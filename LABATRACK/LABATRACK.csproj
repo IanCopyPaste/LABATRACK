@@ -75,6 +75,187 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="Pages\Shared\JobDetail.aspx" />
+    <Content Include="Pages\Shared\JobSlip.aspx" />
+    <Content Include="Pages\Shared\NewJob.aspx" />
+    <Content Include="Assets\icons\check.svg" />
+    <Content Include="Assets\icons\rotate-ccw.svg" />
+    <Content Include="Assets\icons\send.svg" />
+    <Content Include="Assets\icons\scissors.svg" />
+    <Content Include="Assets\icons\phone.svg" />
+    <Content Include="Assets\icons\circle-x.svg" />
+    <Content Include="Assets\icons\weight.svg" />
+    <Content Include="Assets\icons\hand-coins.svg" />
+    <Compile Include="Pages\Shared\JobDetail.aspx.cs">
+      <DependentUpon>JobDetail.aspx</DependentUpon>
+      <SubType>ASPXCodeBehind</SubType>
+    </Compile>
+    <Compile Include="Pages\Shared\JobDetail.aspx.designer.cs">
+      <DependentUpon>JobDetail.aspx</DependentUpon>
+    </Compile>
+    <Compile Include="Pages\Shared\JobSlip.aspx.cs">
+      <DependentUpon>JobSlip.aspx</DependentUpon>
+      <SubType>ASPXCodeBehind</SubType>
+    </Compile>
+    <Compile Include="Pages\Shared\JobSlip.aspx.designer.cs">
+      <DependentUpon>JobSlip.aspx</DependentUpon>
+    </Compile>
+    <Compile Include="Pages\Shared\NewJob.aspx.cs">
+      <DependentUpon>NewJob.aspx</DependentUpon>
+      <SubType>ASPXCodeBehind</SubType>
+    </Compile>
+    <Compile Include="Pages\Shared\NewJob.aspx.designer.cs">
+      <DependentUpon>NewJob.aspx</DependentUpon>
+    </Compile>
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Default.aspx" />
+    <Content Include="Logout.aspx" />
+    <Content Include="Admin\DailySalesReport.aspx" />
+    <Content Include="Admin\Dashboard.aspx" />
+    <Content Include="Admin\Default.aspx" />
+    <Content Include="Admin\EditJob.aspx" />
+    <Content Include="Admin\Login.aspx" />
+    <Content Include="Admin\Pricing.aspx" />
+    <Content Include="Admin\Reports.aspx" />
+    <Content Include="Admin\Settings.aspx" />
+    <Content Include="Admin\Staff.aspx" />
+    <Content Include="Assets\fonts\Inter-OFL-LICENSE.txt" />
+    <Content Include="Assets\fonts\Inter-Variable.woff2" />
+    <Content Include="Assets\icons\Lucide-ISC-LICENSE.txt" />
+    <Content Include="Assets\icons\arrow-left.svg" />
+    <Content Include="Assets\icons\arrow-right.svg" />
+    <Content Include="Assets\icons\ban.svg" />
+    <Content Include="Assets\icons\banknote.svg" />
+    <Content Include="Assets\icons\calendar.svg" />
+    <Content Include="Assets\icons\chart-column.svg" />
+    <Content Include="Assets\icons\chevron-right.svg" />
+    <Content Include="Assets\icons\circle-alert.svg" />
+    <Content Include="Assets\icons\circle-check.svg" />
+    <Content Include="Assets\icons\clipboard-list.svg" />
+    <Content Include="Assets\icons\clock.svg" />
+    <Content Include="Assets\icons\eye.svg" />
+    <Content Include="Assets\icons\file-pen.svg" />
+    <Content Include="Assets\icons\history.svg" />
+    <Content Include="Assets\icons\info.svg" />
+    <Content Include="Assets\icons\key-round.svg" />
+    <Content Include="Assets\icons\layout-dashboard.svg" />
+    <Content Include="Assets\icons\lock.svg" />
+    <Content Include="Assets\icons\log-out.svg" />
+    <Content Include="Assets\icons\mail.svg" />
+    <Content Include="Assets\icons\package-check.svg" />
+    <Content Include="Assets\icons\pencil.svg" />
+    <Content Include="Assets\icons\plus.svg" />
+    <Content Include="Assets\icons\printer.svg" />
+    <Content Include="Assets\icons\receipt.svg" />
+    <Content Include="Assets\icons\save.svg" />
+    <Content Include="Assets\icons\search.svg" />
+    <Content Include="Assets\icons\settings.svg" />
+    <Content Include="Assets\icons\shield-check.svg" />
+    <Content Include="Assets\icons\shirt.svg" />
+    <Content Include="Assets\icons\smartphone.svg" />
+    <Content Include="Assets\icons\store.svg" />
+    <Content Include="Assets\icons\tags.svg" />
+    <Content Include="Assets\icons\timer.svg" />
+    <Content Include="Assets\icons\trending-down.svg" />
+    <Content Include="Assets\icons\trending-up.svg" />
+    <Content Include="Assets\icons\user-plus.svg" />
+    <Content Include="Assets\icons\user-round.svg" />
+    <Content Include="Assets\icons\user-x.svg" />
+    <Content Include="Assets\icons\users.svg" />
+    <Content Include="Assets\icons\wallet.svg" />
+    <Content Include="Assets\icons\washing-machine.svg" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Default.aspx.cs">
+      <DependentUpon>Default.aspx</DependentUpon>
+      <SubType>ASPXCodeBehind</SubType>
+    </Compile>
+    <Compile Include="Default.aspx.designer.cs">
+      <DependentUpon>Default.aspx</DependentUpon>
+    </Compile>
+    <Compile Include="Logout.aspx.cs">
+      <DependentUpon>Logout.aspx</DependentUpon>
+      <SubType>ASPXCodeBehind</SubType>
+    </Compile>
+    <Compile Include="Logout.aspx.designer.cs">
+      <DependentUpon>Logout.aspx</DependentUpon>
+    </Compile>
+    <Compile Include="Admin\DailySalesReport.aspx.cs">
+      <DependentUpon>DailySalesReport.aspx</DependentUpon>
+      <SubType>ASPXCodeBehind</SubType>
+    </Compile>
+    <Compile Include="Admin\DailySalesReport.aspx.designer.cs">
+      <DependentUpon>DailySalesReport.aspx</DependentUpon>
+    </Compile>
+    <Compile Include="Admin\Dashboard.aspx.cs">
+      <DependentUpon>Dashboard.aspx</DependentUpon>
+      <SubType>ASPXCodeBehind</SubType>
+    </Compile>
+    <Compile Include="Admin\Dashboard.aspx.designer.cs">
+      <DependentUpon>Dashboard.aspx</DependentUpon>
+    </Compile>
+    <Compile Include="Admin\Default.aspx.cs">
+      <DependentUpon>Default.aspx</DependentUpon>
+      <SubType>ASPXCodeBehind</SubType>
+    </Compile>
+    <Compile Include="Admin\Default.aspx.designer.cs">
+      <DependentUpon>Default.aspx</DependentUpon>
+    </Compile>
+    <Compile Include="Admin\EditJob.aspx.cs">
+      <DependentUpon>EditJob.aspx</DependentUpon>
+      <SubType>ASPXCodeBehind</SubType>
+    </Compile>
+    <Compile Include="Admin\EditJob.aspx.designer.cs">
+      <DependentUpon>EditJob.aspx</DependentUpon>
+    </Compile>
+    <Compile Include="Admin\Login.aspx.cs">
+      <DependentUpon>Login.aspx</DependentUpon>
+      <SubType>ASPXCodeBehind</SubType>
+    </Compile>
+    <Compile Include="Admin\Login.aspx.designer.cs">
+      <DependentUpon>Login.aspx</DependentUpon>
+    </Compile>
+    <Compile Include="Admin\Pricing.aspx.cs">
+      <DependentUpon>Pricing.aspx</DependentUpon>
+      <SubType>ASPXCodeBehind</SubType>
+    </Compile>
+    <Compile Include="Admin\Pricing.aspx.designer.cs">
+      <DependentUpon>Pricing.aspx</DependentUpon>
+    </Compile>
+    <Compile Include="Admin\Reports.aspx.cs">
+      <DependentUpon>Reports.aspx</DependentUpon>
+      <SubType>ASPXCodeBehind</SubType>
+    </Compile>
+    <Compile Include="Admin\Reports.aspx.designer.cs">
+      <DependentUpon>Reports.aspx</DependentUpon>
+    </Compile>
+    <Compile Include="Admin\Settings.aspx.cs">
+      <DependentUpon>Settings.aspx</DependentUpon>
+      <SubType>ASPXCodeBehind</SubType>
+    </Compile>
+    <Compile Include="Admin\Settings.aspx.designer.cs">
+      <DependentUpon>Settings.aspx</DependentUpon>
+    </Compile>
+    <Compile Include="Admin\Staff.aspx.cs">
+      <DependentUpon>Staff.aspx</DependentUpon>
+      <SubType>ASPXCodeBehind</SubType>
+    </Compile>
+    <Compile Include="Admin\Staff.aspx.designer.cs">
+      <DependentUpon>Staff.aspx</DependentUpon>
+    </Compile>
+    <Compile Include="Helpers\Icons.cs" />
+    <Compile Include="Helpers\NavBar.cs" />
+    <Compile Include="Helpers\SiteStyle.cs" />
+    <Compile Include="Security\BasePage.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="DataAccess\" />
+    <Folder Include="Database\" />
+    <Folder Include="Models\" />
+    <Folder Include="Services\" />
+  </ItemGroup>
+  <ItemGroup>
     <None Include="packages.config" />
     <None Include="Web.Debug.config">
       <DependentUpon>Web.config</DependentUpon>
