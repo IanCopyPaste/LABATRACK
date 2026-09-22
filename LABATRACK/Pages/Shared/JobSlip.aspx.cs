@@ -9,6 +9,11 @@ namespace LABATRACK.Pages.Shared
     // Phase 3 loads the job and its payment by JobId instead.
     public partial class JobSlip : BasePage
     {
+        protected override string PageStyleSheet
+        {
+            get { return "JobSlip.css"; }
+        }
+
         protected decimal Total = 305.00m;
         protected string Method { get; private set; }
         protected decimal CashReceived { get; private set; }

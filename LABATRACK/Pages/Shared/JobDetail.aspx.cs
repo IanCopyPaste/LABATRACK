@@ -11,6 +11,11 @@ namespace LABATRACK.Pages.Shared
     // and the buttons call StatusService.
     public partial class JobDetail : BasePage
     {
+        protected override string PageStyleSheet
+        {
+            get { return "JobDetail.css"; }
+        }
+
         private static readonly string[] Stages =
             { "Queued", "Washing", "Drying", "Folding", "Inspection", "Ready for pick-up", "Claimed" };
 

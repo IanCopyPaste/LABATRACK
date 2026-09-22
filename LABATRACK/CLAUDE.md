@@ -9,28 +9,34 @@ Build order, definition of done per phase, and the test script: @docs/BUILD_PROC
 - ASP.NET Web Forms, C#, .NET Framework 4.8 (Visual Studio on Windows)
 - SQL Server Express with T-SQL, managed with SSMS. The database is `ADOTE_LABATRACK` and it already exists. Plain ADO.NET (`System.Data.SqlClient`) with parameterized queries. No ORM.
 - Connection: Windows authentication (`Integrated Security=True`). The connection string is named `ADOTE_LABATRACKConnectionString` in `Web.config`, and `Db.cs` is the only code that reads it, through `ConfigurationManager.ConnectionStrings`.
-- UI styling comes from `Helpers/SiteStyle.cs` (one shared `<style>` block that `BasePage` puts in every page's `<head>`). No Bootstrap: the project has no copy of it, and loading one would need a `<link>` tag (see "Fonts, icons, and the Assets folder"). The look is professional and light on the eyes: soft grey background, white cards, one calm blue accent.
+- UI styling comes from `Assets/css/Site.css` plus one optional stylesheet per page in `Assets/css/pages/`, loaded by `BasePage` through `Helpers/SiteStyle.cs`. No Bootstrap: the project has no copy of it and does not need one. The look is professional and light on the eyes: soft grey background, white cards, one calm blue accent.
 - Email through SMTP only. No SMS. No payment gateway.
 - Currency is the Philippine peso. Use `decimal` in C# and `DECIMAL(10,2)` in SQL for every amount. Never `float` or `double`.
 - Timestamps are `DATETIME2` in server local time (Asia/Manila). One convention everywhere, never mixed.
 
-## File types: only `.aspx` and `.cs`
+## File types: `.aspx`, `.cs`, plus `.css` and `.js`
 
-The application is built from `.aspx` pages (with their `.aspx.cs` code-behind) and plain `.cs` classes. Nothing else. Do not go beyond that. This is strict: never `.ashx` handlers, never `.ascx` user controls, or any other ASP.NET file type, even when it would be the usual choice.
+The application is built from `.aspx` pages (with their `.aspx.cs` code-behind), plain `.cs` classes, and plain `.css` and `.js` files in `Assets/`. Nothing else. This is strict: never `.ashx` handlers, never `.ascx` user controls, or any other ASP.NET file type, even when it would be the usual choice.
 
-- **Do not create:** `.master`, `.ascx`, `.ashx`, `.asmx`, `.asax`, `.cshtml`, `.razor`, `.html` email templates, or custom `.css` and `.js` files. Do not use MVC, Razor, Web API, `[WebMethod]` endpoints, SignalR, or a JavaScript framework.
+- **Do not create:** `.master`, `.ascx`, `.ashx`, `.asmx`, `.asax`, `.cshtml`, `.razor`, or `.html` email templates. Do not use MVC, Razor, Web API, `[WebMethod]` endpoints, SignalR, or a JavaScript framework.
 - **Allowed exceptions, because the project cannot work without them:**
   - `Web.config` and the external config file that holds secrets
   - the `.sql` scripts in `Database/`, which run in SSMS and are not part of the web application
   - files Visual Studio generates itself (`.csproj`, `.sln`, `.aspx.designer.cs`)
   - downloaded font files (`.woff2`) and icon files (`.svg`) in `Assets/`, with their licence `.txt` files
   - `CLAUDE.md`, `README.md`, and the files in `docs/`
+- **CSS and JavaScript go in files, never inside `.aspx` pages.** No `<style>` blocks, no inline `<script>` blocks, and no `onclick=`-style attributes in pages. (A `style="..."` attribute for a one-off value, such as a bar width that comes from data, is fine.)
+  - `Assets/css/Site.css`: shared styles for every page, including the `@font-face` rule.
+  - `Assets/css/pages/<PageName>.css`: rules only one page needs, named after the page (for example `JobDetail.css`). A page picks its file by overriding `PageStyleSheet` in its code-behind. Rules used by two or more pages go in `Site.css` instead.
+  - Stylesheets are loaded by `BasePage` through `Helpers/SiteStyle.cs`, which writes `@import` lines inside one `<style>` tag. This keeps the no-`<link>` rule.
+  - `Assets/js/<PageName>.js`: a page's script, loaded with `<script src="...">` just before `</body>`. Shared behaviour gets its own file (for example `Print.js` for print buttons marked `data-print`).
+  - Values a script needs from the server (such as the total for the change calculator) go in `data-` attributes on the page, and the script reads them. Never hard-code them in the `.js` file.
+  - Scripts only improve the display. Every rule (prices, change, validation) is checked again on the server in `.cs`.
 - Where you would normally reach for a forbidden file type, do this instead:
   - **Shared layout or navigation (`.master`):** one `NavBar.cs` helper renders the menu for the user's role. Each page has an `<asp:Literal>` for it, and `BasePage` fills it in. The login pages and printable pages simply omit it.
   - **Reusable pieces (`.ascx`):** put the markup in the page itself, as an `<asp:Repeater>` template or an `<asp:Panel>`. Repeated markup is acceptable if the logic behind it is not repeated. Keep the logic in `Services/` and `DataAccess/`.
   - **Email bodies (`.html`):** build them in `EmailTemplates.cs` with `string.Format` or `StringBuilder`.
-  - **Custom styles (`.css`):** use the shared classes from `Helpers/SiteStyle.cs`, plus a small `<style>` block in the page for page-only rules. Print styles are a `@media print` block inside `JobSlip.aspx` and `DailySalesReport.aspx`.
-  - **Small scripts (`.js`):** a short inline `<script>` in the `.aspx` (for example a print button) is fine. Server-side logic stays in `.cs`.
+  - **Print styles:** a `@media print` block inside `Assets/css/pages/JobSlip.css` and `Assets/css/pages/DailySalesReport.css`.
   - **Global application events (`Global.asax`):** not needed. Do not add it.
 - No NuGet packages beyond what the project template already includes. If something seems to need one, stop and ask.
 - If a task cannot be done within these limits, say so and ask instead of adding a new file type.
@@ -38,11 +44,11 @@ The application is built from `.aspx` pages (with their `.aspx.cs` code-behind) 
 ## Fonts, icons, and the Assets folder
 
 - Every font and icon is downloaded into the project, in `Assets/fonts/` and `Assets/icons/`. Nothing is loaded from a CDN or Google Fonts at runtime.
-- **No `<link>` tags, especially for fonts.** Fonts are loaded with `@font-face` inside the shared style in `SiteStyle.cs`, pointing at the local file (`~/Assets/fonts/Inter-Variable.woff2`).
+- **No `<link>` tags, especially for fonts.** Fonts are loaded with `@font-face` in `Assets/css/Site.css`, pointing at the local file (`../fonts/Inter-Variable.woff2`, relative to the stylesheet). Stylesheets themselves are loaded with `@import` (see File types).
 - Icons are Lucide `.svg` files. `Helpers/Icons.cs` reads the file and writes it inline, so the icon takes the text colour. In a page: `<%= Icons.Get("plus") %>`, or `Icons.Get("plus", "ico-sm")` for the small size. No icon fonts, no `<img>` tags for icons.
 - To add an icon, download its `.svg` from the same Lucide version (`lucide-static@0.460.0`) into `Assets/icons/`, keep the file name, and add it to the `.csproj` as Content.
 - Keep each licence file next to what it covers (`Inter-OFL-LICENSE.txt`, `Lucide-ISC-LICENSE.txt`).
-- Save `.aspx` and `.cs` files as UTF-8 with BOM (Visual Studio's default). Without the BOM, ASP.NET misreads characters such as ₱ and ñ.
+- Save `.aspx`, `.cs`, `.css`, and `.js` files as UTF-8 with BOM (Visual Studio's default). Without the BOM, ASP.NET and the browser can misread characters such as ₱ and ñ.
 
 ## Roles and permissions
 
@@ -108,11 +114,19 @@ Claimed and Voided are final.
 
 - **Full payment only, collected at drop-off.** The shop does not accept partial payments, balances, or pay-at-pick-up. A job is saved only together with one payment for exactly its `TotalAmount`. There is no Partial or Unpaid state.
 - The payment is a row in `Payments` (job, amount, method Cash or E-wallet, timestamp, staff). `Amount` is always the job total, never the cash the customer handed over, so the drawer totals stay correct.
-- **Cash and change.** For cash, staff type the cash received. The page shows the change while they type, with a short inline `<script>` that only displays it. On save, the server checks that cash received is at least the total and works out change = cash received − total itself; it never trusts the browser's number. Cash received is stored on the payment (proposed column `Payments.CashReceived`, nullable, cash only), so the slip can print "Cash received" and "Change" and reprints stay correct.
+- **Cash and change.** For cash, staff type the cash received. The page shows the change while they type, with a script (`Assets/js/NewJob.js`) that only displays it. On save, the server checks that cash received is at least the total and works out change = cash received − total itself; it never trusts the browser's number. Cash received is stored on the payment (proposed column `Payments.CashReceived`, nullable, cash only), so the slip can print "Cash received" and "Change" and reprints stay correct.
 - E-wallet is only a declared method that staff selects. No gateway, no webhooks, no verification. The amount is the exact total, and there is no change.
 - Claiming needs no payment step, because every job was paid in full at drop-off. Ready for pick-up to Claimed is only a status change.
 - Creating a job saves the job, its add-ons, the first history row (Queued), and its payment in one `SqlTransaction`. All of it or none of it.
-- Voiding a job inserts an offsetting negative `Payments` row (a refund of the full amount, same method) in the same transaction, so totals and the cash drawer stay correct.
+- Voiding a job inserts an offsetting negative `Payments` row (a refund of everything paid on the job, same method) in the same transaction, so totals and the cash drawer stay correct.
+- **Owner edits that change the total** (for example a corrected weight). Allowed only while the job is not Claimed or Voided. The job update and one adjustment row in `Payments` for the difference are saved in one `SqlTransaction`:
+  - New total higher: a positive row, the extra amount collected from the customer.
+  - New total lower (the customer overpaid): a negative row, the difference refunded to the customer. The screen tells the owner exactly how much to give back.
+  - When the extra amount is collected in cash, the same cash received and change rules as a new job apply.
+  - Same total: no payment row.
+  - The owner picks Cash or E-wallet for the adjustment; it defaults to the job's original method.
+  - Rule that keeps this simple to defend: after every save, the payments on a job always add up to exactly its `TotalAmount`. There is still never a balance.
+- Recomputing an edited total uses the frozen prices: the job's `RatePerKgAtCreation` and each existing add-on's `PriceAtCreation`. Only something newly chosen in the edit (a different service or a newly ticked add-on) uses today's price, which is then frozen onto the job like any other.
 
 ## Data rules
 
@@ -178,7 +192,7 @@ Proposed tables (confirm with the user before creating):
 
 ## Folder structure
 
-New files go in these folders, and every application file is `.aspx` or `.cs` (the `.sql` scripts are the listed exception; see File types above). Do not add top-level folders without asking. A star marks the files the student must be able to explain.
+New files go in these folders. Every application file is `.aspx` or `.cs`, except the `.css` and `.js` files in `Assets/` and the `.sql` scripts (see File types above). Do not add top-level folders without asking. A star marks the files the student must be able to explain.
 
 ```
 LabaTrack/
@@ -218,14 +232,18 @@ LabaTrack/
 │   └── PasswordHasher.cs
 ├── Helpers/
 │   ├── NavBar.cs             menu HTML for the user's role
-│   ├── SiteStyle.cs          shared styles and the @font-face rule
+│   ├── SiteStyle.cs          writes the <style> @import lines for Site.css and the page's stylesheet
 │   ├── Icons.cs              inlines SVG icons from Assets/icons
 │   └── EmailTemplates.cs     email subjects and bodies
 ├── Database/
 │   ├── 01_schema.sql         *
 │   ├── 02_seed_settings.sql
 │   └── 03_seed_demo_jobs.sql
-└── Assets/                   downloaded files only, never loaded from the internet
+└── Assets/                   project files only, never loaded from the internet
+    ├── css/
+    │   ├── Site.css          shared styles and the @font-face rule
+    │   └── pages/            one stylesheet per page that needs one (JobDetail.css, ...)
+    ├── js/                   one script per page that needs one (NewJob.js, ...), plus Print.js
     ├── fonts/                Inter (.woff2) and its licence
     └── icons/                Lucide icons (.svg) and their licence
 ```
@@ -262,4 +280,3 @@ Ask the student before hard-coding any of these. Store them in `Settings`, not i
 4. Default turnaround hours used for the expected pick-up date on the slip.
 5. Whether rework may return to Drying or Folding, or only to Washing (default: any of the three).
 6. Whether the refund-on-void rule above matches what the student wants to demonstrate.
-7. What happens when the owner edits a paid job and the total changes (for example a wrong weight). Since the job is already paid in full, the difference must be collected or refunded as an extra `Payments` row, or such edits are not allowed. Until this is decided, EditJob does not save a total change.

@@ -62,7 +62,8 @@
                                         </div>
                                         <div class="field">
                                             <label for="txtWeight">Weight (kg)</label>
-                                            <asp:TextBox ID="txtWeight" runat="server" Text="4.6" />
+                                            <asp:TextBox ID="txtWeight" runat="server" />
+                                            <span class="hint">Was 4.6 kg when the job was created.</span>
                                         </div>
                                     </div>
                                     <div class="field">
@@ -81,7 +82,7 @@
                                 </div>
                                 <div class="card-f">
                                     <a class="btn btn-ghost" href="Dashboard.aspx">Cancel</a>
-                                    <button type="button" class="btn btn-primary"><%= Icons.Get("save", "ico-sm") %>Save changes</button>
+                                    <button type="button" class="btn btn-primary"><%= Icons.Get("save", "ico-sm") %><%= IsRefund ? "Save and refund ₱55.00" : "Save and collect ₱35.00" %></button>
                                 </div>
                             </section>
                         </div>
@@ -97,26 +98,73 @@
                                 <div class="card-b">
                                     <dl class="dl">
                                         <dt>Rate at creation</dt><dd>₱35.00 / kg</dd>
-                                        <dt>4.6 kg &rarr; billable</dt><dd>5 kg</dd>
-                                        <dt>Laundry charge</dt><dd>₱175.00</dd>
+                                        <% if (IsRefund) { %>
+                                        <dt>2.9 kg &rarr; billable</dt><dd>3 kg</dd>
+                                        <dt>3 kg &times; ₱35.00</dt><dd class="muted">₱105.00</dd>
+                                        <dt>Raised to minimum</dt><dd>₱120.00</dd>
+                                        <% } else { %>
+                                        <dt>5.3 kg &rarr; billable</dt><dd>6 kg</dd>
+                                        <dt>Laundry charge</dt><dd>₱210.00</dd>
+                                        <% } %>
                                         <dt>Extra rinse</dt><dd>₱20.00</dd>
                                     </dl>
                                     <div class="divider" style="margin:14px 0;"></div>
-                                    <div class="total-line"><span>Total</span><span class="num">₱195.00</span></div>
+                                    <div class="total-line"><span>New total</span><span class="num"><%= IsRefund ? "₱140.00" : "₱230.00" %></span></div>
                                     <dl class="dl" style="margin-top:12px;">
-                                        <dt>Paid in full (e-wallet)</dt><dd>₱195.00</dd>
+                                        <dt>Already paid (e-wallet)</dt><dd>₱195.00</dd>
                                     </dl>
                                 </div>
                             </section>
 
-                            <div class="notice notice-info">
-                                <%= Icons.Get("info", "ico-sm") %>
-                                <span>Today's Wash-Dry rate is ₱35.00. If it changes later, this job still bills at the rate it was created with.</span>
+                            <%-- The difference is always settled on save, so payments = total and there is never a balance.
+                                 Higher total: collect the difference. Lower (customer overpaid): refund it. Same: nothing to do. --%>
+                            <section class="card">
+                                <div class="card-h">
+                                    <div><h2>Settle the difference</h2><div class="sub">Saved together with the edit</div></div>
+                                    <span class="pill <%= IsRefund ? "pill-danger" : "pill-warn" %>"><%= IsRefund ? "Overpaid" : "Collect" %></span>
+                                </div>
+                                <div class="card-b form">
+                                    <% if (IsRefund) { %>
+                                    <div class="total-line" style="color:var(--danger);"><span>Refund to customer</span><span class="num">₱55.00</span></div>
+                                    <div class="notice notice-danger">
+                                        <%= Icons.Get("hand-coins", "ico-sm") %>
+                                        <span>The customer paid ₱195.00 but the corrected total is ₱140.00. Give back <strong>₱55.00</strong> before saving. It is recorded as a −₱55.00 refund row.</span>
+                                    </div>
+                                    <% } else { %>
+                                    <div class="total-line" style="color:var(--warning);"><span>Collect from customer</span><span class="num">₱35.00</span></div>
+                                    <% } %>
+                                    <div class="field">
+                                        <span class="label"><%= IsRefund ? "Refund by" : "Method" %></span>
+                                        <div class="grid grid-2" style="gap:10px;">
+                                            <label class="check"><input type="radio" name="adjMethod" id="rbAdjCash" /><%= Icons.Get("banknote", "ico-sm") %>Cash</label>
+                                            <label class="check"><input type="radio" name="adjMethod" id="rbAdjEwallet" checked="checked" /><%= Icons.Get("smartphone", "ico-sm") %>E-wallet</label>
+                                        </div>
+                                        <span class="hint">Defaults to how the job was first paid.</span>
+                                    </div>
+                                    <% if (!IsRefund) { %>
+                                    <%-- Cash only: same cash received and change as a new job --%>
+                                    <div id="adjCashFields" class="form-row" style="display:none;" data-due="35.00">
+                                        <div class="field">
+                                            <label for="txtAdjCashReceived">Cash received</label>
+                                            <div class="input-prefix"><span>₱</span><asp:TextBox ID="txtAdjCashReceived" runat="server" Text="50.00" autocomplete="off" /></div>
+                                        </div>
+                                        <div class="field">
+                                            <span class="label">Change to give</span>
+                                            <div id="adjChangeBox" class="change-box"><span class="muted small">Change</span><span id="adjChange" class="change-amount num">₱15.00</span></div>
+                                        </div>
+                                    </div>
+                                    <% } %>
+                                </div>
+                            </section>
+
+                            <div class="notice notice-warn preview-links">
+                                <%= Icons.Get("eye", "ico-sm") %>
+                                <span><strong>Design draft.</strong> Preview: <a href="EditJob.aspx">total goes up (collect)</a> <a href="EditJob.aspx?case=refund">customer overpaid (refund)</a></span>
                             </div>
 
-                            <div class="notice notice-warn">
-                                <%= Icons.Get("circle-alert", "ico-sm") %>
-                                <span>This job is already paid in full. A change that alters the total needs a rule for collecting or refunding the difference, which is not decided yet (CLAUDE.md, open decision 7).</span>
+                            <div class="notice notice-info">
+                                <%= Icons.Get("info", "ico-sm") %>
+                                <span>The weight is re-billed at the ₱35.00 rate frozen on this job, not today's rate.</span>
                             </div>
 
                             <section class="card">
@@ -135,5 +183,7 @@
             </main>
         </div>
     </form>
+
+    <script src="../Assets/js/EditJob.js"></script>
 </body>
 </html>

@@ -53,5 +53,10 @@ namespace LABATRACK.Admin
         /// txtRemarks control.
         /// </summary>
         protected global::System.Web.UI.WebControls.TextBox txtRemarks;
+
+        /// <summary>
+        /// txtAdjCashReceived control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.TextBox txtAdjCashReceived;
     }
 }

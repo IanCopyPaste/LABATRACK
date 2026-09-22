@@ -6,6 +6,11 @@ namespace LABATRACK.Admin
     // DRAFT: design only. The page shows sample data until its phase is built.
     public partial class DailySalesReport : BasePage
     {
+        protected override string PageStyleSheet
+        {
+            get { return "DailySalesReport.css"; }
+        }
+
         protected void Page_Load(object sender, EventArgs e)
         {
         }

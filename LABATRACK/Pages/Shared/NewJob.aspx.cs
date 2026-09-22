@@ -7,6 +7,11 @@ namespace LABATRACK.Pages.Shared
     // DRAFT: design only. The page shows sample data until Phase 3 is built.
     public partial class NewJob : BasePage
     {
+        protected override string PageStyleSheet
+        {
+            get { return "NewJob.css"; }
+        }
+
         private const decimal SampleTotal = 305.00m;   // DRAFT: Phase 3 gets this from PricingService
 
         protected override string ActiveNav

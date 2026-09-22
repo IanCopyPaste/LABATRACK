@@ -109,6 +109,7 @@ Run this at the end of each phase that touches it, and once more before the demo
 7. Log in as staff and open an admin URL directly. It must redirect to the admin login.
 8. Change a rate as the owner. Old jobs must keep their totals.
 9. Compare the on-screen daily total with a `SELECT` on `Payments` for the same day.
+10. As the owner, correct a paid job's weight upward, then another one downward. Confirm each save adds one adjustment row (positive, then negative) and that each job's payments add up to its new total.
 
 ## Defense questions to be ready for
 

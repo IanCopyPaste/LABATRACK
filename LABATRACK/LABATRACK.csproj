@@ -75,6 +75,16 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="Assets\css\Site.css" />
+    <Content Include="Assets\css\pages\DailySalesReport.css" />
+    <Content Include="Assets\css\pages\JobDetail.css" />
+    <Content Include="Assets\css\pages\JobSlip.css" />
+    <Content Include="Assets\css\pages\NewJob.css" />
+    <Content Include="Assets\js\EditJob.js" />
+    <Content Include="Assets\js\NewJob.js" />
+    <Content Include="Assets\js\Print.js" />
+  </ItemGroup>
+  <ItemGroup>
     <Content Include="Pages\Shared\JobDetail.aspx" />
     <Content Include="Pages\Shared\JobSlip.aspx" />
     <Content Include="Pages\Shared\NewJob.aspx" />
@@ -247,7 +257,9 @@
     <Compile Include="Helpers\Icons.cs" />
     <Compile Include="Helpers\NavBar.cs" />
     <Compile Include="Helpers\SiteStyle.cs" />
-    <Compile Include="Security\BasePage.cs" />
+    <Compile Include="Security\BasePage.cs">
+      <SubType>ASPXCodeBehind</SubType>
+    </Compile>
   </ItemGroup>
   <ItemGroup>
     <Folder Include="DataAccess\" />

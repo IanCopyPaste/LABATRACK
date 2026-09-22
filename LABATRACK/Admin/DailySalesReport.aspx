@@ -6,28 +6,6 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Daily sales report · LabaTrack</title>
-    <style>
-        .sheet { max-width: 880px; margin: 32px auto; padding: 0 16px; }
-        .sheet-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 20px; }
-        .toolbar { display: flex; gap: 8px; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
-        .totals { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
-        .totals > div { padding: 16px 20px; border-right: 1px solid var(--border); }
-        .totals > div:last-child { border-right: 0; }
-        .totals .v { font-size: 20px; font-weight: 650; font-variant-numeric: tabular-nums; margin-top: 4px; }
-        .neg { color: var(--danger); }
-        .sign { display: flex; gap: 48px; margin-top: 48px; }
-        .sign div { flex: 1; border-top: 1px solid var(--border-strong); padding-top: 6px; color: var(--muted); font-size: 12.5px; }
-        @media (max-width: 640px) { .totals { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-
-        /* Printing: plain white sheet, no toolbar, no shadows */
-        @media print {
-            body { background: #fff; font-size: 12px; }
-            .toolbar { display: none; }
-            .sheet { margin: 0; max-width: none; padding: 0; }
-            .card { box-shadow: none; }
-            .table td, .table th { padding: 7px 10px; }
-        }
-    </style>
 </head>
 <body>
     <form id="form1" runat="server">
@@ -36,7 +14,7 @@
                 <a class="btn btn-ghost" href="Reports.aspx"><%= Icons.Get("arrow-left", "ico-sm") %>Back to reports</a>
                 <div style="display:flex; gap:8px;">
                     <asp:TextBox ID="txtDate" runat="server" TextMode="Date" Text="2026-09-22" CssClass="input" style="width:auto;" />
-                    <button type="button" class="btn btn-primary" onclick="window.print();"><%= Icons.Get("printer", "ico-sm") %>Print</button>
+                    <button type="button" class="btn btn-primary" data-print="true"><%= Icons.Get("printer", "ico-sm") %>Print</button>
                 </div>
             </div>
 
@@ -94,5 +72,7 @@
             </div>
         </div>
     </form>
+
+    <script src="../Assets/js/Print.js"></script>
 </body>
 </html>
