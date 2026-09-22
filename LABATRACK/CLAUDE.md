@@ -1,0 +1,251 @@
+# LabaTrack: Laundry Shop Job Order and Sales Management System
+
+IPT102 project (Quezon City University, BSIT). One student is building this in about 2.5 weeks and must be able to explain every important part in a defense. This file is the working summary of the approved proposal. If a request conflicts with it, say so before building anything.
+
+Build order, definition of done per phase, and the test script: @docs/BUILD_PROCESS.md
+
+## Stack
+
+- ASP.NET Web Forms, C#, .NET Framework 4.8 (Visual Studio on Windows)
+- SQL Server Express with T-SQL, managed with SSMS. The database is `ADOTE_LABATRACK` and it already exists. Plain ADO.NET (`System.Data.SqlClient`) with parameterized queries. No ORM.
+- Connection: Windows authentication (`Integrated Security=True`). The connection string is named `ADOTE_LABATRACKConnectionString` in `Web.config`, and `Db.cs` is the only code that reads it, through `ConfigurationManager.ConnectionStrings`.
+- Bootstrap (the copy that ships with the project template) for the UI. Plain and functional is fine; nobody is grading the CSS.
+- Email through SMTP only. No SMS. No payment gateway.
+- Currency is the Philippine peso. Use `decimal` in C# and `DECIMAL(10,2)` in SQL for every amount. Never `float` or `double`.
+- Timestamps are `DATETIME2` in server local time (Asia/Manila). One convention everywhere, never mixed.
+
+## File types: only `.aspx` and `.cs`
+
+The application is built from `.aspx` pages (with their `.aspx.cs` code-behind) and plain `.cs` classes. Nothing else. Do not go beyond that.
+
+- **Do not create:** `.master`, `.ascx`, `.ashx`, `.asmx`, `.asax`, `.cshtml`, `.razor`, `.html` email templates, or custom `.css` and `.js` files. Do not use MVC, Razor, Web API, `[WebMethod]` endpoints, SignalR, or a JavaScript framework.
+- **Allowed exceptions, because the project cannot work without them:**
+  - `Web.config` and the external config file that holds secrets
+  - the `.sql` scripts in `Database/`, which run in SSMS and are not part of the web application
+  - files Visual Studio generates itself (`.csproj`, `.sln`, `.aspx.designer.cs`)
+  - Bootstrap and jQuery files that ship with the Web Forms project template, unchanged
+  - `CLAUDE.md`, `README.md`, and the files in `docs/`
+- Where you would normally reach for a forbidden file type, do this instead:
+  - **Shared layout or navigation (`.master`):** one `NavBar.cs` helper renders the menu for the user's role. Each page has an `<asp:Literal>` for it, and `BasePage` fills it in. The login pages and printable pages simply omit it.
+  - **Reusable pieces (`.ascx`):** put the markup in the page itself, as an `<asp:Repeater>` template or an `<asp:Panel>`. Repeated markup is acceptable if the logic behind it is not repeated. Keep the logic in `Services/` and `DataAccess/`.
+  - **Email bodies (`.html`):** build them in `EmailTemplates.cs` with `string.Format` or `StringBuilder`.
+  - **Custom styles (`.css`):** use Bootstrap classes, plus a small `<style>` block in the page. Print styles are a `@media print` block inside `JobSlip.aspx` and `DailySalesReport.aspx`.
+  - **Small scripts (`.js`):** a short inline `<script>` in the `.aspx` (for example a print button) is fine. Server-side logic stays in `.cs`.
+  - **Global application events (`Global.asax`):** not needed. Do not add it.
+- No NuGet packages beyond what the project template already includes. If something seems to need one, stop and ask.
+- If a task cannot be done within these limits, say so and ask instead of adding a new file type.
+
+## Roles and permissions
+
+Two roles: **Owner** (admin) and **Staff**. The owner can do everything staff can.
+
+| Action | Staff | Owner |
+|---|---|---|
+| Create a job order, print the slip, advance status, mark claimed | Yes | Yes |
+| Void a job that is still Queued (reason required) | Yes | Yes |
+| Add and search customers | Yes | Yes |
+| Search past jobs by claim number or customer name | Yes | Yes |
+| Resend a notification | Yes | Yes |
+| See today's sales total | Yes | Yes |
+| Edit an existing job order (wrong weight, service, customer detail) | No | Yes |
+| Edit customer records | No | Yes |
+| Create, disable, and reset staff accounts | No | Yes |
+| Change prices, services, add-ons, and settings | No | Yes |
+| Historical sales, reports, analytics, full history with voided jobs and who did what | No | Yes |
+
+- Staff can void freely on purpose, because the owner may be unreachable. Voiding is not deleting (see Data rules).
+- Staff cannot edit a job. A wrong weight is fixed by the owner, or by voiding and re-creating a Queued job.
+- Enforce roles on the server. Every page in `Admin/` inherits `AdminBasePage`, and `Web.config` also denies that folder to staff. Hiding a menu link is not security.
+- Staff log in at `/Login.aspx`. The owner logs in at `/Admin/Login.aspx`. Both use one `AuthService`.
+- The owner must be able to reach the counter screens (New Job, Dashboard, History) from the owner's navigation (`NavBar.cs`), so the owner never needs a second staff account.
+
+## Job lifecycle
+
+Stages: **Queued, Washing, Drying, Folding, Inspection, Ready for pick-up, Claimed**, plus **Voided**.
+
+Inspection is the quality check after folding (verify the finished laundry before shelving). The intake check at the counter is not a stage; it lives in the job's `Remarks` field.
+
+These are the only allowed transitions. `StatusService` enforces them and rejects everything else. No skipping.
+
+| From | To | Notes |
+|---|---|---|
+| Queued | Washing | |
+| Washing | Drying | |
+| Drying | Folding | |
+| Folding | Inspection | |
+| Inspection | Ready for pick-up | Pass. Triggers the ready email. |
+| Inspection | Washing, Drying, or Folding | Fail. Rework. Reason required. |
+| Ready for pick-up | Claimed | Balance must be 0 first (see Payments). |
+| Queued | Voided | Reason required. Only from Queued. |
+
+//use smtp setup for a while for email sending
+
+Claimed and Voided are final.
+
+- Every transition inserts one row into `JobStatusHistory` (job, from, to, timestamp, staff, optional reason). History rows are never updated or deleted.
+- The stage timeline on `JobDetail.aspx` reads only from `JobStatusHistory`. Never store stage times as columns on `JobOrders`, or rework breaks. A load that goes back to Washing shows as a new entry, not an overwrite.
+- `JobOrders.CurrentStatus` exists only so the board query is fast. Update it and insert the history row in one `SqlTransaction`.
+- Guard against two staff advancing the same job at once: `UPDATE ... WHERE JobId = @id AND CurrentStatus = @expected`. If zero rows change, show "This job was already updated. Refresh." and do nothing.
+
+## Pricing rules (`PricingService`)
+
+- Total = laundry charge + sum of add-on prices.
+- Laundry charge = billable kilos x the service's rate per kilo, then raised to the minimum charge if lower. Add-ons are added after.
+- Billable kilos = weight rounded up to the next multiple of `RoundingIncrementKg` (default 1, so 3.2 kg bills as 4 kg).
+- Freeze the price at creation. Copy the service rate into `JobOrders.RatePerKgAtCreation` and each add-on price into `JobAddOns.PriceAtCreation`. Compute `TotalAmount` once and store it. Never recompute an old job from today's prices, or historical sales silently change when the owner edits a rate.
+- Add-ons are priced extras only (for example fabric conditioner, extra rinse, rush). No stock, no deduction, no reorder alerts. Keep the list to four or five.
+
+## Payment rules
+
+- Payments are recorded, not gated. A job can be created Paid, Partial, or Unpaid.
+- Each payment is a row in `Payments` (job, amount, method Cash or E-wallet, timestamp, staff). A later payment on the same job is a new row.
+- Payment status and balance are computed from the `Payments` rows, not typed in.
+- E-wallet is only a declared method that staff selects. No gateway, no webhooks, no verification.
+- A job cannot become Claimed while its balance is above 0. The claim screen records the final payment and marks it Claimed in one transaction.
+- Creating a job saves the job, its add-ons, the first history row (Queued), and any initial payment in one `SqlTransaction`. All of it or none of it.
+- Voiding a job that already has payments inserts an offsetting negative `Payments` row (a refund) in the same transaction, so totals and the cash drawer stay correct.
+
+## Data rules
+
+- No hard deletes anywhere. Voiding marks the job Voided and keeps the row, the reason, the staff name, and the timestamp.
+- Every status change and payment carries who did it and when.
+- `01_schema.sql` is the single source of truth. Constrain in SQL too: foreign keys, `CHECK` on status and method values, unique `ClaimNumber`. No ad-hoc database changes that are not in the scripts.
+- Claim numbers are unique, short, and readable at a counter, generated by `ClaimNumberGenerator`. Uniqueness is enforced by a unique index, and generation must survive two jobs created in the same second.
+
+Proposed tables (confirm with the user before creating):
+
+- `Users` (username, password hash, salt, role, active flag, failed login count, locked until)
+- `Customers` (name, contact number, email nullable, created at)
+- `Services` (name, rate per kg, active)
+- `AddOns` (name, price, active)
+- `JobOrders` (claim number, customer, service, weight, billable kg, rate at creation, total, current status, remarks, expected pick-up, created at and by)
+- `JobAddOns` (job, add-on, price at creation)
+- `JobStatusHistory`, `Payments`, `NotificationLog`
+- `Settings` (key/value: minimum charge, rounding increment, unclaimed threshold in days, default turnaround hours, shop name, slip header)
+
+## T-SQL conventions
+
+- Every database script is T-SQL for SQL Server, run in SSMS. Separate batches with `GO`. Never write MySQL or PostgreSQL syntax (`LIMIT`, `AUTO_INCREMENT`, backticks). Use `TOP` or `OFFSET ... FETCH` for paging and `IDENTITY(1,1)` for keys.
+- Guard object creation (`IF OBJECT_ID(N'dbo.JobOrders', N'U') IS NULL`) so scripts can be re-run, and create tables in foreign-key order.
+- Types: `INT IDENTITY` primary keys, `NVARCHAR` for names and emails (Filipino names include characters like ñ), `DECIMAL(10,2)` for money, `DATETIME2` for timestamps, `BIT` for flags.
+- Default timestamps with `SYSDATETIME()`. It follows the time zone of the machine running SQL Server, so confirm that machine is set to Philippine time or every timestamp will be off.
+- Filter by day with a half-open range: `PaidAt >= @dayStart AND PaidAt < @nextDayStart`. Do not use `BETWEEN` with an end-of-day time, and do not wrap the column in a function in the `WHERE` clause.
+- Transactions are handled in C# with `SqlTransaction`, not in stored procedures. The concurrency guard reads the rows-affected count from `ExecuteNonQuery`; zero means someone else already changed the job.
+- Payment status and balance come from one view (for example `vw_JobBalances`, built from `JobOrders` and `Payments`), so every screen and report uses the same calculation.
+- Every script starts with `USE ADOTE_LABATRACK;` followed by `GO`. Scripts never `CREATE`, `DROP`, or `ALTER` the database itself.
+- The connection string's `Data Source` names this development machine (`DESKTOP-0J9K2FQ\SQLEXPRESS`). Never hard-code that in C#. If the app runs on another computer, change it in `Web.config` to that machine's instance, or to `.\SQLEXPRESS`, which works on any computer with a default SQL Express install.
+- Windows authentication means the account running the app needs a login and permissions on `ADOTE_LABATRACK`. It works as-is when the app is run from Visual Studio. If it is ever hosted in full IIS, the app pool identity needs that login.
+
+## Customers
+
+- Search by contact number first and autofill if found. Create a new customer only when none exists.
+- Required: name and contact number. Email is optional. No address (there is no delivery).
+- If a customer has no email, log the notification as Skipped instead of failing.
+
+## Notifications
+
+- Email only, sent through `EmailService`, with the message bodies built in `EmailTemplates.cs`.
+- Two emails: at drop-off (includes the claim number) and when the job becomes Ready for pick-up.
+- A failed send must never block or roll back the job. Log every attempt in `NotificationLog` (Sent, Failed, or Skipped), and give staff a resend button on `JobDetail`.
+- SMTP credentials never go in source control.
+
+## Screens
+
+**Dashboard (staff and owner).** The active list is filtered by status, not by date: everything from Queued to Ready for pick-up stays on the board until it is Claimed or Voided. Sort oldest first and show the drop-off date on every row. Below it: jobs claimed today with today's total, and a "needs attention" list (unclaimed past the owner's threshold, plus jobs voided today). Staff see only today's total. The staff and owner dashboards call the same repository method. The small Repeater markup may be repeated in both pages, but the query and the rules may not.
+
+**JobDetail.** Show job ID and customer info once in a header. Below it, a stage stepper: completed stages show time and staff, the current stage is highlighted, future stages are greyed. The "advance" button appears only on the current stage. Voided is its own red state, not a step in the bar. Use a vertical timeline on narrow screens.
+
+**Owner reports.** Daily and monthly sales, cash vs e-wallet split, most-availed services, average turnaround (first Queued to first Ready), unclaimed loads, and a comparison with the previous period. Daily sales and the cash split come from `Payments.PaidAt`, which is what the drawer check needs. Service popularity comes from the job's created date. Do not mix the two.
+
+## Security rules
+
+- Parameterized queries only. Never build SQL by string concatenation.
+- Hash passwords with PBKDF2 (`Rfc2898DeriveBytes`) and a per-user salt. Never store or log plain text.
+- The login error is always "Invalid username or password", including when a staff account tries the admin login. Never reveal which part was wrong.
+- Lock an account for a few minutes after five failed logins.
+- `Admin/Login.aspx` is the only anonymous page under `Admin/` (allow it with a `<location>` rule in `Web.config`, or the login page locks itself out). `AdminBasePage` redirects to `~/Admin/Login.aspx` itself, because Forms authentication has only one `loginUrl`.
+- HTML-encode all output. Do not disable request validation or ViewState MAC.
+- The connection string uses Windows authentication, so it contains no password and stays in `Web.config`. SMTP credentials are secrets: put them in an external config file (`configSource`) that is listed in `.gitignore`. Demo credentials from seed scripts are documented in the README and are never real passwords.
+
+## Folder structure
+
+New files go in these folders, and every application file is `.aspx` or `.cs` (the `.sql` scripts are the listed exception; see File types above). Do not add top-level folders without asking. A star marks the files the student must be able to explain.
+
+```
+LabaTrack/
+├── Web.config
+├── Default.aspx              routes to the right login or dashboard
+├── Login.aspx                staff login
+├── Logout.aspx
+├── Admin/                    owner only, except Login.aspx
+│   ├── Default.aspx
+│   ├── Login.aspx
+│   ├── Dashboard.aspx
+│   ├── Staff.aspx
+│   ├── Pricing.aspx
+│   ├── EditJob.aspx
+│   ├── Reports.aspx
+│   ├── DailySalesReport.aspx
+│   └── Settings.aspx
+├── Pages/Shared/             staff and owner
+│   ├── Dashboard.aspx
+│   ├── NewJob.aspx
+│   ├── JobDetail.aspx
+│   ├── JobSlip.aspx
+│   ├── History.aspx
+│   └── Customers.aspx
+├── Models/                   plain classes, one per table
+├── DataAccess/               Db.cs and repositories. The only place SQL lives.
+├── Services/                 business rules
+│   ├── PricingService.cs     *
+│   ├── StatusService.cs      *
+│   ├── AuthService.cs        *
+│   ├── ClaimNumberGenerator.cs
+│   ├── EmailService.cs
+│   └── ReportService.cs
+├── Security/
+│   ├── BasePage.cs
+│   ├── AdminBasePage.cs      *
+│   └── PasswordHasher.cs
+├── Helpers/
+│   ├── NavBar.cs             menu HTML for the user's role
+│   └── EmailTemplates.cs     email subjects and bodies
+├── Database/
+│   ├── 01_schema.sql         *
+│   ├── 02_seed_settings.sql
+│   └── 03_seed_demo_jobs.sql
+└── Content/, Scripts/        Bootstrap and jQuery from the project template, unchanged
+```
+
+Layering:
+
+- Code-behind calls Services and Repositories. It contains no SQL, no pricing math, and no status rules.
+- SQL lives only in `DataAccess/`.
+- Business rules live only in `Services/`.
+
+## Out of scope
+
+Do not build these, and do not add hooks "for later" without asking: SMS, payment gateway or e-wallet verification, customer login or customer tracking page, inventory or supply tracking, delivery or pick-up scheduling, multi-branch, accounting, profit, tax or payroll, machine assignment, loyalty programs, scale/printer/scanner integration, demand forecasting, piece counting or itemized garment lists, online ordering, hard deletes.
+
+## Working agreement
+
+1. **One feature at a time**, against the existing schema. Do not rename, restructure, or "clean up" existing code unprompted. Follow the existing naming: PascalCase for C# and SQL, plural table names, foreign keys named `<Entity>Id`.
+2. **Starred files: explain before writing.** For any starred file, first describe the design in plain language and wait for the student's OK. Keep the code short and comment each rule it implements. Afterward, give a two or three sentence explanation the student can say out loud in the defense.
+3. **Schema changes: propose first.** Show the SQL, wait for approval, then update `01_schema.sql`.
+4. **Money and report queries: show your work.** Show the SQL and a worked example with small numbers so the student can verify it by hand.
+5. **Never claim something works without running it.** Build with Visual Studio or MSBuild. If you cannot build or run here, say so and give the exact steps to verify manually.
+6. **Simple over clever.** The student has to defend this code. Stay inside the file-type limits above, and add no NuGet packages without asking.
+7. **Flag assumptions.** If you had to guess, say "assumption" and ask.
+8. **Scope guard.** If a request contradicts this file or the out-of-scope list, point it out and ask before building.
+9. Keep changes small so the student can review each one before committing.
+
+## Open decisions
+
+Ask the student before hard-coding any of these. Store them in `Settings`, not in code.
+
+1. Real rate per kilo for each service, the minimum charge, and the rounding increment (default 1 kg).
+2. Claim number format (suggested: `LT-yyMMdd-###`).
+3. Days before an unclaimed load is flagged.
+4. Default turnaround hours used for the expected pick-up date on the slip.
+5. Whether rework may return to Drying or Folding, or only to Washing (default: any of the three).
+6. Whether the refund-on-void rule above matches what the student wants to demonstrate.
