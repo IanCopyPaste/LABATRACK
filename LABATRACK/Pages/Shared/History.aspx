@@ -83,13 +83,14 @@
                                         <th class="right">Total</th>
                                         <th>Paid via</th>
                                         <% if (IsOwner) { %><th>Staff</th><% } %>
+                                        <th><span class="sr-only">Actions</span></th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     <asp:Repeater ID="rptJobs" runat="server">
                                         <ItemTemplate>
                                             <tr class="<%# (string)Eval("Status") == "Voided" ? "is-voided" : "" %>">
-                                                <td class="mono"><a href="JobDetail.aspx"><%#: Eval("Claim") %></a></td>
+                                                <td class="mono"><%#: Eval("Claim") %></td>
                                                 <td><div class="cell-main"><%#: Eval("Customer") %></div><div class="cell-sub"><%#: Eval("Contact") %></div></td>
                                                 <td><div class="cell-main"><%#: Eval("Service") %></div><div class="cell-sub"><%# ((decimal)Eval("WeightKg")).ToString("0.0") %> kg</div></td>
                                                 <td class="num"><%# When((DateTime)Eval("DroppedOff")) %></td>
@@ -109,6 +110,9 @@
                                                     <%# string.IsNullOrEmpty((string)Eval("VoidReason")) ? "" : "<div class=\"void-reason\">&ldquo;" + Server.HtmlEncode((string)Eval("VoidReason")) + "&rdquo;</div>" %>
                                                 </td>
                                                 <% } %>
+                                                <td class="right">
+                                                    <a class="btn btn-sm" href="<%# DetailLink((string)Eval("Status")) %>" aria-label="View job <%#: Eval("Claim") %>"><%# Icons.Get("eye", "ico-sm") %>View</a>
+                                                </td>
                                             </tr>
                                         </ItemTemplate>
                                     </asp:Repeater>

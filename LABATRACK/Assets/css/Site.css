@@ -55,6 +55,8 @@ h2 { font-size: 15px; }
 h3 { font-size: 14px; }
 p { margin: 0; }
 .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* Read out by screen readers, not shown: a name for a column that has only buttons. */
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .muted { color: var(--muted); }
 .small { font-size: 12.5px; }
 .strong { font-weight: 600; }
@@ -226,11 +228,42 @@ table.table { width: 100%; border-collapse: collapse; }
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field label, .label { font-size: 13px; font-weight: 550; color: var(--text-2); }
 .hint { font-size: 12px; color: var(--muted); }
-.input, input[type=text], input[type=password], input[type=email], input[type=number], input[type=date], select, textarea {
+.input, input[type=text], input[type=password], input[type=email], input[type=number], input[type=search], input[type=tel],
+input[type=date], input[type=datetime-local], input[type=month], input[type=time], select, textarea {
   width: 100%; height: 38px; padding: 0 12px;
   border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
   background: var(--surface); color: var(--text); font: inherit;
 }
+
+/* Date and time boxes. The browser's own calendar button is a black glyph that ignores the
+   theme, so it is repainted with the local Lucide calendar icon in the muted ink, turning
+   blue on hover, and the part being typed (day, month, hour) is highlighted in the accent
+   instead of the system blue. */
+input[type=date], input[type=datetime-local], input[type=month], input[type=time] {
+  font-variant-numeric: tabular-nums; padding-right: 8px;
+}
+input::-webkit-datetime-edit { padding: 0; }
+input::-webkit-datetime-edit-fields-wrapper { padding: 0; }
+input::-webkit-datetime-edit-text { color: var(--muted); padding: 0 1px; }
+input::-webkit-datetime-edit-month-field:focus,
+input::-webkit-datetime-edit-day-field:focus,
+input::-webkit-datetime-edit-year-field:focus,
+input::-webkit-datetime-edit-hour-field:focus,
+input::-webkit-datetime-edit-minute-field:focus,
+input::-webkit-datetime-edit-ampm-field:focus {
+  background: var(--primary-soft); color: var(--primary); border-radius: 3px; outline: none;
+}
+input::-webkit-calendar-picker-indicator {
+  width: 16px; height: 16px; padding: 4px; margin-left: 6px; cursor: pointer; opacity: 1;
+  background: var(--muted);
+  -webkit-mask: url('../icons/calendar.svg') center / 16px 16px no-repeat;
+          mask: url('../icons/calendar.svg') center / 16px 16px no-repeat;
+}
+input[type=time]::-webkit-calendar-picker-indicator {
+  -webkit-mask-image: url('../icons/clock.svg'); mask-image: url('../icons/clock.svg');
+}
+input::-webkit-calendar-picker-indicator:hover { background: var(--primary); }
+input[type=search]::-webkit-search-cancel-button { cursor: pointer; }
 textarea { height: auto; min-height: 84px; padding: 10px 12px; resize: vertical; }
 .input:focus, input:focus, select:focus, textarea:focus {
   outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(47, 98, 201, .15);
@@ -356,6 +389,41 @@ textarea { height: auto; min-height: 84px; padding: 10px 12px; resize: vertical;
 .method { display: flex; gap: 10px; }
 .method label { flex: 1; }
 
+/* A short form laid out as one row above a full-width list (Customers, Staff). The fields
+   share the width and the buttons sit at the end, lined up with the boxes, not the labels.
+   Error text under a box pushes only its own column down. */
+.form-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px 16px; align-items: start; }
+.form-strip-actions { display: flex; gap: 8px; align-items: center; justify-content: flex-end; padding-top: 25px; }
+@media (max-width: 860px) {
+  .form-strip-actions { padding-top: 0; justify-content: stretch; }
+  .form-strip-actions .btn { flex: 1; }
+}
+
+/* Modal window, built on <dialog> so the browser handles focus, Esc, and the backdrop. */
+.modal {
+  width: min(480px, calc(100vw - 32px)); padding: 0; border: 1px solid var(--border);
+  border-radius: 12px; background: var(--surface); color: var(--text);
+  box-shadow: 0 20px 50px rgba(20, 35, 60, .22);
+}
+.modal::backdrop { background: rgba(20, 30, 45, .38); }
+.modal[open] { animation: modal-in .16s ease-out; }
+@keyframes modal-in { from { opacity: 0; transform: translateY(8px) scale(.98); } }
+.modal-h { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 18px 20px 14px; border-bottom: 1px solid var(--border); }
+.modal-h .sub { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+.modal-h .icon-btn { border: 0; background: none; cursor: pointer; flex-shrink: 0; }
+.modal-h .icon-btn:hover { color: var(--text); background: var(--surface-2); }
+.modal-b { padding: 18px 20px; }
+.modal-f {
+  display: flex; align-items: center; gap: 8px; justify-content: flex-end; flex-wrap: wrap;
+  padding: 14px 20px; border-top: 1px solid var(--border); background: var(--surface-2); border-radius: 0 0 12px 12px;
+}
+.draft-tag { margin-right: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--warning); }
+@media (prefers-reduced-motion: reduce) { .modal[open] { animation: none; } }
+
+/* A row that was just changed is washed in the accent for a moment. */
+.table tr.is-changed td { animation: row-flash 1.6s ease-out; }
+@keyframes row-flash { from { background: var(--primary-soft); } }
+
 /* Text box with a search icon inside it (History, Customers) */
 .search-input { position: relative; flex: 1; min-width: 0; }
 .search-input .ico { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
@@ -380,3 +448,59 @@ textarea { height: auto; min-height: 84px; padding: 10px 12px; resize: vertical;
 
 /* DRAFT: "preview another state" links on design drafts (JobDetail, EditJob) */
 .preview-links a { margin-right: 10px; font-weight: 600; }
+
+/* ---------- Charts (drawn by Helpers/SvgChart.cs; used by Reports and the daily sales report) ---------- */
+.chart { display: block; width: 100%; height: auto; overflow: visible; }
+.chart-axis { font-size: 11px; fill: #7b8796; font-variant-numeric: tabular-nums; }
+.chart-value { font-size: 11.5px; font-weight: 600; fill: #4a5768; }
+
+/* Every column or point is one hover and keyboard target; it gets a faint wash when active. */
+.chart .hit { fill: transparent; cursor: default; outline: none; }
+.chart a .hit { cursor: pointer; }
+.chart .hit:hover, .chart .hit:focus, .chart a:focus .hit { fill: rgba(47, 98, 201, .07); }
+.chart .hit:focus-visible, .chart a:focus-visible .hit { stroke: var(--primary); stroke-width: 1.5; }
+.chart a:focus { outline: none; }
+.chart .crosshair { visibility: hidden; }
+.chart .crosshair.on { visibility: visible; }
+
+/* Legend keys mirror the marks: a square for bars, a short stroke for lines. */
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-bottom: 8px; font-size: 12.5px; color: var(--text-2); }
+.legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.key-box { display: inline-block; width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+.key-line { display: inline-block; width: 14px; height: 2px; border-radius: 1px; flex-shrink: 0; }
+
+.split-line { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 10px; font-size: 13px; color: var(--text-2); }
+.split-line > span { display: inline-flex; align-items: center; gap: 6px; }
+.split-line b { color: var(--text); font-weight: 650; }
+
+/* The table twin of each chart, folded away until asked for. */
+.chart-table { margin-top: 12px; }
+.chart-table summary { cursor: pointer; font-size: 12.5px; color: var(--primary); width: max-content; }
+.chart-table[open] summary { margin-bottom: 8px; }
+.chart-table .table-wrap { max-height: 320px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.chart-table .table th, .chart-table .table td { padding: 7px 12px; font-size: 12.5px; }
+
+/* ---------- Horizontal bars (services, add-ons, staff) ---------- */
+.hbars { display: flex; flex-direction: column; gap: 4px; }
+.hbar {
+  display: grid; grid-template-columns: minmax(110px, 38%) 1fr auto; align-items: center; gap: 12px;
+  padding: 7px 8px; border-radius: 6px; outline: none;
+}
+.hbar:hover, .hbar:focus { background: var(--surface-2); }
+.hbar:focus-visible { box-shadow: 0 0 0 2px var(--primary); }
+.hbar-label { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hbar-track { height: 10px; background: #edf1f6; border-radius: 0 4px 4px 0; }
+.hbar-fill { display: block; height: 100%; background: #2f62c9; border-radius: 0 4px 4px 0; min-width: 2px; }
+.hbar-value { font-size: 12.5px; color: var(--text-2); white-space: nowrap; font-variant-numeric: tabular-nums; min-width: 96px; text-align: right; }
+
+/* ---------- Tooltip (Charts.js) ---------- */
+.chart-tip {
+  position: fixed; z-index: 50; pointer-events: none; min-width: 150px; max-width: 260px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(20, 35, 60, .14); padding: 8px 10px; font-size: 12.5px;
+}
+.chart-tip[hidden] { display: none; }
+.chart-tip .tip-title { color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+.chart-tip .tip-row { display: flex; align-items: center; gap: 8px; line-height: 1.7; }
+.chart-tip .tip-row b { font-weight: 650; color: var(--text); font-variant-numeric: tabular-nums; }
+.chart-tip .tip-row span { color: var(--text-2); }

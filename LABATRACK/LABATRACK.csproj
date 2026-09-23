@@ -88,6 +88,7 @@
     <Content Include="Assets\js\Dashboard.js" />
     <Content Include="Assets\js\EditJob.js" />
     <Content Include="Assets\js\NewJob.js" />
+    <Content Include="Assets\js\Pricing.js" />
     <Content Include="Assets\js\Print.js" />
   </ItemGroup>
   <ItemGroup>
@@ -186,6 +187,7 @@
     <Content Include="Assets\icons\package-check.svg" />
     <Content Include="Assets\icons\pencil.svg" />
     <Content Include="Assets\icons\minus.svg" />
+    <Content Include="Assets\icons\x.svg" />
     <Content Include="Assets\icons\plus.svg" />
     <Content Include="Assets\icons\printer.svg" />
     <Content Include="Assets\icons\receipt.svg" />

@@ -66,7 +66,7 @@
                         </div>
                     </section>
 
-                    <div class="grid grid-main-side">
+                    <%-- The job list takes the full width so every column fits; the two short lists sit side by side under it. --%>
                         <!-- Active board: filtered by status, oldest first -->
                         <section class="card">
                             <div class="card-h">
@@ -176,7 +176,8 @@
                             </div>
                         </section>
 
-                        <div class="stack">
+                    <div class="grid grid-2" style="align-items:start;">
+
                             <!-- Needs attention: unclaimed past threshold + voided today -->
                             <section class="card">
                                 <div class="card-h">
@@ -237,7 +238,7 @@
                                     </li>
                                 </ul>
                             </section>
-                        </div>
+
                     </div>
                 </div>
             </main>
