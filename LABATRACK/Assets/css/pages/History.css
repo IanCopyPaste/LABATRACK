@@ -1,4 +1,4 @@
-/* Pages/Shared/History.aspx */
+﻿/* Pages/Shared/History.aspx */
 
 /* Filters sit on one line on a wide screen and wrap onto more as it narrows. */
 .history-filters { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; }

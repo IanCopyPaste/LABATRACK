@@ -29,8 +29,8 @@ Claude Code proposes the tables, the student reviews and approves, then it write
 
 Done when:
 
-- `01_schema.sql` runs top to bottom in SSMS against the empty `ADOTE_LABATRACK` database with no errors, and running it a second time does not break anything.
-- A page in the app (a throwaway `.aspx` is fine) connects using `ADOTE_LABATRACKConnectionString` and shows a row from `Settings`, which proves the connection works before any real feature depends on it.
+- `01_schema.sql` runs top to bottom in SSMS against the empty `labatrack` database on `(localdb)\IPTconnection` with no errors, and running it a second time does not break anything.
+- A page in the app (a throwaway `.aspx` is fine) connects using `LABATRACK_conn` and shows a row from `Settings`, which proves the connection works before any real feature depends on it.
 - The tables exist in SQL Server with foreign keys and `CHECK` constraints on status and payment method.
 - The `vw_JobPayments` view returns the right amount paid, net of refunds, for a few hand-made rows (including a voided job that nets to 0).
 - A database diagram of the schema has been generated in SSMS for the documentation.
@@ -81,7 +81,7 @@ Done when the daily total on screen equals `SELECT SUM(Amount) FROM Payments` fo
 
 ### Phase 6: Demo data and rehearsal (Days 14 to 15)
 
-Write `03_seed_demo_jobs.sql`: 40 to 50 jobs across at least seven days, covering every stage, at least one rework, one voided job with a refund, a mix of cash (with change) and e-wallet payments, and a few loads sitting unclaimed. Then run the test script below, rehearse the demo from login to end-of-day report, and prepare the defense answers. Run the whole demo once on the computer you will present from. Its SQL Server instance must match the connection string's `Data Source`, and the database and seed data must exist there too.
+Write `03_seed_demo_jobs.sql`: 40 to 50 jobs across at least seven days, covering every stage, at least one rework, one voided job with a refund, a mix of cash (with change) and e-wallet payments, and a few loads sitting unclaimed. Then run the test script below, rehearse the demo from login to end-of-day report, and prepare the defense answers. Run the whole demo once on the computer you will present from. That computer needs the LocalDB instance from the connection string (`sqllocaldb create IPTconnection`), with the `labatrack` database and its seed data built there too.
 
 Seed data should exist before Phase 5, not on the last day, so the reports show something real while they are being built.
 

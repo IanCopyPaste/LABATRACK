@@ -30,10 +30,10 @@
                                         <h2>Services</h2>
                                         <div class="sub">Charged per kilo</div>
                                     </div>
-                                    <button type="button" class="btn btn-sm"><%= Icons.Get("plus", "ico-sm") %>Add service</button>
+                                    <button type="button" class="btn btn-sm" data-price-add="service"><%= Icons.Get("plus", "ico-sm") %>Add service</button>
                                 </div>
                                 <div class="table-wrap">
-                                    <table class="table">
+                                    <table class="table" data-price-table="service">
                                         <thead>
                                             <tr><th>Service</th><th class="right">Rate per kg</th><th>Status</th><th></th></tr>
                                         </thead>
@@ -42,25 +42,25 @@
                                                 <td class="cell-main">Wash-Dry-Fold</td>
                                                 <td class="right num">₱40.00</td>
                                                 <td><span class="pill pill-ok">Active</span></td>
-                                                <td class="right"><button type="button" class="btn btn-sm btn-ghost"><%= Icons.Get("pencil", "ico-sm") %>Edit</button></td>
+                                                <td class="right"><button type="button" class="btn btn-sm btn-ghost" data-price-edit="true"><%= Icons.Get("pencil", "ico-sm") %>Edit</button></td>
                                             </tr>
                                             <tr>
                                                 <td class="cell-main">Wash-Dry</td>
                                                 <td class="right num">₱35.00</td>
                                                 <td><span class="pill pill-ok">Active</span></td>
-                                                <td class="right"><button type="button" class="btn btn-sm btn-ghost"><%= Icons.Get("pencil", "ico-sm") %>Edit</button></td>
+                                                <td class="right"><button type="button" class="btn btn-sm btn-ghost" data-price-edit="true"><%= Icons.Get("pencil", "ico-sm") %>Edit</button></td>
                                             </tr>
                                             <tr>
                                                 <td class="cell-main">Comforter / Bulky</td>
                                                 <td class="right num">₱60.00</td>
                                                 <td><span class="pill pill-ok">Active</span></td>
-                                                <td class="right"><button type="button" class="btn btn-sm btn-ghost"><%= Icons.Get("pencil", "ico-sm") %>Edit</button></td>
+                                                <td class="right"><button type="button" class="btn btn-sm btn-ghost" data-price-edit="true"><%= Icons.Get("pencil", "ico-sm") %>Edit</button></td>
                                             </tr>
                                             <tr>
                                                 <td class="cell-main muted">Wash Only</td>
                                                 <td class="right num muted">₱25.00</td>
                                                 <td><span class="pill st-claimed">Inactive</span></td>
-                                                <td class="right"><button type="button" class="btn btn-sm btn-ghost"><%= Icons.Get("pencil", "ico-sm") %>Edit</button></td>
+                                                <td class="right"><button type="button" class="btn btn-sm btn-ghost" data-price-edit="true"><%= Icons.Get("pencil", "ico-sm") %>Edit</button></td>
                                             </tr>
                                         </tbody>
                                     </table>
@@ -76,10 +76,10 @@
                                         <h2>Service add-ons</h2>
                                         <div class="sub">Extra work on the load. Charged once, whatever the weight.</div>
                                     </div>
-                                    <button type="button" class="btn btn-sm"><%= Icons.Get("plus", "ico-sm") %>Add service</button>
+                                    <button type="button" class="btn btn-sm" data-price-add="service-addon"><%= Icons.Get("plus", "ico-sm") %>Add service add-on</button>
                                 </div>
                                 <div class="table-wrap">
-                                    <table class="table">
+                                    <table class="table" data-price-table="service-addon">
                                         <thead>
                                             <tr><th>Service add-on</th><th class="right">Price</th><th>Status</th><th></th></tr>
                                         </thead>
@@ -88,13 +88,13 @@
                                                 <td class="cell-main">Extra rinse</td>
                                                 <td class="right num">₱20.00</td>
                                                 <td><span class="pill pill-ok">Active</span></td>
-                                                <td class="right"><button type="button" class="btn btn-sm btn-ghost"><%= Icons.Get("pencil", "ico-sm") %>Edit</button></td>
+                                                <td class="right"><button type="button" class="btn btn-sm btn-ghost" data-price-edit="true"><%= Icons.Get("pencil", "ico-sm") %>Edit</button></td>
                                             </tr>
                                             <tr>
                                                 <td class="cell-main">Stain treatment</td>
                                                 <td class="right num">₱30.00</td>
                                                 <td><span class="pill pill-ok">Active</span></td>
-                                                <td class="right"><button type="button" class="btn btn-sm btn-ghost"><%= Icons.Get("pencil", "ico-sm") %>Edit</button></td>
+                                                <td class="right"><button type="button" class="btn btn-sm btn-ghost" data-price-edit="true"><%= Icons.Get("pencil", "ico-sm") %>Edit</button></td>
                                             </tr>
                                         </tbody>
                                     </table>
@@ -107,10 +107,10 @@
                                         <h2>Product add-ons</h2>
                                         <div class="sub">Items sold with the load. Priced per piece and billed by quantity.</div>
                                     </div>
-                                    <button type="button" class="btn btn-sm"><%= Icons.Get("plus", "ico-sm") %>Add product</button>
+                                    <button type="button" class="btn btn-sm" data-price-add="product"><%= Icons.Get("plus", "ico-sm") %>Add product</button>
                                 </div>
                                 <div class="table-wrap">
-                                    <table class="table">
+                                    <table class="table" data-price-table="product">
                                         <thead>
                                             <tr><th>Product add-on</th><th class="right">Price each</th><th>Status</th><th></th></tr>
                                         </thead>
@@ -119,13 +119,13 @@
                                                 <td class="cell-main">Fabric conditioner</td>
                                                 <td class="right num">₱15.00</td>
                                                 <td><span class="pill pill-ok">Active</span></td>
-                                                <td class="right"><button type="button" class="btn btn-sm btn-ghost"><%= Icons.Get("pencil", "ico-sm") %>Edit</button></td>
+                                                <td class="right"><button type="button" class="btn btn-sm btn-ghost" data-price-edit="true"><%= Icons.Get("pencil", "ico-sm") %>Edit</button></td>
                                             </tr>
                                             <tr>
                                                 <td class="cell-main">Detergent sachet</td>
                                                 <td class="right num">₱12.00</td>
                                                 <td><span class="pill pill-ok">Active</span></td>
-                                                <td class="right"><button type="button" class="btn btn-sm btn-ghost"><%= Icons.Get("pencil", "ico-sm") %>Edit</button></td>
+                                                <td class="right"><button type="button" class="btn btn-sm btn-ghost" data-price-edit="true"><%= Icons.Get("pencil", "ico-sm") %>Edit</button></td>
                                             </tr>
                                         </tbody>
                                     </table>
@@ -188,6 +188,48 @@
                 </div>
             </main>
         </div>
+
+        <%-- One edit window for all three lists (services, service add-ons, products). Pricing.js fills it
+             from the row that was clicked and sets the labels for that kind of price. There is no delete:
+             a price that is no longer offered is set to Inactive, so old jobs still point at it. --%>
+        <dialog id="priceDialog" class="modal" aria-labelledby="priceDialogTitle">
+            <div class="modal-h">
+                <div>
+                    <h2 id="priceDialogTitle">Edit price</h2>
+                    <div class="sub" id="priceDialogSub"></div>
+                </div>
+                <button type="button" class="icon-btn" data-modal-close="true" aria-label="Close"><%= Icons.Get("x") %></button>
+            </div>
+            <div class="modal-b form">
+                <div class="field">
+                    <label for="pdName">Name</label>
+                    <input type="text" id="pdName" maxlength="60" autocomplete="off" />
+                    <span class="error-text" id="pdNameError" hidden></span>
+                </div>
+                <div class="field">
+                    <label for="pdPrice" id="pdPriceLabel">Price</label>
+                    <div class="input-prefix"><span>₱</span><input type="text" id="pdPrice" inputmode="decimal" autocomplete="off" /></div>
+                    <span class="hint" id="pdPriceHint"></span>
+                    <span class="error-text" id="pdPriceError" hidden></span>
+                </div>
+                <div class="field">
+                    <span class="label">Status</span>
+                    <label class="check"><input type="checkbox" id="pdActive" /><span><strong>Active</strong> <span class="muted small">&middot; offered on new job orders</span></span></label>
+                    <span class="hint">Untick to stop offering it. It stays on every job that already used it.</span>
+                </div>
+                <div class="notice notice-info">
+                    <%= Icons.Get("info", "ico-sm") %>
+                    <span>A new price applies to new job orders only. Jobs already made keep the price they were created with.</span>
+                </div>
+            </div>
+            <div class="modal-f">
+                <span class="draft-tag"><%= Icons.Get("circle-alert", "ico-sm") %>Draft: updates this page only, nothing is saved yet</span>
+                <button type="button" class="btn btn-ghost" data-modal-close="true">Cancel</button>
+                <button type="button" class="btn btn-primary" id="pdSave"><%= Icons.Get("save", "ico-sm") %><span id="pdSaveText">Save changes</span></button>
+            </div>
+        </dialog>
     </form>
+
+    <script src="<%= AssetUrl.Get("~/Assets/js/Pricing.js") %>"></script>
 </body>
 </html>

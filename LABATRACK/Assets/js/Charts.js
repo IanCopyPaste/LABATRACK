@@ -1,4 +1,4 @@
-// Tooltips for the charts drawn by Helpers/SvgChart.cs (Admin/Reports.aspx).
+﻿// Tooltips for the charts drawn by Helpers/SvgChart.cs (Admin/Reports.aspx).
 // Every mark that can show a tooltip carries data-tip-title and data-tip-rows (JSON rows of
 // [name, value, colour]). The same tooltip appears on hover and on keyboard focus, and it
 // only repeats what the table under each chart already shows. Names are put in with

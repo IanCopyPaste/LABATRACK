@@ -1,22 +1,121 @@
-﻿/* Admin/DailySalesReport.aspx: printable daily sales sheet */
+﻿/* Admin/DailySalesReport.aspx
+   A document, not a screen: the page is one A4 sheet (210 x 297 mm). On screen it is shown
+   as paper on the grey desk with the toolbar above it; on paper the toolbar goes and the
+   sheet prints at its own size with its own margins and page numbers. */
 
-.sheet { max-width: 880px; margin: 32px auto; padding: 0 16px; }
-.sheet-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 20px; }
-.toolbar { display: flex; gap: 8px; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
-.totals { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.totals > div { padding: 16px 20px; border-right: 1px solid var(--border); }
-.totals > div:last-child { border-right: 0; }
-.totals .v { font-size: 20px; font-weight: 650; font-variant-numeric: tabular-nums; margin-top: 4px; }
-.neg { color: var(--danger); }
-.sign { display: flex; gap: 48px; margin-top: 48px; }
-.sign div { flex: 1; border-top: 1px solid var(--border-strong); padding-top: 6px; color: var(--muted); font-size: 12.5px; }
-@media (max-width: 640px) { .totals { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* ---------- Screen: the sheet on the desk ---------- */
+.toolbar {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 10px 16px; background: rgba(244, 246, 249, .92); backdrop-filter: blur(6px);
+  border-bottom: 1px solid var(--border);
+}
+.toolbar-tools { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.toolbar-tools .input { width: auto; }
 
-/* Printing: plain white sheet, no toolbar, no shadows */
+.paper {
+  width: 210mm; min-height: 297mm; margin: 24px auto 48px; padding: 16mm 15mm 14mm;
+  background: #fff; color: #1e2a3a; font-size: 11.5px; line-height: 1.45;
+  box-shadow: 0 1px 3px rgba(20, 35, 60, .08), 0 12px 32px rgba(20, 35, 60, .12);
+  display: flex; flex-direction: column;
+}
+
+/* ---------- Letterhead ---------- */
+.letterhead {
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;
+  padding-bottom: 10px; border-bottom: 2px solid #1e2a3a;
+}
+.shop { display: flex; align-items: center; gap: 10px; }
+.shop-mark { width: 34px; height: 34px; border-radius: 8px; background: var(--primary); color: #fff; display: grid; place-items: center; }
+.shop-name { font-size: 15px; font-weight: 700; letter-spacing: -.01em; }
+.shop-sub { font-size: 10.5px; color: #7b8796; }
+.doc-id { text-align: right; }
+.doc-title { font-size: 17px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; }
+.doc-date { font-size: 12.5px; font-weight: 600; margin-top: 2px; }
+.doc-meta { font-size: 10px; color: #7b8796; margin-top: 2px; }
+
+.open-day {
+  display: flex; align-items: center; gap: 6px; margin-top: 8px; padding: 4px 10px;
+  border-radius: 6px; background: var(--warning-soft); color: #8a5a14; font-size: 11px;
+}
+
+/* ---------- Summary boxes ---------- */
+.summary { display: grid; grid-template-columns: 1.3fr 1fr 1fr 1fr; gap: 8px; margin-top: 10px; }
+.sum-box { border: 1px solid #d9e0e8; border-radius: 6px; padding: 9px 11px; }
+.sum-box.lead { background: #f3f6fc; border-color: #c9d6ef; }
+.sum-label { display: flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: #4a5768; }
+.sum-value { font-size: 17px; font-weight: 700; margin-top: 3px; }
+.sum-box.lead .sum-value { font-size: 20px; color: var(--primary); }
+.sum-note { font-size: 10px; color: #7b8796; margin-top: 2px; }
+
+/* ---------- Sections ---------- */
+.block { margin-top: 12px; break-inside: avoid; }
+/* The ledger can be long, so it may run onto the next page (its header row repeats there);
+   a heading is never left alone at the bottom of a page. */
+.block.ledger-block { break-inside: auto; }
+.block h2 {
+  font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #4a5768;
+  padding-bottom: 5px; margin-bottom: 8px; border-bottom: 1px solid #d9e0e8; break-after: avoid;
+}
+.block .legend { font-size: 10.5px; margin-bottom: 2px; }
+.block .chart-axis { font-size: 10px; }
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+/* Tables built for paper: hairlines, no fills, numbers lined up. */
+.sheet-table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+.sheet-table th {
+  text-align: left; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+  color: #7b8796; padding: 4px 6px; border-bottom: 1px solid #1e2a3a;
+}
+.sheet-table td { padding: 3px 6px; border-bottom: 1px solid #edf0f4; vertical-align: top; }
+.sheet-table .right { text-align: right; }
+.sheet-table tfoot td { border-top: 1.5px solid #1e2a3a; border-bottom: 0; font-weight: 700; padding-top: 6px; }
+.sheet-table .mono { font-size: 10px; }
+.ledger td.what { color: #4a5768; }
+.ledger tr.refund td { color: var(--danger); }
+.ledger tr { break-inside: avoid; }
+.footnote { margin: 6px 0 0; font-size: 9.5px; color: #7b8796; }
+
+/* ---------- Cash drawer check, filled in by hand ---------- */
+/* One column, read top to bottom like the sum it is: float + cash sales = expected; counted - expected = over/short. */
+.drawer-grid { display: flex; flex-direction: column; }
+.drawer-row { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; padding: 3px 0 1px; }
+.drawer-row.strong span:first-child { font-weight: 700; }
+.drawer-row .val { font-weight: 600; font-variant-numeric: tabular-nums; }
+.drawer-row .blank { flex: 0 0 38%; border-bottom: 1px solid #1e2a3a; height: 13px; }
+
+.closing { display: grid; grid-template-columns: 1.35fr 1fr; gap: 32px; align-items: start; break-inside: avoid; }
+.signatures { display: flex; flex-direction: column; gap: 10px; margin-top: 30px; }
+.signatures div { font-size: 10px; color: #7b8796; }
+.signatures .line { display: block; border-bottom: 1px solid #1e2a3a; height: 22px; margin-bottom: 3px; }
+
+
+/* ---------- Narrow screens: the sheet shrinks to fit, it is still one sheet.
+   Screen only: the printable width of A4 is under 860px too, and paper must keep the full layout. */
+@media screen and (max-width: 860px) {
+  .paper { width: auto; min-height: 0; margin: 12px; padding: 20px 16px; }
+  .summary { grid-template-columns: 1fr 1fr; }
+  .two-col { grid-template-columns: 1fr; }
+  .closing { grid-template-columns: 1fr; gap: 8px; }
+  .signatures { margin-top: 12px; }
+  .letterhead { flex-direction: column; }
+  .doc-id { text-align: left; }
+}
+
+/* ---------- Paper ---------- */
+@page {
+  size: A4 portrait;
+  margin: 12mm 12mm 14mm;
+  @bottom-left { content: "LabaTrack · Daily sales report"; font: 8pt 'Inter', sans-serif; color: #9aa5b1; }
+  @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 8pt 'Inter', sans-serif; color: #9aa5b1; }
+}
 @media print {
-  body { background: #fff; font-size: 12px; }
-  .toolbar { display: none; }
-  .sheet { margin: 0; max-width: none; padding: 0; }
-  .card { box-shadow: none; }
-  .table td, .table th { padding: 7px 10px; }
+  html, body.print-page { background: #fff; }
+  .toolbar, .chart-tip, .chart .crosshair { display: none !important; }
+  .paper { width: auto; min-height: 0; margin: 0; padding: 0; box-shadow: none; }
+  /* Keep the colours of the chart keys, the lead box and refunds, which browsers drop by default. */
+  .paper { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .chart .hit { fill: transparent !important; stroke: none !important; }
+  /* The net total prints once, under the last line, not at the foot of every page. */
+  .ledger tfoot { display: table-row-group; }
 }

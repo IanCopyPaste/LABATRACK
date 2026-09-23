@@ -132,6 +132,19 @@ namespace LABATRACK.Pages.Shared
             return "History.aspx" + (parts.Count > 0 ? "?" + string.Join("&", parts) : "");
         }
 
+        // DRAFT: JobDetail has no job id yet, only preview stages, so View opens the preview for the
+        // same stage. Phase 4 links to JobDetail.aspx?id=<JobId> instead.
+        protected static string DetailLink(string status)
+        {
+            switch (status)
+            {
+                case "Queued": case "Washing": case "Inspection": case "Claimed": case "Voided":
+                    return "JobDetail.aspx?stage=" + status;
+                default:
+                    return "JobDetail.aspx";
+            }
+        }
+
         protected static string StageCss(string stage)
         {
             switch (stage)
