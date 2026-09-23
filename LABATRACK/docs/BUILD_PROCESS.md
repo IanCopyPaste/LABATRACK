@@ -7,7 +7,7 @@ Target: a working demo about 15 working days after planning starts. Rules live i
 - Login with owner and staff roles, enforced on the server
 - Job order creation with automatic price computation
 - Rate snapshot stored inside each job
-- Payment recording (method and paid, partial, or unpaid)
+- Full payment at drop-off (Cash with change computed, or E-wallet)
 - Claim number and printable slip
 - Status board with a timestamp and staff name on every change
 - Mark as claimed
@@ -32,7 +32,7 @@ Done when:
 - `01_schema.sql` runs top to bottom in SSMS against the empty `ADOTE_LABATRACK` database with no errors, and running it a second time does not break anything.
 - A page in the app (a throwaway `.aspx` is fine) connects using `ADOTE_LABATRACKConnectionString` and shows a row from `Settings`, which proves the connection works before any real feature depends on it.
 - The tables exist in SQL Server with foreign keys and `CHECK` constraints on status and payment method.
-- The `vw_JobBalances` view returns the right paid, partial, or unpaid result for a few hand-made rows.
+- The `vw_JobPayments` view returns the right amount paid, net of refunds, for a few hand-made rows (including a voided job that nets to 0).
 - A database diagram of the schema has been generated in SSMS for the documentation.
 
 ### Phase 2: Login, roles, pricing settings (Days 3 to 4)
@@ -48,16 +48,16 @@ Done when:
 
 ### Phase 3: Job creation (Days 5 to 8)
 
-This is the heart of the system and it takes longer than expected. Build customer lookup by contact number, `NewJob.aspx` (add-on checkboxes and the payment fields live in the page itself), `PricingService`, `ClaimNumberGenerator`, the single-transaction save, and `JobSlip.aspx` with its own `@media print` block.
+This is the heart of the system and it takes longer than expected. Build customer lookup by contact number, `NewJob.aspx` (service add-on checkboxes, product add-on quantity steppers, and the payment fields live in the page itself), `PricingService`, `ClaimNumberGenerator`, the single-transaction save, and `JobSlip.aspx` with its own `@media print` block.
 
 Done when the totals below match by hand. These are example numbers (rate 40 per kg, minimum charge 120, rounding increment 1 kg). Replace them with the owner's real rates.
 
 | Weight | Billable kg | Laundry charge | Add-ons | Total |
 |---|---|---|---|---|
 | 2.0 kg | 2 | 80, raised to minimum 120 | none | 120 |
-| 2.3 kg | 3 | 120 | Fabric conditioner 15 | 135 |
+| 2.3 kg | 3 | 120 | Fabric conditioner x1 (15) | 135 |
 | 5.1 kg | 6 | 240 | none | 240 |
-| 5.1 kg | 6 | 240 | Fabric conditioner 15, Rush 50 | 305 |
+| 5.1 kg | 6 | 240 | Extra rinse (20), Fabric conditioner x2 (30) | 290 |
 
 Also done when a job created at one rate keeps its total after the owner changes that rate.
 
@@ -69,8 +69,8 @@ Done when:
 
 - An illegal transition (for example Queued straight to Folding) is rejected.
 - Failing inspection sends a job back to Washing and the timeline shows both passes.
-- Voiding a Queued job with a payment creates a refund row and the day's total is correct.
-- Claiming with a balance above 0 is blocked until the balance is paid.
+- Voiding a Queued job creates a full refund row and the day's total is correct.
+- A job cannot be saved without a full payment, and cash received below the total is rejected.
 - A job dropped off yesterday is still on the board today.
 
 ### Phase 5: Reports and email (Days 12 to 13)
@@ -81,7 +81,7 @@ Done when the daily total on screen equals `SELECT SUM(Amount) FROM Payments` fo
 
 ### Phase 6: Demo data and rehearsal (Days 14 to 15)
 
-Write `03_seed_demo_jobs.sql`: 40 to 50 jobs across at least seven days, covering every stage, at least one rework, one voided job with a refund, several partial payments, and a few loads sitting unclaimed. Then run the test script below, rehearse the demo from login to end-of-day report, and prepare the defense answers. Run the whole demo once on the computer you will present from. Its SQL Server instance must match the connection string's `Data Source`, and the database and seed data must exist there too.
+Write `03_seed_demo_jobs.sql`: 40 to 50 jobs across at least seven days, covering every stage, at least one rework, one voided job with a refund, a mix of cash (with change) and e-wallet payments, and a few loads sitting unclaimed. Then run the test script below, rehearse the demo from login to end-of-day report, and prepare the defense answers. Run the whole demo once on the computer you will present from. Its SQL Server instance must match the connection string's `Data Source`, and the database and seed data must exist there too.
 
 Seed data should exist before Phase 5, not on the last day, so the reports show something real while they are being built.
 
@@ -100,15 +100,16 @@ Cut in this order:
 
 Run this at the end of each phase that touches it, and once more before the demo.
 
-1. Create a job with two add-ons and a partial payment. Check the total and the balance by hand.
+1. Create a job with one service add-on and a product add-on at quantity 2, paid in cash with more than the total. Check the total and the change by hand, and that the slip prints the quantity, the same cash received, and the change.
 2. Advance it through every stage. Confirm one history row per change with the right staff name.
 3. Fail inspection, send it back to Washing, and advance it again. Confirm the timeline shows the rework.
-4. Void a Queued job that already had a payment. Confirm the refund row and the daily total.
+4. Void a Queued job. Confirm the full refund row and that the daily total nets it out.
 5. Open the same job in two browser windows and advance it in both. The second must get the "already updated" message.
-6. Try to claim a job with a balance. It must be blocked. Pay the balance and claim it.
+6. Try to create a job with cash received below the total. It must be rejected. Then create it with enough cash and claim it once Ready.
 7. Log in as staff and open an admin URL directly. It must redirect to the admin login.
 8. Change a rate as the owner. Old jobs must keep their totals.
 9. Compare the on-screen daily total with a `SELECT` on `Payments` for the same day.
+10. As the owner, correct a paid job's weight upward, then another one downward. Confirm each save adds one adjustment row (positive, then negative) and that each job's payments add up to its new total.
 
 ## Defense questions to be ready for
 
