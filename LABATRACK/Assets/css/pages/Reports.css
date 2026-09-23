@@ -1,4 +1,4 @@
-/* Admin/Reports.aspx. The charts themselves are SVG drawn by Helpers/SvgChart.cs. */
+﻿/* Admin/Reports.aspx. The charts themselves are SVG drawn by Helpers/SvgChart.cs. */
 
 /* ---------- Period filter: one row above everything it scopes ---------- */
 .report-filters { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }

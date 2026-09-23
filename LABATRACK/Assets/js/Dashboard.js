@@ -1,4 +1,4 @@
-// Pages/Shared/Dashboard.aspx
+﻿// Pages/Shared/Dashboard.aspx
 // Filters the board as staff type a claim number, name, or contact number. Display only:
 // hidden cards are still on the page, and the filter text survives a card move because
 // the box is a server TextBox.

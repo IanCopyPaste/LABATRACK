@@ -7,8 +7,8 @@ Build order, definition of done per phase, and the test script: @docs/BUILD_PROC
 ## Stack
 
 - ASP.NET Web Forms, C#, .NET Framework 4.8 (Visual Studio on Windows)
-- SQL Server Express with T-SQL, managed with SSMS. The database is `ADOTE_LABATRACK` and it already exists. Plain ADO.NET (`System.Data.SqlClient`) with parameterized queries. No ORM.
-- Connection: Windows authentication (`Integrated Security=True`). The connection string is named `ADOTE_LABATRACKConnectionString` in `Web.config`, and `Db.cs` is the only code that reads it, through `ConfigurationManager.ConnectionStrings`.
+- SQL Server LocalDB with T-SQL, managed with SSMS. The instance is `(localdb)\IPTconnection` and the database is `labatrack`. Plain ADO.NET (`System.Data.SqlClient`) with parameterized queries. No ORM.
+- Connection: Windows authentication (`Trusted_Connection=True`). The connection string is named `LABATRACK_conn` in `Web.config` (`Server=(localdb)\IPTconnection;Database=labatrack;Trusted_Connection=True;`), and `Db.cs` is the only code that reads it, through `ConfigurationManager.ConnectionStrings["LABATRACK_conn"]`. This is the student's chosen connection; do not change it.
 - UI styling comes from `Assets/css/Site.css` plus one optional stylesheet per page in `Assets/css/pages/`, loaded by `BasePage` through `Helpers/SiteStyle.cs`. No Bootstrap: the project has no copy of it and does not need one. The look is professional and light on the eyes: soft grey background, white cards, one calm blue accent.
 - Email through SMTP only. No SMS. No payment gateway.
 - Currency is the Philippine peso. Use `decimal` in C# and `DECIMAL(10,2)` in SQL for every amount. Never `float` or `double`.
@@ -158,9 +158,9 @@ Proposed tables (confirm with the user before creating):
 - Filter by day with a half-open range: `PaidAt >= @dayStart AND PaidAt < @nextDayStart`. Do not use `BETWEEN` with an end-of-day time, and do not wrap the column in a function in the `WHERE` clause.
 - Transactions are handled in C# with `SqlTransaction`, not in stored procedures. The concurrency guard reads the rows-affected count from `ExecuteNonQuery`; zero means someone else already changed the job.
 - The amount paid per job, net of refunds, comes from one view (for example `vw_JobPayments`, built from `JobOrders` and `Payments`), so every screen and report uses the same calculation.
-- Every script starts with `USE ADOTE_LABATRACK;` followed by `GO`. Scripts never `CREATE`, `DROP`, or `ALTER` the database itself.
-- The connection string's `Data Source` names this development machine (`DESKTOP-0J9K2FQ\SQLEXPRESS`). Never hard-code that in C#. If the app runs on another computer, change it in `Web.config` to that machine's instance, or to `.\SQLEXPRESS`, which works on any computer with a default SQL Express install.
-- Windows authentication means the account running the app needs a login and permissions on `ADOTE_LABATRACK`. It works as-is when the app is run from Visual Studio. If it is ever hosted in full IIS, the app pool identity needs that login.
+- Every script starts with `USE labatrack;` followed by `GO`. Scripts never `CREATE`, `DROP`, or `ALTER` the database itself.
+- The server name lives only in `Web.config` (`(localdb)\IPTconnection`). Never hard-code it in C#. LocalDB runs per Windows user on the machine itself, so any computer that runs the app (including the one used for the defense) needs the `IPTconnection` instance created (`sqllocaldb create IPTconnection`) and the `labatrack` database restored or built there from the scripts.
+- Windows authentication means the Windows user running the app needs permissions on `labatrack`. It works as-is when the app is run from Visual Studio. LocalDB does not work under full IIS without extra setup, so demo from Visual Studio (IIS Express).
 
 ## Customers
 
