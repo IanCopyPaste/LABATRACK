@@ -73,6 +73,6 @@
         </div>
     </form>
 
-    <script src="../Assets/js/Print.js"></script>
+    <script src="<%= AssetUrl.Get("~/Assets/js/Print.js") %>"></script>
 </body>
 </html>

@@ -12,7 +12,7 @@ namespace LABATRACK.Pages.Shared
             get { return "NewJob.css"; }
         }
 
-        private const decimal SampleTotal = 305.00m;   // DRAFT: Phase 3 gets this from PricingService
+        private const decimal SampleTotal = 290.00m;   // DRAFT: Phase 3 gets this from PricingService
 
         protected override string ActiveNav
         {

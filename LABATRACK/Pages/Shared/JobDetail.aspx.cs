@@ -36,7 +36,7 @@ namespace LABATRACK.Pages.Shared
         protected string CurrentStage { get; private set; }
         protected string NextStage { get; private set; }
         protected bool IsVoided { get; private set; }
-        protected decimal Total = 305.00m;
+        protected decimal Total = 290.00m;
         protected decimal CashReceived = 500.00m;
         protected decimal Change { get { return CashReceived - Total; } }   // change = cash received - total
         protected bool ReadyEmailSent { get { return CurrentStage == "Ready for pick-up" || CurrentStage == "Claimed"; } }
@@ -96,9 +96,9 @@ namespace LABATRACK.Pages.Shared
 
         private List<PaymentRow> BuildPayments()
         {
-            var list = new List<PaymentRow> { new PaymentRow("Sep 21, 9:12 AM", "Cash", 305.00m, "jcruz", false) };
+            var list = new List<PaymentRow> { new PaymentRow("Sep 21, 9:12 AM", "Cash", 290.00m, "jcruz", false) };
             if (IsVoided)
-                list.Add(new PaymentRow("Sep 21, 9:20 AM", "Cash", -305.00m, "jcruz", true));
+                list.Add(new PaymentRow("Sep 21, 9:20 AM", "Cash", -290.00m, "jcruz", true));
             return list;
         }
 

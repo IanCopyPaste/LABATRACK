@@ -66,13 +66,40 @@
                                             <span class="hint">Was 4.6 kg when the job was created.</span>
                                         </div>
                                     </div>
+                                    <%-- Services are charged once and stay checkboxes; products are counted and
+                                         bill as quantity x unit price. Like the weight above, a change here is
+                                         priced by the server on save, so the summary beside this form is the
+                                         total as it stands now. --%>
                                     <div class="field">
-                                        <span class="label">Add-ons</span>
-                                        <div class="grid grid-2" style="gap:10px;">
-                                            <label class="check"><input type="checkbox" />Fabric conditioner<span class="price num">₱15.00</span></label>
+                                        <span class="label">Service add-ons</span>
+                                        <div class="grid grid-2" style="gap:10px; margin-top:8px;">
                                             <label class="check"><input type="checkbox" checked="checked" />Extra rinse<span class="price num">₱20.00</span></label>
                                             <label class="check"><input type="checkbox" />Stain treatment<span class="price num">₱30.00</span></label>
-                                            <label class="check"><input type="checkbox" />Rush (same day)<span class="price num">₱50.00</span></label>
+                                        </div>
+                                    </div>
+                                    <div class="field">
+                                        <span class="label">Product add-ons</span>
+                                        <div class="stack" style="gap:10px; margin-top:8px;">
+                                            <div class="product-row is-zero" data-product data-price="15.00">
+                                                <span class="product-name">Fabric conditioner</span>
+                                                <span class="price num">₱15.00 each</span>
+                                                <div class="qty">
+                                                    <button type="button" data-qty-step="-1" aria-label="One less fabric conditioner" disabled="disabled"><%= Icons.Get("minus", "ico-sm") %></button>
+                                                    <input type="text" inputmode="numeric" value="0" data-qty aria-label="Fabric conditioner quantity" />
+                                                    <button type="button" data-qty-step="1" aria-label="One more fabric conditioner"><%= Icons.Get("plus", "ico-sm") %></button>
+                                                </div>
+                                                <span class="line-total num">₱0.00</span>
+                                            </div>
+                                            <div class="product-row is-zero" data-product data-price="12.00">
+                                                <span class="product-name">Detergent sachet</span>
+                                                <span class="price num">₱12.00 each</span>
+                                                <div class="qty">
+                                                    <button type="button" data-qty-step="-1" aria-label="One less detergent sachet" disabled="disabled"><%= Icons.Get("minus", "ico-sm") %></button>
+                                                    <input type="text" inputmode="numeric" value="0" data-qty aria-label="Detergent sachet quantity" />
+                                                    <button type="button" data-qty-step="1" aria-label="One more detergent sachet"><%= Icons.Get("plus", "ico-sm") %></button>
+                                                </div>
+                                                <span class="line-total num">₱0.00</span>
+                                            </div>
                                         </div>
                                     </div>
                                     <div class="field">
@@ -184,6 +211,6 @@
         </div>
     </form>
 
-    <script src="../Assets/js/EditJob.js"></script>
+    <script src="<%= AssetUrl.Get("~/Assets/js/EditJob.js") %>"></script>
 </body>
 </html>

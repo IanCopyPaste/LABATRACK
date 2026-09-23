@@ -29,7 +29,8 @@ The application is built from `.aspx` pages (with their `.aspx.cs` code-behind),
   - `Assets/css/Site.css`: shared styles for every page, including the `@font-face` rule.
   - `Assets/css/pages/<PageName>.css`: rules only one page needs, named after the page (for example `JobDetail.css`). A page picks its file by overriding `PageStyleSheet` in its code-behind. Rules used by two or more pages go in `Site.css` instead.
   - Stylesheets are loaded by `BasePage` through `Helpers/SiteStyle.cs`, which writes `@import` lines inside one `<style>` tag. This keeps the no-`<link>` rule.
-  - `Assets/js/<PageName>.js`: a page's script, loaded with `<script src="...">` just before `</body>`. Shared behaviour gets its own file (for example `Print.js` for print buttons marked `data-print`).
+  - `Assets/js/<PageName>.js`: a page's script, loaded with `<script src="<%= AssetUrl.Get("~/Assets/js/<PageName>.js") %>"></script>` just before `</body>`. Shared behaviour gets its own file (for example `Print.js` for print buttons marked `data-print`).
+  - Always reference `.js` and `.css` through `AssetUrl.Get` (stylesheets already go through it in `SiteStyle.cs`). It appends `?v=<file time>`, so a browser never runs a cached old script against new markup. A plain `src="../Assets/js/..."` once left an edited page reading a `data-` attribute that no longer existed, which showed ₱NaN and disabled the save button.
   - Values a script needs from the server (such as the total for the change calculator) go in `data-` attributes on the page, and the script reads them. Never hard-code them in the `.js` file.
   - Scripts only improve the display. Every rule (prices, change, validation) is checked again on the server in `.cs`.
 - Where you would normally reach for a forbidden file type, do this instead:
@@ -104,11 +105,13 @@ Claimed and Voided are final.
 
 ## Pricing rules (`PricingService`)
 
-- Total = laundry charge + sum of add-on prices.
+- Total = laundry charge + sum of add-on lines, where a line is `Quantity * PriceAtCreation`.
 - Laundry charge = billable kilos x the service's rate per kilo, then raised to the minimum charge if lower. Add-ons are added after.
 - Billable kilos = weight rounded up to the next multiple of `RoundingIncrementKg` (default 1, so 3.2 kg bills as 4 kg).
 - Freeze the price at creation. Copy the service rate into `JobOrders.RatePerKgAtCreation` and each add-on price into `JobAddOns.PriceAtCreation`. Compute `TotalAmount` once and store it. Never recompute an old job from today's prices, or historical sales silently change when the owner edits a rate.
-- Add-ons are priced extras only (for example fabric conditioner, extra rinse, rush). No stock, no deduction, no reorder alerts. Keep the list to four or five.
+- **Add-ons come in two kinds, and the difference is how they are charged.** A **service add-on** is extra work done to the load (extra rinse, stain treatment): it is charged once whatever the weight, so the form shows it as a checkbox and its quantity is always 1. A **product add-on** is a thing sold with the load (fabric conditioner, detergent sachet): it is priced per piece, so the form shows a quantity stepper and the line bills as quantity x unit price. Both live in `AddOns`, told apart by `Kind`, and both freeze their price onto the job the same way.
+- Add-ons are priced extras only. No stock, no deduction, no reorder alerts — a product's quantity is recorded on the job as something sold, not counted against an inventory. Keep each list to two or three.
+- **No rush, express, or same-day fee.** Every load runs on the same turnaround and the expected pick-up is always now + the turnaround hours in `Settings`. The shop will not charge for speed it often delivers anyway: a load paid as rush would frequently have finished that day regardless, so the fee sells the customer something they were already getting. Do not add a priority add-on, a rush flag on the job, or urgency-based ordering on the board.
 
 ## Payment rules
 
@@ -140,9 +143,9 @@ Proposed tables (confirm with the user before creating):
 - `Users` (username, password hash, salt, role, active flag, failed login count, locked until)
 - `Customers` (name, contact number, email nullable, created at)
 - `Services` (name, rate per kg, active)
-- `AddOns` (name, price, active)
+- `AddOns` (name, price, kind, active) — `kind` is `Service` or `Product`, with a `CHECK` constraint
 - `JobOrders` (claim number, customer, service, weight, billable kg, rate at creation, total, current status, remarks, expected pick-up, created at and by)
-- `JobAddOns` (job, add-on, price at creation)
+- `JobAddOns` (job, add-on, quantity, price at creation) — `quantity` is always 1 for a service and 1 or more for a product, never 0; a line amount is `Quantity * PriceAtCreation`
 - `JobStatusHistory`, `Payments`, `NotificationLog`
 - `Settings` (key/value: minimum charge, rounding increment, unclaimed threshold in days, default turnaround hours, shop name, slip header)
 
@@ -179,6 +182,10 @@ Proposed tables (confirm with the user before creating):
 **JobDetail.** Show job ID and customer info once in a header. Below it, a stage stepper: completed stages show time and staff, the current stage is highlighted, future stages are greyed. The "advance" button appears only on the current stage. Voided is its own red state, not a step in the bar. Use a vertical timeline on narrow screens.
 
 **Owner reports.** Daily and monthly sales, cash vs e-wallet split, most-availed services, average turnaround (first Queued to first Ready), unclaimed loads, and a comparison with the previous period. Daily sales and the cash split come from `Payments.PaidAt`, which is what the drawer check needs. Service popularity comes from the job's created date. Do not mix the two.
+
+The Reports page (`Admin/Reports.aspx`) is scoped by one period filter (a year, a month, or a day) and every figure below it covers that period. Comparisons are like for like: a year or month so far against the same dates one period earlier, a day against the same weekday a week before, never a part-period against a whole one. Beyond the list above it shows sales by month/day/hour split into cash and e-wallet, a running total against last month, sales per year, average sales by weekday, a weekday-by-hour heatmap of drop-offs, add-on take-up, load sizes (and how many hit the minimum charge), turnaround against the 24-hour target, new against returning customers, top customers, orders per staff member, and voids with their reasons. It deliberately shows nothing about profit, costs, payroll, stock, or forecasts (see Out of scope).
+
+Charts are inline SVG drawn on the server by `Helpers/SvgChart.cs`. No chart library and no CDN. Every chart has a "Show as table" twin, hover and keyboard tooltips come from `Assets/js/Charts.js`, and the series colours (blue `#2f62c9`, orange `#eb6834`, grey for context) were checked for colour-blind separation. Add new charts through the same helper rather than a second way of drawing them.
 
 ## Security rules
 

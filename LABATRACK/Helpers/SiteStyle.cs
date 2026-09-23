@@ -13,16 +13,12 @@ namespace LABATRACK.Helpers
     {
         public static string StyleTag(string pageStyleSheet)
         {
-            string tag = "<style>@import url('" + Url("~/Assets/css/Site.css") + "');";
+            // Versioned URLs, so an edited stylesheet is fetched again instead of served from cache.
+            string tag = "<style>@import url('" + AssetUrl.Get("~/Assets/css/Site.css") + "');";
             if (!string.IsNullOrEmpty(pageStyleSheet))
-                tag += " @import url('" + Url("~/Assets/css/pages/" + pageStyleSheet) + "');";
+                tag += " @import url('" + AssetUrl.Get("~/Assets/css/pages/" + pageStyleSheet) + "');";
+            // The file names are fixed in code (never user input), so no encoding is needed.
             return tag + "</style>";
-        }
-
-        // The file names are fixed in code (never user input), so no encoding is needed.
-        private static string Url(string appRelative)
-        {
-            return VirtualPathUtility.ToAbsolute(appRelative);
         }
     }
 }

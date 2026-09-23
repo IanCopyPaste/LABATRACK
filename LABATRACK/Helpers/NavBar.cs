@@ -30,9 +30,9 @@ namespace LABATRACK.Helpers
         private static readonly Item[] Counter =
         {
             new Item("NewJob", "New job order", "~/Pages/Shared/NewJob.aspx", "plus", true),
-            new Item("Board", "Job board", "~/Pages/Shared/Dashboard.aspx", "washing-machine", false),
-            new Item("History", "History", "~/Pages/Shared/History.aspx", "history", false),
-            new Item("Customers", "Customers", "~/Pages/Shared/Customers.aspx", "users", false),
+            new Item("Board", "Job board", "~/Pages/Shared/Dashboard.aspx", "washing-machine", true),
+            new Item("History", "History", "~/Pages/Shared/History.aspx", "history", true),
+            new Item("Customers", "Customers", "~/Pages/Shared/Customers.aspx", "users", true),
         };
 
         private static readonly Item[] Management =

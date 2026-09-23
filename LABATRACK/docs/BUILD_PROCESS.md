@@ -48,16 +48,16 @@ Done when:
 
 ### Phase 3: Job creation (Days 5 to 8)
 
-This is the heart of the system and it takes longer than expected. Build customer lookup by contact number, `NewJob.aspx` (add-on checkboxes and the payment fields live in the page itself), `PricingService`, `ClaimNumberGenerator`, the single-transaction save, and `JobSlip.aspx` with its own `@media print` block.
+This is the heart of the system and it takes longer than expected. Build customer lookup by contact number, `NewJob.aspx` (service add-on checkboxes, product add-on quantity steppers, and the payment fields live in the page itself), `PricingService`, `ClaimNumberGenerator`, the single-transaction save, and `JobSlip.aspx` with its own `@media print` block.
 
 Done when the totals below match by hand. These are example numbers (rate 40 per kg, minimum charge 120, rounding increment 1 kg). Replace them with the owner's real rates.
 
 | Weight | Billable kg | Laundry charge | Add-ons | Total |
 |---|---|---|---|---|
 | 2.0 kg | 2 | 80, raised to minimum 120 | none | 120 |
-| 2.3 kg | 3 | 120 | Fabric conditioner 15 | 135 |
+| 2.3 kg | 3 | 120 | Fabric conditioner x1 (15) | 135 |
 | 5.1 kg | 6 | 240 | none | 240 |
-| 5.1 kg | 6 | 240 | Fabric conditioner 15, Rush 50 | 305 |
+| 5.1 kg | 6 | 240 | Extra rinse (20), Fabric conditioner x2 (30) | 290 |
 
 Also done when a job created at one rate keeps its total after the owner changes that rate.
 
@@ -100,7 +100,7 @@ Cut in this order:
 
 Run this at the end of each phase that touches it, and once more before the demo.
 
-1. Create a job with two add-ons, paid in cash with more than the total. Check the total and the change by hand, and that the slip prints the same cash received and change.
+1. Create a job with one service add-on and a product add-on at quantity 2, paid in cash with more than the total. Check the total and the change by hand, and that the slip prints the quantity, the same cash received, and the change.
 2. Advance it through every stage. Confirm one history row per change with the right staff name.
 3. Fail inspection, send it back to Washing, and advance it again. Confirm the timeline shows the rework.
 4. Void a Queued job. Confirm the full refund row and that the daily total nets it out.

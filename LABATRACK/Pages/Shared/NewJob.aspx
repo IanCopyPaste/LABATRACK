@@ -72,13 +72,41 @@
                                             <span class="hint">Rounded up to the next 1 kg: bills as 6 kg.</span>
                                         </div>
                                     </div>
+                                    <%-- Two kinds of add-on. A service is work done to the load, so it is
+                                         charged once and is a plain checkbox. A product is a thing sold, so it
+                                         carries a quantity and bills as quantity x unit price. --%>
                                     <div class="field">
-                                        <span class="label">Add-ons</span>
-                                        <div class="grid grid-2" style="gap:10px;">
-                                            <label class="check"><input type="checkbox" checked="checked" />Fabric conditioner<span class="price num">₱15.00</span></label>
-                                            <label class="check"><input type="checkbox" />Extra rinse<span class="price num">₱20.00</span></label>
-                                            <label class="check"><input type="checkbox" />Stain treatment<span class="price num">₱30.00</span></label>
-                                            <label class="check"><input type="checkbox" checked="checked" />Rush (same day)<span class="price num">₱50.00</span></label>
+                                        <span class="label">Service add-ons</span>
+                                        <span class="hint">Extra work on the load. Charged once, whatever the weight.</span>
+                                        <div class="grid grid-2" style="gap:10px; margin-top:8px;">
+                                            <label class="check"><input type="checkbox" checked="checked" data-service data-name="Extra rinse" data-price="20.00" />Extra rinse<span class="price num">₱20.00</span></label>
+                                            <label class="check"><input type="checkbox" data-service data-name="Stain treatment" data-price="30.00" />Stain treatment<span class="price num">₱30.00</span></label>
+                                        </div>
+                                    </div>
+                                    <div class="field">
+                                        <span class="label">Product add-ons</span>
+                                        <span class="hint">Items sold with the load. Set how many.</span>
+                                        <div class="stack" style="gap:10px; margin-top:8px;">
+                                            <div class="product-row is-on" data-product data-name="Fabric conditioner" data-price="15.00">
+                                                <span class="product-name">Fabric conditioner</span>
+                                                <span class="price num">₱15.00 each</span>
+                                                <div class="qty">
+                                                    <button type="button" data-qty-step="-1" aria-label="One less fabric conditioner"><%= Icons.Get("minus", "ico-sm") %></button>
+                                                    <input type="text" inputmode="numeric" value="2" data-qty aria-label="Fabric conditioner quantity" />
+                                                    <button type="button" data-qty-step="1" aria-label="One more fabric conditioner"><%= Icons.Get("plus", "ico-sm") %></button>
+                                                </div>
+                                                <span class="line-total num">₱30.00</span>
+                                            </div>
+                                            <div class="product-row is-zero" data-product data-name="Detergent sachet" data-price="12.00">
+                                                <span class="product-name">Detergent sachet</span>
+                                                <span class="price num">₱12.00 each</span>
+                                                <div class="qty">
+                                                    <button type="button" data-qty-step="-1" aria-label="One less detergent sachet" disabled="disabled"><%= Icons.Get("minus", "ico-sm") %></button>
+                                                    <input type="text" inputmode="numeric" value="0" data-qty aria-label="Detergent sachet quantity" />
+                                                    <button type="button" data-qty-step="1" aria-label="One more detergent sachet"><%= Icons.Get("plus", "ico-sm") %></button>
+                                                </div>
+                                                <span class="line-total num">₱0.00</span>
+                                            </div>
                                         </div>
                                     </div>
                                     <div class="form-row">
@@ -88,15 +116,15 @@
                                         </div>
                                         <div class="field">
                                             <label for="txtExpectedPickup">Expected pick-up</label>
-                                            <asp:TextBox ID="txtExpectedPickup" runat="server" TextMode="DateTimeLocal" Text="2026-09-22T17:00" />
-                                            <span class="hint">Rush: same day. Without rush, now + 24 hours (default turnaround). Can be changed.</span>
+                                            <asp:TextBox ID="txtExpectedPickup" runat="server" TextMode="DateTimeLocal" Text="2026-09-22T09:12" />
+                                            <span class="hint">Defaults to now + the turnaround hours in Settings. Can be changed if the load will be ready sooner.</span>
                                         </div>
                                     </div>
                                 </div>
                             </section>
 
                             <!-- 3. Payment: full amount only, collected now -->
-                            <section class="card" id="paymentCard" data-total="305.00">
+                            <section class="card" id="paymentCard" data-laundry="240.00">
                                 <div class="card-h"><div class="title"><span class="step-no">3</span><div><h2>Payment</h2><div class="sub">Full payment is collected now. No partial payments or balances.</div></div></div></div>
                                 <div class="card-b form">
                                     <div class="field">
@@ -111,7 +139,7 @@
                                             <label for="txtCashReceived">Cash received</label>
                                             <div class="input-prefix"><span>₱</span><asp:TextBox ID="txtCashReceived" runat="server" Text="500.00" autocomplete="off" /></div>
                                             <div class="quick-cash">
-                                                <button type="button" class="btn btn-sm" data-cash="305">Exact</button>
+                                                <button type="button" class="btn btn-sm" id="btnExact" data-cash="290">Exact</button>
                                                 <button type="button" class="btn btn-sm" data-cash="400">₱400</button>
                                                 <button type="button" class="btn btn-sm" data-cash="500">₱500</button>
                                                 <button type="button" class="btn btn-sm" data-cash="1000">₱1,000</button>
@@ -120,14 +148,14 @@
                                         <div class="field">
                                             <span class="label">Change to give</span>
                                             <div id="changeBox" class="change-box">
-                                                <span class="muted small">Change</span>
-                                                <span id="changeAmount" class="change-amount num">₱195.00</span>
+                                                <span class="small" id="changeLabel">Change</span>
+                                                <span id="changeAmount" class="change-amount num">₱210.00</span>
                                             </div>
                                         </div>
                                     </div>
                                     <div id="ewalletNote" class="notice notice-info" style="display:none;">
                                         <%= Icons.Get("smartphone", "ico-sm") %>
-                                        <span>Confirm the customer sent exactly <strong>₱305.00</strong> before saving. E-wallet is recorded only; it is not verified by the system.</span>
+                                        <span>Confirm the customer sent exactly <strong id="ewalletTotal">₱290.00</strong> before saving. E-wallet is recorded only; it is not verified by the system.</span>
                                     </div>
                                 </div>
                             </section>
@@ -141,19 +169,22 @@
                                     <%= Icons.Get("receipt") %>
                                 </div>
                                 <div class="card-b">
-                                    <dl class="dl">
+                                    <%-- The dt/dd pairs marked addon-line are rebuilt by NewJob.js whenever a
+                                         service is ticked or a product quantity changes. The server renders the
+                                         same rows first, so the summary is right before the script runs. --%>
+                                    <dl class="dl" id="sumLines">
                                         <dt>Wash-Dry-Fold</dt><dd>₱40.00 / kg</dd>
                                         <dt>5.1 kg &rarr; billable</dt><dd>6 kg</dd>
                                         <dt>Laundry charge</dt><dd>₱240.00</dd>
                                         <dt class="small">Minimum ₱120.00</dt><dd class="small muted">not needed</dd>
-                                        <dt>Fabric conditioner</dt><dd>₱15.00</dd>
-                                        <dt>Rush (same day)</dt><dd>₱50.00</dd>
+                                        <dt class="addon-line">Extra rinse</dt><dd class="addon-line">₱20.00</dd>
+                                        <dt class="addon-line">Fabric conditioner &times; 2</dt><dd class="addon-line">₱30.00</dd>
                                     </dl>
                                     <div class="divider" style="margin:14px 0;"></div>
-                                    <div class="total-line"><span>Total</span><span class="num">₱305.00</span></div>
+                                    <div class="total-line"><span>Total</span><span class="num" id="sumTotal">₱290.00</span></div>
                                     <dl class="dl" id="cashSummary" style="margin-top:12px;">
                                         <dt>Cash received</dt><dd id="sumReceived">₱500.00</dd>
-                                        <dt class="strong" style="color:var(--text);">Change</dt><dd class="strong" id="sumChange" style="color:var(--success);">₱195.00</dd>
+                                        <dt class="strong" style="color:var(--text);">Change</dt><dd class="strong" id="sumChange" style="color:var(--success);">₱210.00</dd>
                                     </dl>
                                     <div class="status-row" style="margin-top:14px;">
                                         <span class="muted small">Payment</span>
@@ -180,6 +211,6 @@
         </div>
     </form>
 
-    <script src="../../Assets/js/NewJob.js"></script>
+    <script src="<%= AssetUrl.Get("~/Assets/js/NewJob.js") %>"></script>
 </body>
 </html>

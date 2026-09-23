@@ -77,14 +77,23 @@
   <ItemGroup>
     <Content Include="Assets\css\Site.css" />
     <Content Include="Assets\css\pages\DailySalesReport.css" />
+    <Content Include="Assets\css\pages\Customers.css" />
+    <Content Include="Assets\css\pages\Dashboard.css" />
+    <Content Include="Assets\css\pages\History.css" />
     <Content Include="Assets\css\pages\JobDetail.css" />
     <Content Include="Assets\css\pages\JobSlip.css" />
     <Content Include="Assets\css\pages\NewJob.css" />
+    <Content Include="Assets\css\pages\Reports.css" />
+    <Content Include="Assets\js\Charts.js" />
+    <Content Include="Assets\js\Dashboard.js" />
     <Content Include="Assets\js\EditJob.js" />
     <Content Include="Assets\js\NewJob.js" />
     <Content Include="Assets\js\Print.js" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="Pages\Shared\Customers.aspx" />
+    <Content Include="Pages\Shared\Dashboard.aspx" />
+    <Content Include="Pages\Shared\History.aspx" />
     <Content Include="Pages\Shared\JobDetail.aspx" />
     <Content Include="Pages\Shared\JobSlip.aspx" />
     <Content Include="Pages\Shared\NewJob.aspx" />
@@ -96,6 +105,27 @@
     <Content Include="Assets\icons\circle-x.svg" />
     <Content Include="Assets\icons\weight.svg" />
     <Content Include="Assets\icons\hand-coins.svg" />
+    <Compile Include="Pages\Shared\Customers.aspx.cs">
+      <DependentUpon>Customers.aspx</DependentUpon>
+      <SubType>ASPXCodeBehind</SubType>
+    </Compile>
+    <Compile Include="Pages\Shared\Customers.aspx.designer.cs">
+      <DependentUpon>Customers.aspx</DependentUpon>
+    </Compile>
+    <Compile Include="Pages\Shared\History.aspx.cs">
+      <DependentUpon>History.aspx</DependentUpon>
+      <SubType>ASPXCodeBehind</SubType>
+    </Compile>
+    <Compile Include="Pages\Shared\History.aspx.designer.cs">
+      <DependentUpon>History.aspx</DependentUpon>
+    </Compile>
+    <Compile Include="Pages\Shared\Dashboard.aspx.cs">
+      <DependentUpon>Dashboard.aspx</DependentUpon>
+      <SubType>ASPXCodeBehind</SubType>
+    </Compile>
+    <Compile Include="Pages\Shared\Dashboard.aspx.designer.cs">
+      <DependentUpon>Dashboard.aspx</DependentUpon>
+    </Compile>
     <Compile Include="Pages\Shared\JobDetail.aspx.cs">
       <DependentUpon>JobDetail.aspx</DependentUpon>
       <SubType>ASPXCodeBehind</SubType>
@@ -155,6 +185,7 @@
     <Content Include="Assets\icons\mail.svg" />
     <Content Include="Assets\icons\package-check.svg" />
     <Content Include="Assets\icons\pencil.svg" />
+    <Content Include="Assets\icons\minus.svg" />
     <Content Include="Assets\icons\plus.svg" />
     <Content Include="Assets\icons\printer.svg" />
     <Content Include="Assets\icons\receipt.svg" />
@@ -257,6 +288,10 @@
     <Compile Include="Helpers\Icons.cs" />
     <Compile Include="Helpers\NavBar.cs" />
     <Compile Include="Helpers\SiteStyle.cs" />
+    <Compile Include="Helpers\AssetUrl.cs" />
+    <Compile Include="Helpers\SampleData.cs" />
+    <Compile Include="Helpers\SampleSales.cs" />
+    <Compile Include="Helpers\SvgChart.cs" />
     <Compile Include="Security\BasePage.cs">
       <SubType>ASPXCodeBehind</SubType>
     </Compile>

@@ -7,11 +7,11 @@
 // </auto-generated>
 //------------------------------------------------------------------------------
 
-namespace LABATRACK.Admin
+namespace LABATRACK.Pages.Shared
 {
 
 
-    public partial class Reports
+    public partial class Dashboard
     {
 
         /// <summary>
@@ -25,23 +25,23 @@ namespace LABATRACK.Admin
         protected global::System.Web.UI.WebControls.Literal litNav;
 
         /// <summary>
-        /// ddlYear control.
+        /// litNotice control.
         /// </summary>
-        protected global::System.Web.UI.WebControls.DropDownList ddlYear;
+        protected global::System.Web.UI.WebControls.Literal litNotice;
 
         /// <summary>
-        /// txtMonth control.
+        /// txtFilter control.
         /// </summary>
-        protected global::System.Web.UI.WebControls.TextBox txtMonth;
+        protected global::System.Web.UI.WebControls.TextBox txtFilter;
 
         /// <summary>
-        /// txtDay control.
+        /// rptColumns control.
         /// </summary>
-        protected global::System.Web.UI.WebControls.TextBox txtDay;
+        protected global::System.Web.UI.WebControls.Repeater rptColumns;
 
         /// <summary>
-        /// btnShow control.
+        /// rptClaimed control.
         /// </summary>
-        protected global::System.Web.UI.WebControls.Button btnShow;
+        protected global::System.Web.UI.WebControls.Repeater rptClaimed;
     }
 }

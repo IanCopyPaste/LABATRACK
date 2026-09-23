@@ -31,7 +31,7 @@
             </div>
 
             <div class="row"><span class="lbl">Dropped off</span><span>Sep 21, 2026 9:12 AM</span></div>
-            <div class="row"><span class="lbl">Ready by</span><span><strong>Sep 21, 2026 5:00 PM</strong></span></div>
+            <div class="row"><span class="lbl">Ready by</span><span><strong>Sep 22, 2026 9:12 AM</strong></span></div>
             <div class="row"><span class="lbl">Received by</span><span>jcruz</span></div>
 
             <hr class="rule" />
@@ -41,11 +41,12 @@
             <hr class="rule" />
             <div class="row"><span>Wash-Dry-Fold</span><span>240.00</span></div>
             <div class="item-sub">5.1 kg, billed 6 kg &times; 40.00</div>
-            <div class="row" style="margin-top:4px;"><span>Fabric conditioner</span><span>15.00</span></div>
-            <div class="row"><span>Rush (same day)</span><span>50.00</span></div>
+            <div class="row" style="margin-top:4px;"><span>Extra rinse</span><span>20.00</span></div>
+            <div class="row"><span>Fabric conditioner &times; 2</span><span>30.00</span></div>
+            <div class="item-sub">2 &times; 15.00</div>
 
             <hr class="rule" />
-            <div class="row grand"><span>TOTAL</span><span>₱305.00</span></div>
+            <div class="row grand"><span>TOTAL</span><span>₱290.00</span></div>
             <% if (Method == "Cash") { %>
             <div class="row" style="margin-top:4px;"><span class="lbl">Cash received</span><span><%= Money(CashReceived) %></span></div>
             <div class="row bal" style="margin-top:4px;"><span>CHANGE</span><span>₱<%= Money(Change) %></span></div>
@@ -71,12 +72,12 @@
                 <div class="tag-claim" style="margin-top:6px;">LT-260921-004</div>
                 <div style="font-size:14px; font-weight:600;">Maria Santos</div>
                 <div>Wash-Dry-Fold &middot; 5.1 kg</div>
-                <div style="margin-top:6px;">Fabric conditioner &nbsp;<span class="rush">RUSH</span></div>
-                <div class="fine" style="margin-top:6px;">Ready by Sep 21, 5:00 PM &middot; Paid</div>
+                <div style="margin-top:6px;">Extra rinse &middot; Fabric conditioner &times; 2</div>
+                <div class="fine" style="margin-top:6px;">Ready by Sep 22, 9:12 AM &middot; Paid</div>
             </div>
         </div>
     </form>
 
-    <script src="../../Assets/js/Print.js"></script>
+    <script src="<%= AssetUrl.Get("~/Assets/js/Print.js") %>"></script>
 </body>
 </html>

@@ -44,7 +44,7 @@
                         </div>
                         <div class="card kpi">
                             <div class="kpi-top">Active loads <span class="kpi-icon"><%= Icons.Get("washing-machine", "ico-sm") %></span></div>
-                            <div class="kpi-value">7</div>
+                            <div class="kpi-value">9</div>
                             <div class="kpi-foot">Queued to Ready for pick-up</div>
                         </div>
                         <div class="card kpi">
@@ -62,7 +62,7 @@
                             <div class="pipe"><span class="pill st-drying">Drying</span><div class="count">1</div></div>
                             <div class="pipe"><span class="pill st-folding">Folding</span><div class="count">1</div></div>
                             <div class="pipe"><span class="pill st-inspection">Inspection</span><div class="count">1</div></div>
-                            <div class="pipe"><span class="pill st-ready">Ready for pick-up</span><div class="count">1</div></div>
+                            <div class="pipe"><span class="pill st-ready">Ready for pick-up</span><div class="count">3</div></div>
                         </div>
                     </section>
 
@@ -74,7 +74,7 @@
                                     <h2>Active job orders</h2>
                                     <div class="sub">Everything not yet claimed or voided, oldest drop-off first</div>
                                 </div>
-                                <a class="btn btn-sm btn-ghost" href="#">View board <%= Icons.Get("arrow-right", "ico-sm") %></a>
+                                <a class="btn btn-sm btn-ghost" href="../Pages/Shared/Dashboard.aspx">View board <%= Icons.Get("arrow-right", "ico-sm") %></a>
                             </div>
                             <div class="table-wrap">
                                 <table class="table">
@@ -91,11 +91,29 @@
                                     </thead>
                                     <tbody>
                                         <tr>
+                                            <td class="mono"><a href="../Pages/Shared/JobDetail.aspx">LT-260912-003</a></td>
+                                            <td><div class="cell-main">Rosa Lim</div><div class="cell-sub">Wash-Dry-Fold &middot; 4.0 kg</div></td>
+                                            <td class="num">Sep 12, 4:20 PM</td>
+                                            <td><span class="pill st-ready">Ready for pick-up</span></td>
+                                            <td class="right num">₱160.00</td>
+                                            <td><span class="pill pill-ok">Cash</span></td>
+                                            <td class="right"><a class="btn btn-sm btn-ghost" href="EditJob.aspx"><%= Icons.Get("pencil", "ico-sm") %>Edit</a></td>
+                                        </tr>
+                                        <tr>
+                                            <td class="mono"><a href="../Pages/Shared/JobDetail.aspx">LT-260914-008</a></td>
+                                            <td><div class="cell-main">Dennis Uy</div><div class="cell-sub">Wash-Dry &middot; 5.5 kg</div></td>
+                                            <td class="num">Sep 14, 10:00 AM</td>
+                                            <td><span class="pill st-ready">Ready for pick-up</span></td>
+                                            <td class="right num">₱210.00</td>
+                                            <td><span class="pill pill-ok">E-wallet</span></td>
+                                            <td class="right"><a class="btn btn-sm btn-ghost" href="EditJob.aspx"><%= Icons.Get("pencil", "ico-sm") %>Edit</a></td>
+                                        </tr>
+                                        <tr>
                                             <td class="mono"><a href="../Pages/Shared/JobDetail.aspx">LT-260921-004</a></td>
                                             <td><div class="cell-main">Maria Santos</div><div class="cell-sub">Wash-Dry-Fold &middot; 5.1 kg</div></td>
                                             <td class="num">Sep 21, 9:12 AM</td>
                                             <td><span class="pill st-ready">Ready for pick-up</span></td>
-                                            <td class="right num">₱305.00</td>
+                                            <td class="right num">₱290.00</td>
                                             <td><span class="pill pill-ok">Cash</span></td>
                                             <td class="right"><a class="btn btn-sm btn-ghost" href="EditJob.aspx"><%= Icons.Get("pencil", "ico-sm") %>Edit</a></td>
                                         </tr>
@@ -172,14 +190,14 @@
                                         <span class="dot-icon" style="background:var(--warning-soft); color:var(--warning);"><%= Icons.Get("clock", "ico-sm") %></span>
                                         <div class="grow">
                                             <div class="cell-main">Rosa Lim <span class="mono muted">LT-260912-003</span></div>
-                                            <div class="cell-sub">Ready since Sep 13 &middot; 10 days unclaimed &middot; paid</div>
+                                            <div class="cell-sub">Ready since Sep 13 &middot; 9 days unclaimed &middot; paid</div>
                                         </div>
                                     </li>
                                     <li>
                                         <span class="dot-icon" style="background:var(--warning-soft); color:var(--warning);"><%= Icons.Get("clock", "ico-sm") %></span>
                                         <div class="grow">
                                             <div class="cell-main">Dennis Uy <span class="mono muted">LT-260914-008</span></div>
-                                            <div class="cell-sub">Ready since Sep 15 &middot; 8 days unclaimed &middot; paid</div>
+                                            <div class="cell-sub">Ready since Sep 15 &middot; 7 days unclaimed &middot; paid</div>
                                         </div>
                                     </li>
                                     <li>

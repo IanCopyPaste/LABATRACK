@@ -18,7 +18,7 @@
                         <a class="small" href="../../Admin/Dashboard.aspx"><%= Icons.Get("arrow-left", "ico-sm") %> Back to dashboard</a>
                         <h1 style="margin-top:8px;"><span class="mono" style="font-size:20px;">LT-260921-004</span>
                             <span class="pill <%= StageCss(CurrentStage) %>" style="margin-left:8px; vertical-align:middle;"><%: CurrentStage %></span></h1>
-                        <p class="sub">Dropped off Sep 21, 2026 9:12 AM by jcruz &middot; expected pick-up Sep 21, 5:00 PM (rush)</p>
+                        <p class="sub">Dropped off Sep 21, 2026 9:12 AM by jcruz &middot; expected pick-up Sep 22, 9:12 AM</p>
                     </div>
                     <div class="page-actions">
                         <a class="btn" href="JobSlip.aspx"><%= Icons.Get("printer", "ico-sm") %>Print slip</a>
@@ -44,7 +44,7 @@
                             <div>
                                 <div class="label muted">Load</div>
                                 <div class="strong" style="font-size:16px; margin-top:4px;">Wash-Dry-Fold &middot; 5.1 kg</div>
-                                <div class="muted small">Billed as 6 kg at ₱40.00/kg &middot; Fabric conditioner, Rush</div>
+                                <div class="muted small">Billed as 6 kg at ₱40.00/kg &middot; Extra rinse, Fabric conditioner &times; 2</div>
                             </div>
                             <div>
                                 <div class="label muted">Remarks (intake check)</div>
@@ -60,7 +60,7 @@
                             <%= Icons.Get("ban", "ico-lg") %>
                             <div>
                                 <div class="strong">Voided Sep 21, 9:20 AM by jcruz</div>
-                                <div class="small">Reason: Customer changed mind, took the load home. The ₱305.00 payment was refunded in cash.</div>
+                                <div class="small">Reason: Customer changed mind, took the load home. The ₱290.00 payment was refunded in cash.</div>
                             </div>
                         </div>
                         <% } %>
@@ -90,7 +90,7 @@
                                 </div>
                                 <div class="card-f" style="justify-content:space-between; flex-wrap:wrap; align-items:flex-end;">
                                     <div class="field" style="flex:1; min-width:220px;">
-                                        <label for="txtVoidReason">Void this job (only while Queued). The full ₱305.00 is refunded.</label>
+                                        <label for="txtVoidReason">Void this job (only while Queued). The full ₱290.00 is refunded.</label>
                                         <asp:TextBox ID="txtVoidReason" runat="server" placeholder="Reason (required)" MaxLength="200" />
                                     </div>
                                     <button type="button" class="btn btn-danger"><%= Icons.Get("ban", "ico-sm") %>Void job</button>
@@ -184,8 +184,8 @@
                                 <div class="card-b">
                                     <dl class="dl">
                                         <dt>6 kg &times; ₱40.00</dt><dd>₱240.00</dd>
-                                        <dt>Fabric conditioner</dt><dd>₱15.00</dd>
-                                        <dt>Rush (same day)</dt><dd>₱50.00</dd>
+                                        <dt>Extra rinse</dt><dd>₱20.00</dd>
+                                        <dt>Fabric conditioner &times; 2</dt><dd>₱30.00</dd>
                                     </dl>
                                     <div class="divider" style="margin:12px 0;"></div>
                                     <div class="total-line" style="font-size:15px;"><span>Total</span><span class="num"><%= Peso(Total) %></span></div>

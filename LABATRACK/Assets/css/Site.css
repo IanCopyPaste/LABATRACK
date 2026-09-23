@@ -244,6 +244,44 @@ textarea { height: auto; min-height: 84px; padding: 10px 12px; resize: vertical;
 .check .price { margin-left: auto; color: var(--muted); }
 .error-text { color: var(--danger); font-size: 13px; }
 
+/* Product add-on row: a counted item, so it carries a stepper instead of a checkbox.
+   A row at zero is dimmed rather than hidden, so the cashier can still see what the
+   shop sells without opening the price list. The columns are fixed widths rather than
+   auto, so the steppers and the line totals line up down the list. */
+.product-row {
+  display: flex; align-items: center; gap: 14px; padding: 9px 12px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  transition: border-color .18s, background .18s;
+}
+.product-row .product-name { flex: 1; min-width: 0; }
+.product-row .price { width: 86px; text-align: right; color: var(--muted); font-size: 13px; white-space: nowrap; }
+.product-row .line-total { width: 72px; text-align: right; font-weight: 600; }
+
+/* A row in play is worth picking out from the ones sitting at zero. */
+.product-row.is-on { border-color: var(--primary); background: var(--primary-soft); }
+.product-row.is-zero { color: var(--muted); }
+.product-row.is-zero .line-total { color: var(--muted); font-weight: 400; }
+
+.qty { display: flex; align-items: center; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 999px; }
+.qty button {
+  width: 32px; height: 32px; padding: 0; border: 0; border-radius: 999px;
+  display: grid; place-items: center; background: none; color: var(--text-2); cursor: pointer;
+  transition: background .15s, color .15s, transform .08s;
+}
+.qty button:hover:enabled { background: var(--primary-soft); color: var(--primary); }
+.qty button:active:enabled { transform: scale(.9); }
+.qty button:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+/* At zero there is nothing to take away, so the minus stays visible but inert. */
+.qty button:disabled { color: var(--border-strong); cursor: default; }
+.qty input {
+  width: 34px; height: 32px; padding: 0; border: 0; border-radius: 0; background: none;
+  text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; color: inherit;
+}
+/* The field sits inside the pill, so it takes an inset ring rather than the usual
+   outer one, which would be clipped by the rounded border. */
+.qty input:focus { box-shadow: none; border: 0; }
+.qty input:focus-visible { box-shadow: inset 0 0 0 2px var(--primary); border-radius: 6px; }
+
 /* ---------- Notices ---------- */
 .notice { display: flex; gap: 10px; padding: 12px 14px; border-radius: var(--radius-sm); font-size: 13px; }
 .notice-info { background: var(--primary-soft); color: #274e9c; }
@@ -318,12 +356,26 @@ textarea { height: auto; min-height: 84px; padding: 10px 12px; resize: vertical;
 .method { display: flex; gap: 10px; }
 .method label { flex: 1; }
 
+/* Text box with a search icon inside it (History, Customers) */
+.search-input { position: relative; flex: 1; min-width: 0; }
+.search-input .ico { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+.search-input input { padding-left: 36px; }
+
+/* "Nothing found" message under a table (History, Customers) */
+.empty-state { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 36px 20px; text-align: center; color: var(--text-2); }
+.empty-state .ico { color: var(--muted); margin-bottom: 4px; }
+
 /* Live change box for cash payments (NewJob, EditJob) */
 .change-box {
   height: 38px; display: flex; align-items: center; justify-content: space-between; padding: 0 12px;
   border-radius: var(--radius-sm); background: var(--success-soft); color: var(--success);
 }
 .change-box.short { background: var(--danger-soft); color: var(--danger); }
+/* Nothing typed yet: neutral, so an empty field does not read as an error. */
+.change-box.idle { background: var(--surface-2); color: var(--muted); }
+.change-box.exact { background: var(--primary-soft); color: var(--primary); }
+.change-box.idle .change-amount { font-size: 13px; font-weight: 500; }
+.change-box { transition: background .18s, color .18s; }
 .change-amount { font-size: 18px; font-weight: 700; }
 
 /* DRAFT: "preview another state" links on design drafts (JobDetail, EditJob) */

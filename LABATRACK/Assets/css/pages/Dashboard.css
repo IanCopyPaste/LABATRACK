@@ -1,0 +1,78 @@
+/* Pages/Shared/Dashboard.aspx: the job board */
+
+/* ---------- Filter ---------- */
+.board-tools { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.board-search { position: relative; flex: 0 1 420px; }
+.board-search .ico { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+.board-search input { width: 100%; padding-left: 36px; }
+
+/* ---------- Columns ----------
+   One column per stage. Six columns need about 1190px, so on a narrower screen the board
+   scrolls sideways inside itself instead of squeezing the cards until they are unreadable. */
+.board {
+  display: grid; grid-template-columns: repeat(6, minmax(188px, 1fr)); gap: 12px;
+  overflow-x: auto; padding-bottom: 6px; align-items: start;
+}
+.board-col {
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius);
+  display: flex; flex-direction: column; min-height: 180px;
+}
+.board-col-h {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 12px 12px 10px;
+}
+.board-count {
+  min-width: 24px; height: 22px; padding: 0 7px; border-radius: 20px;
+  display: grid; place-items: center;
+  background: var(--surface); border: 1px solid var(--border);
+  font-size: 12px; font-weight: 600; color: var(--text-2); font-variant-numeric: tabular-nums;
+}
+.board-cards { display: flex; flex-direction: column; gap: 10px; padding: 0 8px 10px; }
+
+/* Shown only when a column has nothing in it, from the server or after filtering. */
+.board-empty {
+  display: none; padding: 18px 8px; text-align: center; font-size: 12.5px; color: var(--muted);
+  border: 1px dashed var(--border-strong); border-radius: var(--radius-sm);
+}
+.board-col.is-empty .board-empty { display: block; }
+
+/* ---------- Job card ---------- */
+.job-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 10px 11px 11px; box-shadow: var(--shadow);
+  transition: border-color .15s, box-shadow .15s;
+}
+.job-card:hover { border-color: var(--border-strong); box-shadow: 0 2px 8px rgba(20, 35, 60, .08); }
+.job-card[hidden] { display: none; }
+.job-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.job-card-top .mono { font-size: 12.5px; font-weight: 600; }
+.age { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.age .ico { width: 13px; height: 13px; }
+.job-card-name { font-weight: 600; margin-top: 6px; }
+.job-card-sub { font-size: 12.5px; color: var(--text-2); }
+.job-card-addons { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+/* A load sent back from inspection. It is being redone, not new, so it says why. */
+.job-card.is-rework { border-left: 3px solid var(--warning); }
+.job-card-rework {
+  display: flex; gap: 6px; align-items: flex-start; margin-top: 8px; padding: 6px 8px;
+  border-radius: 6px; background: var(--warning-soft); color: #8a5a14; font-size: 12px; line-height: 1.35;
+}
+.job-card-rework .ico { margin-top: 1px; }
+
+/* Label left, value right, one line each: the values do not wrap, so "3:40 PM" never
+   splits across two lines. The column minimum above is sized to fit the longest date. */
+.job-card-meta {
+  display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; margin: 10px 0 0;
+  padding-top: 8px; border-top: 1px solid var(--border); font-size: 12px;
+}
+.job-card-meta dt { color: var(--muted); white-space: nowrap; }
+.job-card-meta dd { margin: 0; text-align: right; color: var(--text-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+.job-card-actions { display: flex; gap: 6px; margin-top: 10px; }
+.job-card-actions .btn { flex: 1; justify-content: center; }
+.job-card-actions .btn-ghost { flex: 0 0 auto; }
+
+@media (max-width: 860px) {
+  .board-search { flex-basis: 100%; }
+}

@@ -1,0 +1,23 @@
+/* Pages/Shared/History.aspx */
+
+/* Filters sit on one line on a wide screen and wrap onto more as it narrows. */
+.history-filters { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; }
+.history-filters .field { flex: 0 0 170px; }
+.history-filters .field.grow { flex: 1 1 280px; }
+.history-filter-actions { display: flex; gap: 8px; }
+
+.result-sales { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.3; }
+.result-sales .num { font-size: 16px; }
+
+/* A voided job stays in history, but it must not read like a sale. */
+.table tr.is-voided td { background: #fdf8f8; }
+.table tr.is-voided .cell-main { color: var(--text-2); }
+.struck { text-decoration: line-through; color: var(--muted); }
+.void-reason { color: var(--danger); margin-top: 2px; max-width: 220px; white-space: normal; }
+
+.pager { justify-content: space-between; align-items: center; }
+.pager-links { display: flex; gap: 8px; }
+
+@media (max-width: 860px) {
+  .history-filters .field { flex: 1 1 140px; }
+}

@@ -14,7 +14,7 @@ namespace LABATRACK.Pages.Shared
             get { return "JobSlip.css"; }
         }
 
-        protected decimal Total = 305.00m;
+        protected decimal Total = 290.00m;
         protected string Method { get; private set; }
         protected decimal CashReceived { get; private set; }
         protected decimal Change { get { return CashReceived - Total; } }   // change = cash received - total
