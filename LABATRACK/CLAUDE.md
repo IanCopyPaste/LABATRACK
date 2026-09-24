@@ -7,7 +7,7 @@ Build order, definition of done per phase, and the test script: @docs/BUILD_PROC
 ## Stack
 
 - ASP.NET Web Forms, C#, .NET Framework 4.8 (Visual Studio on Windows)
-- SQL Server LocalDB with T-SQL, managed with SSMS. The instance is `(localdb)\IPTconnection` and the database is `labatrack`. Plain ADO.NET (`System.Data.SqlClient`) with parameterized queries. No ORM.
+- SQL Server LocalDB with T-SQL, managed with SSMS. The instance is `(localdb)\IPTconnection` and the database is `labatrack`. Plain ADO.NET (`System.Data.SqlClient`) calling stored procedures with parameters (see Stored procedures). No ORM.
 - Connection: Windows authentication (`Trusted_Connection=True`). The connection string is named `LABATRACK_conn` in `Web.config` (`Server=(localdb)\IPTconnection;Database=labatrack;Trusted_Connection=True;`), and `Db.cs` is the only code that reads it, through `ConfigurationManager.ConnectionStrings["LABATRACK_conn"]`. This is the student's chosen connection; do not change it.
 - UI styling comes from `Assets/css/Site.css` plus one optional stylesheet per page in `Assets/css/pages/`, loaded by `BasePage` through `Helpers/SiteStyle.cs`. No Bootstrap: the project has no copy of it and does not need one. The look is professional and light on the eyes: soft grey background, white cards, one calm blue accent.
 - Email through SMTP only. No SMS. No payment gateway.
@@ -156,11 +156,25 @@ Proposed tables (confirm with the user before creating):
 - Types: `INT IDENTITY` primary keys, `NVARCHAR` for names and emails (Filipino names include characters like ñ), `DECIMAL(10,2)` for money, `DATETIME2` for timestamps, `BIT` for flags.
 - Default timestamps with `SYSDATETIME()`. It follows the time zone of the machine running SQL Server, so confirm that machine is set to Philippine time or every timestamp will be off.
 - Filter by day with a half-open range: `PaidAt >= @dayStart AND PaidAt < @nextDayStart`. Do not use `BETWEEN` with an end-of-day time, and do not wrap the column in a function in the `WHERE` clause.
-- Transactions are handled in C# with `SqlTransaction`, not in stored procedures. The concurrency guard reads the rows-affected count from `ExecuteNonQuery`; zero means someone else already changed the job.
+- Transactions are handled in C# with `SqlTransaction`, which wraps the stored procedure calls. A procedure never begins, commits, or rolls back a transaction itself. The concurrency guard reads the rows-affected count that the procedure returns (see Stored procedures); zero means someone else already changed the job.
 - The amount paid per job, net of refunds, comes from one view (for example `vw_JobPayments`, built from `JobOrders` and `Payments`), so every screen and report uses the same calculation.
 - Every script starts with `USE labatrack;` followed by `GO`. Scripts never `CREATE`, `DROP`, or `ALTER` the database itself.
 - The server name lives only in `Web.config` (`(localdb)\IPTconnection`). Never hard-code it in C#. LocalDB runs per Windows user on the machine itself, so any computer that runs the app (including the one used for the defense) needs the `IPTconnection` instance created (`sqllocaldb create IPTconnection`) and the `labatrack` database restored or built there from the scripts.
 - Windows authentication means the Windows user running the app needs permissions on `labatrack`. It works as-is when the app is run from Visual Studio. LocalDB does not work under full IIS without extra setup, so demo from Visual Studio (IIS Express).
+
+## Stored procedures
+
+Every query the application runs goes through a stored procedure: reads, inserts, updates, lookups, and report queries alike. This is a declared rule for when the backend is built. Nothing is built for it yet: no procedures, no repositories, and no changes to existing code until a feature needs them.
+
+- C# never sends SQL text. Repositories in `DataAccess/` call a procedure by name with `CommandType.StoredProcedure` and pass every value as a `SqlParameter`. No `CommandType.Text` and no SQL strings in `.cs` files, even for a one-line lookup.
+- The procedures live in `Database/04_procedures.sql`, which runs after `01_schema.sql`. Like the other scripts it starts with `USE labatrack;` and `GO`, and it can be re-run: each procedure is `CREATE OR ALTER PROCEDURE`, one per batch.
+- Name procedures `dbo.usp_<Table>_<Action>`, for example `usp_JobOrders_Insert`, `usp_JobOrders_AdvanceStatus`, `usp_Payments_GetDailyTotal`.
+- Each procedure starts with `SET NOCOUNT ON;` and declares its parameters with the column types (`DECIMAL(10,2)` for money, `NVARCHAR` for names, `DATETIME2` for timestamps).
+- No dynamic SQL inside a procedure: no `EXEC(@sql)` and no `sp_executesql` on a built string. An optional filter is written as `(@Status IS NULL OR CurrentStatus = @Status)`.
+- Keep each procedure to one job. A save that touches several tables (create job, void, owner edit) calls several procedures on one connection inside one C# `SqlTransaction` (see T-SQL conventions).
+- Concurrency guard: the procedure runs the guarded `UPDATE ... WHERE JobId = @JobId AND CurrentStatus = @Expected` and ends with `SELECT @@ROWCOUNT AS RowsAffected;`. C# reads it with `ExecuteScalar`. Do not rely on the return value of `ExecuteNonQuery`, which is -1 under `SET NOCOUNT ON`.
+- Procedures that need the amount paid read it from `vw_JobPayments`, so the single-calculation rule still holds.
+- Business rules stay in `Services/`. A procedure stores and fetches data; it does not compute prices, change, or allowed status transitions.
 
 ## Customers
 
@@ -189,7 +203,7 @@ Charts are inline SVG drawn on the server by `Helpers/SvgChart.cs`. No chart lib
 
 ## Security rules
 
-- Parameterized queries only. Never build SQL by string concatenation.
+- Stored procedures with parameters only (see Stored procedures). Never build SQL by string concatenation, in C# or inside a procedure.
 - Hash passwords with PBKDF2 (`Rfc2898DeriveBytes`) and a per-user salt. Never store or log plain text.
 - The login error is always "Invalid username or password", including when a staff account tries the admin login. Never reveal which part was wrong.
 - Lock an account for a few minutes after five failed logins.
@@ -225,7 +239,7 @@ LabaTrack/
 │   ├── History.aspx
 │   └── Customers.aspx
 ├── Models/                   plain classes, one per table
-├── DataAccess/               Db.cs and repositories. The only place SQL lives.
+├── DataAccess/               Db.cs and repositories. The only C# that calls the database, through stored procedures.
 ├── Services/                 business rules
 │   ├── PricingService.cs     *
 │   ├── StatusService.cs      *
@@ -245,7 +259,8 @@ LabaTrack/
 ├── Database/
 │   ├── 01_schema.sql         *
 │   ├── 02_seed_settings.sql
-│   └── 03_seed_demo_jobs.sql
+│   ├── 03_seed_demo_jobs.sql
+│   └── 04_procedures.sql     every query the app runs, as stored procedures
 └── Assets/                   project files only, never loaded from the internet
     ├── css/
     │   ├── Site.css          shared styles and the @font-face rule
@@ -258,7 +273,7 @@ LabaTrack/
 Layering:
 
 - Code-behind calls Services and Repositories. It contains no SQL, no pricing math, and no status rules.
-- SQL lives only in `DataAccess/`.
+- SQL lives only in the `Database/` scripts, and every query the app runs is a stored procedure. `DataAccess/` is the only code that calls them.
 - Business rules live only in `Services/`.
 
 ## Out of scope
