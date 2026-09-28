@@ -16,40 +16,78 @@
                 <header class="page-head">
                     <div>
                         <h1>Settings</h1>
-                        <p class="sub">Shop details and the rules the counter screens follow. Pricing rules are on the Pricing page.</p>
+                        <p class="sub">Shop details, the rules the counter screens follow, and your password. Pricing rules are on the Pricing page.</p>
                     </div>
                 </header>
 
                 <div class="content">
                     <%-- DRAFT: sample values. Phase 1 stores these in the Settings table. --%>
                     <div class="grid grid-2" style="align-items:start;">
-                        <section class="card">
-                            <div class="card-h">
-                                <div>
-                                    <h2>Shop and job slip</h2>
-                                    <div class="sub">Printed on every claim slip</div>
+                        <div class="stack">
+                            <section class="card">
+                                <div class="card-h">
+                                    <div>
+                                        <h2>Shop and job slip</h2>
+                                        <div class="sub">Printed on every claim slip</div>
+                                    </div>
+                                    <span class="kpi-icon"><%= Icons.Get("store", "ico-sm") %></span>
                                 </div>
-                                <span class="kpi-icon"><%= Icons.Get("store", "ico-sm") %></span>
-                            </div>
-                            <div class="card-b form">
-                                <div class="field">
-                                    <label for="txtShopName">Shop name</label>
-                                    <asp:TextBox ID="txtShopName" runat="server" Text="LabaTrack Laundry Shop" MaxLength="100" />
+                                <div class="card-b form">
+                                    <div class="field">
+                                        <label for="txtShopName">Shop name</label>
+                                        <asp:TextBox ID="txtShopName" runat="server" Text="LabaTrack Laundry Shop" MaxLength="100" />
+                                    </div>
+                                    <div class="field">
+                                        <label for="txtSlipHeader">Slip header</label>
+                                        <asp:TextBox ID="txtSlipHeader" runat="server" TextMode="MultiLine" Text="Salamat po! Please present this slip when claiming your laundry." />
+                                    </div>
+                                    <div class="field">
+                                        <label for="txtClaimFormat">Claim number format</label>
+                                        <asp:TextBox ID="txtClaimFormat" runat="server" Text="LT-yyMMdd-###" ReadOnly="true" CssClass="input mono" />
+                                        <span class="hint">Example: LT-260922-003. Fixed in code by ClaimNumberGenerator (open decision 2).</span>
+                                    </div>
                                 </div>
-                                <div class="field">
-                                    <label for="txtSlipHeader">Slip header</label>
-                                    <asp:TextBox ID="txtSlipHeader" runat="server" TextMode="MultiLine" Text="Salamat po! Please present this slip when claiming your laundry." />
+                                <div class="card-f">
+                                    <button type="button" class="btn btn-primary"><%= Icons.Get("save", "ico-sm") %>Save</button>
                                 </div>
-                                <div class="field">
-                                    <label for="txtClaimFormat">Claim number format</label>
-                                    <asp:TextBox ID="txtClaimFormat" runat="server" Text="LT-yyMMdd-###" ReadOnly="true" CssClass="input mono" />
-                                    <span class="hint">Example: LT-260922-003. Fixed in code by ClaimNumberGenerator (open decision 2).</span>
+                            </section>
+
+                            <%-- The owner's own password. The current one is asked for first, so nobody can take over
+                                 the account from a screen left signed in. Staff passwords are reset on the Staff page. --%>
+                            <section class="card">
+                                <div class="card-h">
+                                    <div>
+                                        <h2>Your password</h2>
+                                        <div class="sub">For the owner account <strong><%: SignedInUser %></strong>, used at the owner login</div>
+                                    </div>
+                                    <span class="kpi-icon"><%= Icons.Get("key-round", "ico-sm") %></span>
                                 </div>
-                            </div>
-                            <div class="card-f">
-                                <button type="button" class="btn btn-primary"><%= Icons.Get("save", "ico-sm") %>Save</button>
-                            </div>
-                        </section>
+                                <div class="card-b form">
+                                    <asp:Literal ID="litPasswordNotice" runat="server" EnableViewState="false" />
+                                    <div class="field">
+                                        <label for="txtCurrentPassword">Current password</label>
+                                        <asp:TextBox ID="txtCurrentPassword" runat="server" TextMode="Password" MaxLength="100" autocomplete="current-password" />
+                                        <asp:Label ID="lblCurrentError" runat="server" CssClass="error-text" Visible="false" EnableViewState="false" />
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="field">
+                                            <label for="txtNewPassword">New password</label>
+                                            <asp:TextBox ID="txtNewPassword" runat="server" TextMode="Password" MaxLength="100" autocomplete="new-password" />
+                                            <asp:Label ID="lblNewError" runat="server" CssClass="error-text" Visible="false" EnableViewState="false" />
+                                            <span class="hint">At least 8 characters, and not the same as the current one.</span>
+                                        </div>
+                                        <div class="field">
+                                            <label for="txtConfirmPassword">Confirm new password</label>
+                                            <asp:TextBox ID="txtConfirmPassword" runat="server" TextMode="Password" MaxLength="100" autocomplete="new-password" />
+                                            <asp:Label ID="lblConfirmError" runat="server" CssClass="error-text" Visible="false" EnableViewState="false" />
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="card-f">
+                                    <asp:Button ID="btnChangePassword" runat="server" Text="Change password" CssClass="btn btn-primary" OnClick="btnChangePassword_Click" />
+                                </div>
+                            </section>
+                        </div>
 
                         <div class="stack">
                             <section class="card">
@@ -101,11 +139,36 @@
                                     </div>
                                 </div>
                             </section>
+
+                            <%-- Where "Forgot password?" on the owner login sends the reset link. Only the owner
+                                 account has one; staff who forget ask the owner. DRAFT: sample value, Phase 5
+                                 stores it on the owner's Users row. --%>
+                            <section class="card">
+                                <div class="card-h">
+                                    <div>
+                                        <h2>Password recovery</h2>
+                                        <div class="sub">If you forget your password, a reset link is emailed here</div>
+                                    </div>
+                                    <span class="kpi-icon"><%= Icons.Get("mail", "ico-sm") %></span>
+                                </div>
+                                <div class="card-b form">
+                                    <div class="field">
+                                        <label for="txtRecoveryEmail">Recovery email</label>
+                                        <asp:TextBox ID="txtRecoveryEmail" runat="server" TextMode="Email" Text="labatrack.owner@example.com" MaxLength="150" autocomplete="email" />
+                                        <span class="hint">Use an address only you can open. The link works once, within 30 minutes, and needs the email (SMTP) settings to be set up.</span>
+                                    </div>
+                                </div>
+                                <div class="card-f">
+                                    <button type="button" class="btn btn-primary"><%= Icons.Get("save", "ico-sm") %>Save</button>
+                                </div>
+                            </section>
                         </div>
                     </div>
                 </div>
             </main>
         </div>
     </form>
+
+    <script src="<%= AssetUrl.Get("~/Assets/js/Settings.js") %>"></script>
 </body>
 </html>

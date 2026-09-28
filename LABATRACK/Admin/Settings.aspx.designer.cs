@@ -40,6 +40,51 @@ namespace LABATRACK.Admin
         protected global::System.Web.UI.WebControls.TextBox txtClaimFormat;
 
         /// <summary>
+        /// litPasswordNotice control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Literal litPasswordNotice;
+
+        /// <summary>
+        /// txtCurrentPassword control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.TextBox txtCurrentPassword;
+
+        /// <summary>
+        /// lblCurrentError control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Label lblCurrentError;
+
+        /// <summary>
+        /// txtNewPassword control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.TextBox txtNewPassword;
+
+        /// <summary>
+        /// lblNewError control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Label lblNewError;
+
+        /// <summary>
+        /// txtConfirmPassword control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.TextBox txtConfirmPassword;
+
+        /// <summary>
+        /// lblConfirmError control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Label lblConfirmError;
+
+        /// <summary>
+        /// btnChangePassword control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Button btnChangePassword;
+
+        /// <summary>
+        /// txtRecoveryEmail control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.TextBox txtRecoveryEmail;
+
+        /// <summary>
         /// txtTurnaroundHours control.
         /// </summary>
         protected global::System.Web.UI.WebControls.TextBox txtTurnaroundHours;

@@ -79,6 +79,7 @@
                                                     </div>
                                                     <div class="job-card-name"><%#: Eval("Customer") %></div>
                                                     <div class="job-card-sub"><%#: Eval("Service") %> &middot; <%# ((decimal)Eval("WeightKg")).ToString("0.0") %> kg</div>
+                                                    <%# RouteNote((string)Eval("Route")) == "" ? "" : "<div class=\"job-card-route\">" + RouteNote((string)Eval("Route")) + "</div>" %>
                                                     <%# string.IsNullOrEmpty((string)Eval("AddOns")) ? "" : "<div class=\"job-card-addons\">" + Server.HtmlEncode((string)Eval("AddOns")) + "</div>" %>
                                                     <%# string.IsNullOrEmpty((string)Eval("Rework")) ? "" : "<div class=\"job-card-rework\">" + Icons.Get("rotate-ccw", "ico-sm") + "<span>" + Server.HtmlEncode((string)Eval("Rework")) + "</span></div>" %>
                                                     <%-- The column already names the stage, so the second line only says when the
@@ -90,7 +91,7 @@
                                                     </dl>
                                                     <div class="job-card-actions">
                                                         <asp:Button runat="server" CssClass='<%# (string)Eval("Stage") == "Ready for pick-up" ? "btn btn-sm btn-primary" : "btn btn-sm" %>'
-                                                            Text='<%# ActionLabel((string)Eval("Stage")) %>'
+                                                            Text='<%# ActionLabel((string)Eval("Stage"), (string)Eval("Route")) %>'
                                                             CommandName="Move" CommandArgument='<%# Eval("Claim") + "|" + Eval("Stage") %>' />
                                                         <%-- A failed inspection needs a reason, so it is recorded on the job page. --%>
                                                         <%# (string)Eval("Stage") == "Inspection" ? "<a class=\"btn btn-sm btn-ghost\" href=\"JobDetail.aspx?stage=Inspection\">Fail&hellip;</a>" : "" %>

@@ -83,6 +83,7 @@
     <Content Include="Assets\css\pages\JobDetail.css" />
     <Content Include="Assets\css\pages\JobSlip.css" />
     <Content Include="Assets\css\pages\NewJob.css" />
+    <Content Include="Assets\css\pages\Pricing.css" />
     <Content Include="Assets\css\pages\Reports.css" />
     <Content Include="Assets\js\Charts.js" />
     <Content Include="Assets\js\Dashboard.js" />
@@ -90,6 +91,7 @@
     <Content Include="Assets\js\NewJob.js" />
     <Content Include="Assets\js\Pricing.js" />
     <Content Include="Assets\js\Print.js" />
+    <Content Include="Assets\js\Settings.js" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="Pages\Shared\Customers.aspx" />
@@ -151,6 +153,7 @@
   </ItemGroup>
   <ItemGroup>
     <Content Include="Default.aspx" />
+    <Content Include="Login.aspx" />
     <Content Include="Logout.aspx" />
     <Content Include="Admin\DailySalesReport.aspx" />
     <Content Include="Admin\Dashboard.aspx" />
@@ -216,6 +219,13 @@
     </Compile>
     <Compile Include="Default.aspx.designer.cs">
       <DependentUpon>Default.aspx</DependentUpon>
+    </Compile>
+    <Compile Include="Login.aspx.cs">
+      <DependentUpon>Login.aspx</DependentUpon>
+      <SubType>ASPXCodeBehind</SubType>
+    </Compile>
+    <Compile Include="Login.aspx.designer.cs">
+      <DependentUpon>Login.aspx</DependentUpon>
     </Compile>
     <Compile Include="Logout.aspx.cs">
       <DependentUpon>Logout.aspx</DependentUpon>
@@ -305,6 +315,9 @@
     <Folder Include="Services\" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="docs\LabaTrack_Revised_Proposal2.docx" />
+    <Content Include="docs\LabaTrack_Revised_Proposal3.docx" />
+    <Content Include="docs\LabaTrack_Revised_Proposal3_tracked.docx" />
     <None Include="packages.config" />
     <None Include="Web.Debug.config">
       <DependentUpon>Web.config</DependentUpon>

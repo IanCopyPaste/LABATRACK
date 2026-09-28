@@ -37,6 +37,10 @@
 }
 
 *, *::before, *::after { box-sizing: border-box; }
+/* The hidden attribute always wins. Without this, a class that sets display (such as .field,
+   which is flex) shows the element anyway: that is how the stage checkboxes once appeared in
+   the add-on edit window on Pricing. */
+[hidden] { display: none !important; }
 html { -webkit-text-size-adjust: 100%; }
 body {
   margin: 0;

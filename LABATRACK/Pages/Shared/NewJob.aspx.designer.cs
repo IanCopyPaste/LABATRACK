@@ -80,6 +80,11 @@ namespace LABATRACK.Pages.Shared
         protected global::System.Web.UI.WebControls.Label lblPaymentError;
 
         /// <summary>
+        /// hfShownTotal control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.HiddenField hfShownTotal;
+
+        /// <summary>
         /// btnCreate control.
         /// </summary>
         protected global::System.Web.UI.WebControls.Button btnCreate;

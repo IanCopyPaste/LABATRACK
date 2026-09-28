@@ -28,40 +28,32 @@
                                 <div class="card-h">
                                     <div>
                                         <h2>Services</h2>
-                                        <div class="sub">Charged per kilo</div>
+                                        <div class="sub">Charged per kilo. Each service has its own stages. A service with a load still in the shop can't be changed until that load is claimed or voided.</div>
                                     </div>
                                     <button type="button" class="btn btn-sm" data-price-add="service"><%= Icons.Get("plus", "ico-sm") %>Add service</button>
                                 </div>
                                 <div class="table-wrap">
                                     <table class="table" data-price-table="service">
                                         <thead>
-                                            <tr><th>Service</th><th class="right">Rate per kg</th><th>Status</th><th></th></tr>
+                                            <tr><th>Service</th><th class="right">Rate per kg</th><th>Stages</th><th>Status</th><th></th></tr>
                                         </thead>
                                         <tbody>
-                                            <tr>
-                                                <td class="cell-main">Wash-Dry-Fold</td>
-                                                <td class="right num">₱40.00</td>
-                                                <td><span class="pill pill-ok">Active</span></td>
-                                                <td class="right"><button type="button" class="btn btn-sm btn-ghost" data-price-edit="true"><%= Icons.Get("pencil", "ico-sm") %>Edit</button></td>
-                                            </tr>
-                                            <tr>
-                                                <td class="cell-main">Wash-Dry</td>
-                                                <td class="right num">₱35.00</td>
-                                                <td><span class="pill pill-ok">Active</span></td>
-                                                <td class="right"><button type="button" class="btn btn-sm btn-ghost" data-price-edit="true"><%= Icons.Get("pencil", "ico-sm") %>Edit</button></td>
-                                            </tr>
-                                            <tr>
-                                                <td class="cell-main">Comforter / Bulky</td>
-                                                <td class="right num">₱60.00</td>
-                                                <td><span class="pill pill-ok">Active</span></td>
-                                                <td class="right"><button type="button" class="btn btn-sm btn-ghost" data-price-edit="true"><%= Icons.Get("pencil", "ico-sm") %>Edit</button></td>
-                                            </tr>
-                                            <tr>
-                                                <td class="cell-main muted">Wash Only</td>
-                                                <td class="right num muted">₱25.00</td>
-                                                <td><span class="pill st-claimed">Inactive</span></td>
-                                                <td class="right"><button type="button" class="btn btn-sm btn-ghost" data-price-edit="true"><%= Icons.Get("pencil", "ico-sm") %>Edit</button></td>
-                                            </tr>
+                                            <asp:Repeater ID="rptServices" runat="server">
+                                                <ItemTemplate>
+                                                    <tr data-stages="<%# Eval("StageCode") %>">
+                                                        <td class="cell-main<%# (bool)Eval("Active") ? "" : " muted" %>" data-col="name"><%#: Eval("Name") %></td>
+                                                        <td class="right num<%# (bool)Eval("Active") ? "" : " muted" %>" data-col="price">₱<%# ((decimal)Eval("Rate")).ToString("N2") %></td>
+                                                        <td data-col="stages"><div class="stage-chips"><%# StageChips((string)Eval("StageCode")) %></div></td>
+                                                        <td data-col="status">
+                                                            <span class="pill <%# (bool)Eval("Active") ? "pill-ok" : "st-claimed" %>"><%# (bool)Eval("Active") ? "Active" : "Inactive" %></span>
+                                                            <%# (bool)Eval("Locked") ? "<div class=\"in-use\">" + Icons.Get("lock", "ico-sm") + "In use &middot; " + Eval("LoadsInShop") + ((int)Eval("LoadsInShop") == 1 ? " load" : " loads") + " in the shop</div>" : "" %>
+                                                        </td>
+                                                        <td class="right">
+                                                            <button type="button" class="btn btn-sm btn-ghost" data-price-edit="true"<%# (bool)Eval("Locked") ? " disabled=\"disabled\" title=\"Can't be changed while a load using this service is in the shop\"" : "" %>><%# Icons.Get("pencil", "ico-sm") %>Edit</button>
+                                                        </td>
+                                                    </tr>
+                                                </ItemTemplate>
+                                            </asp:Repeater>
                                         </tbody>
                                     </table>
                                 </div>
@@ -85,15 +77,15 @@
                                         </thead>
                                         <tbody>
                                             <tr>
-                                                <td class="cell-main">Extra rinse</td>
-                                                <td class="right num">₱20.00</td>
-                                                <td><span class="pill pill-ok">Active</span></td>
+                                                <td class="cell-main" data-col="name">Extra rinse</td>
+                                                <td class="right num" data-col="price">₱20.00</td>
+                                                <td data-col="status"><span class="pill pill-ok">Active</span></td>
                                                 <td class="right"><button type="button" class="btn btn-sm btn-ghost" data-price-edit="true"><%= Icons.Get("pencil", "ico-sm") %>Edit</button></td>
                                             </tr>
                                             <tr>
-                                                <td class="cell-main">Stain treatment</td>
-                                                <td class="right num">₱30.00</td>
-                                                <td><span class="pill pill-ok">Active</span></td>
+                                                <td class="cell-main" data-col="name">Stain treatment</td>
+                                                <td class="right num" data-col="price">₱30.00</td>
+                                                <td data-col="status"><span class="pill pill-ok">Active</span></td>
                                                 <td class="right"><button type="button" class="btn btn-sm btn-ghost" data-price-edit="true"><%= Icons.Get("pencil", "ico-sm") %>Edit</button></td>
                                             </tr>
                                         </tbody>
@@ -116,15 +108,15 @@
                                         </thead>
                                         <tbody>
                                             <tr>
-                                                <td class="cell-main">Fabric conditioner</td>
-                                                <td class="right num">₱15.00</td>
-                                                <td><span class="pill pill-ok">Active</span></td>
+                                                <td class="cell-main" data-col="name">Fabric conditioner</td>
+                                                <td class="right num" data-col="price">₱15.00</td>
+                                                <td data-col="status"><span class="pill pill-ok">Active</span></td>
                                                 <td class="right"><button type="button" class="btn btn-sm btn-ghost" data-price-edit="true"><%= Icons.Get("pencil", "ico-sm") %>Edit</button></td>
                                             </tr>
                                             <tr>
-                                                <td class="cell-main">Detergent sachet</td>
-                                                <td class="right num">₱12.00</td>
-                                                <td><span class="pill pill-ok">Active</span></td>
+                                                <td class="cell-main" data-col="name">Detergent sachet</td>
+                                                <td class="right num" data-col="price">₱12.00</td>
+                                                <td data-col="status"><span class="pill pill-ok">Active</span></td>
                                                 <td class="right"><button type="button" class="btn btn-sm btn-ghost" data-price-edit="true"><%= Icons.Get("pencil", "ico-sm") %>Edit</button></td>
                                             </tr>
                                         </tbody>
@@ -156,6 +148,13 @@
                                             <asp:ListItem Value="0.5">0.5 kg</asp:ListItem>
                                             <asp:ListItem Value="1" Selected="True">1 kg</asp:ListItem>
                                         </asp:DropDownList>
+                                    </div>
+                                    <%-- Stored in Settings like the two above. New Job and the owner's Edit Job both refuse a
+                                         weight above it, on screen and again on the server (PricingService). --%>
+                                    <div class="field">
+                                        <label for="txtMaxWeight">Maximum weight per job (kg)</label>
+                                        <asp:TextBox ID="txtMaxWeight" runat="server" Text="100" inputmode="decimal" MaxLength="6" />
+                                        <span class="hint">A job heavier than this can't be saved. A bigger load is split into two or more jobs.</span>
                                     </div>
                                 </div>
                                 <div class="card-f">
@@ -211,6 +210,18 @@
                     <div class="input-prefix"><span>₱</span><input type="text" id="pdPrice" inputmode="decimal" autocomplete="off" /></div>
                     <span class="hint" id="pdPriceHint"></span>
                     <span class="error-text" id="pdPriceError" hidden></span>
+                </div>
+                <%-- Services only: which work stages a load goes through. The order is fixed; the owner
+                     only includes or leaves out a stage. Inspection is always part of the route. --%>
+                <div class="field" id="pdStagesField" hidden>
+                    <span class="label">Stages</span>
+                    <div class="stage-picks">
+                        <label class="check"><input type="checkbox" id="pdWash" data-stage="Washing" />Washing</label>
+                        <label class="check"><input type="checkbox" id="pdDry" data-stage="Drying" />Drying</label>
+                        <label class="check"><input type="checkbox" id="pdFold" data-stage="Folding" />Folding</label>
+                    </div>
+                    <span class="hint route-preview" id="pdRoute"></span>
+                    <span class="error-text" id="pdStagesError" hidden>Tick at least one stage.</span>
                 </div>
                 <div class="field">
                     <span class="label">Status</span>

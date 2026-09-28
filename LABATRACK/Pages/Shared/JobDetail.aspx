@@ -22,7 +22,8 @@
                     </div>
                     <div class="page-actions">
                         <a class="btn" href="JobSlip.aspx"><%= Icons.Get("printer", "ico-sm") %>Print slip</a>
-                        <a class="btn" href="../../Admin/EditJob.aspx"><%= Icons.Get("pencil", "ico-sm") %>Edit <span class="muted small">(owner)</span></a>
+                        <%-- Only the owner may edit a job order; staff fix a mistake by voiding a Queued job instead. --%>
+                        <% if (IsOwner) { %><a class="btn" href="../../Admin/EditJob.aspx"><%= Icons.Get("pencil", "ico-sm") %>Edit <span class="muted small">(owner)</span></a><% } %>
                     </div>
                 </header>
 
@@ -115,11 +116,9 @@
                                     </div>
                                     <div class="stack" style="gap:10px;">
                                         <div class="strong" style="color:var(--warning);"><%= Icons.Get("rotate-ccw", "ico-sm") %> Fail, send back</div>
-                                        <asp:DropDownList ID="ddlReworkStage" runat="server">
-                                            <asp:ListItem>Washing</asp:ListItem>
-                                            <asp:ListItem>Drying</asp:ListItem>
-                                            <asp:ListItem Selected="True">Folding</asp:ListItem>
-                                        </asp:DropDownList>
+                                        <%-- Filled in the code-behind with only the work stages on this job's route. --%>
+                                        <asp:DropDownList ID="ddlReworkStage" runat="server" />
+                                        <span class="hint">Only the stages this job's service includes are offered.</span>
                                         <asp:TextBox ID="txtReworkReason" runat="server" placeholder="Reason (required)" MaxLength="200" />
                                         <button type="button" class="btn"><%= Icons.Get("rotate-ccw", "ico-sm") %>Send back</button>
                                     </div>
@@ -212,11 +211,18 @@
 
                             <!-- Email log with resend -->
                             <section class="card">
-                                <div class="card-h"><div><h2>Notifications</h2><div class="sub">Email only. A failed send never blocks the job.</div></div></div>
+                                <div class="card-h"><div><h2>Notifications</h2><div class="sub">Email only. Every attempt is logged, and a failed send never blocks the job.</div></div></div>
+                                <%-- DRAFT: sample NotificationLog rows. The first drop-off email failed and staff resent it,
+                                     so both results show. A customer with no email gets one "Skipped" row instead. --%>
                                 <ul class="list">
                                     <li>
+                                        <span class="dot-icon" style="background:var(--danger-soft); color:var(--danger);"><%= Icons.Get("mail", "ico-sm") %></span>
+                                        <div class="grow"><div class="cell-main">Drop-off email</div><div class="cell-sub">Sep 21, 9:13 AM &middot; the mail server did not answer</div></div>
+                                        <span class="pill pill-danger">Failed</span>
+                                    </li>
+                                    <li>
                                         <span class="dot-icon" style="background:var(--primary-soft); color:var(--primary);"><%= Icons.Get("mail", "ico-sm") %></span>
-                                        <div class="grow"><div class="cell-main">Drop-off email</div><div class="cell-sub">Sep 21, 9:13 AM</div></div>
+                                        <div class="grow"><div class="cell-main">Drop-off email, resent</div><div class="cell-sub">Sep 21, 9:20 AM &middot; resent by jcruz</div></div>
                                         <span class="pill pill-ok">Sent</span>
                                         <button type="button" class="btn btn-sm btn-ghost" title="Resend"><%= Icons.Get("send", "ico-sm") %></button>
                                     </li>

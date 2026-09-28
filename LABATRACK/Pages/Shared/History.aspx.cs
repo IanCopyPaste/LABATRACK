@@ -30,7 +30,7 @@ namespace LABATRACK.Pages.Shared
 
         // DRAFT: Phase 2 takes the role from the signed-in account. Staff may search past jobs,
         // but voided jobs, who did what, and sales totals are the owner's (CLAUDE.md, Roles).
-        protected bool IsOwner { get { return true; } }
+        protected bool IsOwner { get { return SampleData.IsOwner(Session); } }
 
         protected int ResultCount { get; private set; }
         protected decimal ResultSales { get; private set; }

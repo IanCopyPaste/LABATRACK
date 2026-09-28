@@ -34,6 +34,35 @@ namespace LABATRACK.Helpers
             return SeedJobs();
         }
 
+        // ---- Draft sign-in ----
+        // DRAFT: who is "signed in", kept in Session so the two login pages can show the owner
+        // and the staff versions of the app. There is no password check and no page is locked:
+        // Phase 2 replaces all of this with AuthService, Forms authentication and AdminBasePage.
+        // Nobody signed in counts as the owner, so every draft page still opens straight from its URL.
+        private const string UserKey = "DraftUser";
+
+        public static void SignIn(HttpSessionState session, string username, bool owner)
+        {
+            session[UserKey] = (owner ? "Owner|" : "Staff|") + username;
+        }
+
+        public static bool IsSignedIn(HttpSessionState session)
+        {
+            return session != null && session[UserKey] is string;
+        }
+
+        public static bool IsOwner(HttpSessionState session)
+        {
+            var user = session == null ? null : session[UserKey] as string;
+            return user == null || user.StartsWith("Owner|");
+        }
+
+        public static string Username(HttpSessionState session)
+        {
+            var user = session == null ? null : session[UserKey] as string;
+            return user == null ? "owner" : user.Substring(user.IndexOf('|') + 1);
+        }
+
         /// <summary>Digits only, so "0917 555 0123" and "09175550123" are the same number.</summary>
         public static string Digits(string contact)
         {
