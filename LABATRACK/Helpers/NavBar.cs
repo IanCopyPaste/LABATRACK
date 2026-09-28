@@ -6,8 +6,8 @@ namespace LABATRACK.Helpers
     /// <summary>
     /// Builds the sidebar menu. Replaces a .master page: every page has an
     /// &lt;asp:Literal ID="litNav"&gt; and BasePage fills it with this HTML.
-    /// DRAFT: only the owner menu exists so far. The staff menu and the real
-    /// signed-in user come in Phase 2 with AuthService.
+    /// There are two menus: the owner's (everything) and staff's (the counter screens).
+    /// DRAFT: the role comes from the draft sign-in until Phase 2 adds AuthService.
     /// </summary>
     public static class NavBar
     {
@@ -43,22 +43,44 @@ namespace LABATRACK.Helpers
             new Item("Settings", "Settings", "~/Admin/Settings.aspx", "settings", true),
         };
 
+        // The staff menu: the same counter items as above, with the job board moved first as
+        // their home. Built from Counter (declared above, so it already exists here) so an item
+        // is only ever written once.
+        private static readonly Item[] StaffCounter = { Counter[1], Counter[0], Counter[2], Counter[3] };
+
         public static string Render(string activeKey)
         {
+            // DRAFT: the role comes from the draft sign-in in SampleData. Phase 2 reads the
+            // signed-in account from AuthService instead. The menu only shows what a role may
+            // open; the pages themselves are guarded on the server (AdminBasePage, Web.config).
+            var session = HttpContext.Current == null ? null : HttpContext.Current.Session;
+            bool owner = SampleData.IsOwner(session);
+            string username = SampleData.Username(session);
+
             var sb = new StringBuilder();
             sb.Append("<aside class=\"sidebar\">");
             sb.Append("<div class=\"brand\"><div class=\"brand-mark\">").Append(Icons.Get("washing-machine"))
-              .Append("</div><div><div class=\"brand-name\">LabaTrack</div><div class=\"brand-sub\">Owner console</div></div></div>");
+              .Append("</div><div><div class=\"brand-name\">LabaTrack</div><div class=\"brand-sub\">")
+              .Append(owner ? "Owner console" : "Counter").Append("</div></div></div>");
 
             sb.Append("<nav class=\"nav\">");
-            AppendSection(sb, "Overview", Overview, activeKey);
-            AppendSection(sb, "Counter", Counter, activeKey);
-            AppendSection(sb, "Management", Management, activeKey);
+            if (owner)
+            {
+                AppendSection(sb, "Overview", Overview, activeKey);
+                AppendSection(sb, "Counter", Counter, activeKey);
+                AppendSection(sb, "Management", Management, activeKey);
+            }
+            else
+            {
+                AppendSection(sb, "Counter", StaffCounter, activeKey);
+            }
             sb.Append("</nav>");
 
+            string initials = username.Length >= 2 ? username.Substring(0, 2).ToUpperInvariant() : username.ToUpperInvariant();
             sb.Append("<div class=\"sidebar-foot\"><div class=\"user-chip\">")
-              .Append("<div class=\"avatar\">OW</div>")
-              .Append("<div class=\"who\"><div>owner</div><div class=\"small muted\">Owner</div></div>")
+              .Append("<div class=\"avatar\">").Append(HttpUtility.HtmlEncode(initials)).Append("</div>")
+              .Append("<div class=\"who\"><div>").Append(HttpUtility.HtmlEncode(username)).Append("</div><div class=\"small muted\">")
+              .Append(owner ? "Owner" : "Staff").Append("</div></div>")
               .Append("<a class=\"icon-btn\" title=\"Sign out\" href=\"").Append(Url("~/Logout.aspx")).Append("\">")
               .Append(Icons.Get("log-out")).Append("</a></div>")
               .Append("<div class=\"draft-note\">Design draft &middot; sample data only</div>")

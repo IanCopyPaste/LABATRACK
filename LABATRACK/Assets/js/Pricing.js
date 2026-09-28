@@ -3,6 +3,8 @@
 // from the clicked row; Add opens it empty. DRAFT: Save only updates the table on this page.
 // Phase 2 posts the same fields to the server, which checks them again and saves them to
 // Services or AddOns; the checks below are there so the owner sees a mistake straight away.
+// A service with a load still in the shop has its Edit button turned off by the server, and the
+// server refuses the save as well: the button is a courtesy, not the rule.
 (function () {
     var dialog = document.getElementById('priceDialog');
     if (!dialog || typeof dialog.showModal !== 'function') return;
@@ -12,6 +14,10 @@
     var activeBox = document.getElementById('pdActive');
     var nameError = document.getElementById('pdNameError');
     var priceError = document.getElementById('pdPriceError');
+    var stagesField = document.getElementById('pdStagesField');
+    var stagesError = document.getElementById('pdStagesError');
+    var routeHint = document.getElementById('pdRoute');
+    var stageBoxes = stagesField.querySelectorAll('[data-stage]');   // Washing, Drying, Folding, in order
 
     // What changes between the three lists: the words used, and what the price means.
     var kinds = {
@@ -36,17 +42,41 @@
         return '₱' + n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
+    // Cells are found by their column name, because the service table has a Stages column the
+    // add-on tables do not.
+    function cell(tr, col) {
+        return tr.querySelector('[data-col="' + col + '"]');
+    }
+
     function cellsOf(tr) {
         return {
-            name: tr.cells[0].textContent.trim(),
-            price: parseFloat(tr.cells[1].textContent.replace(/[₱,\s]/g, '')),
-            active: tr.cells[2].textContent.trim() === 'Active'
+            name: cell(tr, 'name').textContent.trim(),
+            price: parseFloat(cell(tr, 'price').textContent.replace(/[₱,\s]/g, '')),
+            active: cell(tr, 'status').querySelector('.pill').textContent.trim() === 'Active',
+            stages: tr.getAttribute('data-stages') || ''
         };
     }
 
     function showError(el, text) {
         el.textContent = text;
         el.hidden = !text;
+    }
+
+    // "W", "D", "F" for each ticked stage, in the fixed order.
+    function stageCode() {
+        return Array.prototype.map.call(stageBoxes, function (box) {
+            return box.checked ? box.getAttribute('data-stage').charAt(0) : '';
+        }).join('');
+    }
+
+    // Shows the whole route a load on this service would take, so the owner sees the effect.
+    // With nothing ticked there is no route, and the error below says why.
+    function paintRoute() {
+        var work = Array.prototype.filter.call(stageBoxes, function (box) { return box.checked; })
+            .map(function (box) { return box.getAttribute('data-stage'); });
+        routeHint.textContent = work.length === 0
+            ? ''
+            :'Route: ' + ['Queued'].concat(work, ['Inspection', 'Ready for pick-up']).join(' → ');
     }
 
     function open(k, tr) {
@@ -59,18 +89,22 @@
         document.getElementById('pdSaveText').textContent = tr ? 'Save changes' : 'Add ' + info.noun;
         showError(nameError, '');
         showError(priceError, '');
+        stagesError.hidden = true;
+        stagesField.hidden = k !== 'service';
+
+        var current = tr ? cellsOf(tr) : { name: '', price: NaN, active: true, stages: 'WDF' };
+        nameBox.value = current.name;
+        priceBox.value = tr ? current.price.toFixed(2) : '';
+        activeBox.checked = current.active;
+        Array.prototype.forEach.call(stageBoxes, function (box) {
+            box.checked = current.stages.indexOf(box.getAttribute('data-stage').charAt(0)) >= 0;
+        });
+        paintRoute();
 
         if (tr) {
-            var current = cellsOf(tr);
-            nameBox.value = current.name;
-            priceBox.value = current.price.toFixed(2);
-            activeBox.checked = current.active;
             document.getElementById('priceDialogSub').textContent = 'Now ' + peso(current.price) + (current.active ? '' : ' · inactive');
             document.getElementById('pdPriceHint').textContent = info.hint + ' Was ' + peso(current.price) + '.';
         } else {
-            nameBox.value = '';
-            priceBox.value = '';
-            activeBox.checked = true;
             document.getElementById('priceDialogSub').textContent = 'It will show on new job orders once saved.';
             document.getElementById('pdPriceHint').textContent = info.hint;
         }
@@ -103,19 +137,54 @@
         } else {
             showError(priceError, '');
         }
+
+        // A service with no work stages would go straight from Queued to Inspection.
+        if (kind === 'service' && stageCode() === '') {
+            stagesError.hidden = false; ok = false;
+        } else {
+            stagesError.hidden = true;
+        }
         return ok;
     }
 
+    function stageChips(code) {
+        var wrap = document.createElement('div');
+        wrap.className = 'stage-chips';
+        ['Washing', 'Drying', 'Folding'].forEach(function (stage) {
+            var chip = document.createElement('span');
+            var on = code.indexOf(stage.charAt(0)) >= 0;
+            chip.className = 'stage-chip' + (on ? '' : ' is-off');
+            if (!on) chip.title = 'Skipped by this service';
+            chip.textContent = stage;
+            wrap.appendChild(chip);
+        });
+        return wrap;
+    }
+
     function paint(tr, name, price, active) {
-        tr.cells[0].textContent = name;
-        tr.cells[1].textContent = peso(price);
-        tr.cells[0].className = 'cell-main' + (active ? '' : ' muted');
-        tr.cells[1].className = 'right num' + (active ? '' : ' muted');
+        cell(tr, 'name').textContent = name;
+        cell(tr, 'price').textContent = peso(price);
+        cell(tr, 'name').className = 'cell-main' + (active ? '' : ' muted');
+        cell(tr, 'price').className = 'right num' + (active ? '' : ' muted');
+
+        // The status cell is rebuilt from scratch: a newly added service has no loads yet, so
+        // it carries no "in use" note and its Edit button is on.
         var pill = document.createElement('span');
         pill.className = 'pill ' + (active ? 'pill-ok' : 'st-claimed');
         pill.textContent = active ? 'Active' : 'Inactive';
-        tr.cells[2].textContent = '';
-        tr.cells[2].appendChild(pill);
+        cell(tr, 'status').textContent = '';
+        cell(tr, 'status').appendChild(pill);
+
+        if (kind === 'service') {
+            var code = stageCode();
+            tr.setAttribute('data-stages', code);
+            cell(tr, 'stages').textContent = '';
+            cell(tr, 'stages').appendChild(stageChips(code));
+        }
+
+        var edit = tr.querySelector('[data-price-edit]');
+        edit.disabled = false;
+        edit.removeAttribute('title');
 
         // Picks the changed row out for a moment so the owner sees where it went.
         tr.classList.remove('is-changed');
@@ -141,12 +210,20 @@
     document.addEventListener('click', function (e) {
         var edit = e.target.closest('[data-price-edit]');
         if (edit) {
+            if (edit.disabled) return;   // a service in use
             var tr = edit.closest('tr');
             open(tr.closest('[data-price-table]').getAttribute('data-price-table'), tr);
             return;
         }
         var add = e.target.closest('[data-price-add]');
         if (add) open(add.getAttribute('data-price-add'), null);
+    });
+
+    Array.prototype.forEach.call(stageBoxes, function (box) {
+        box.addEventListener('change', function () {
+            paintRoute();
+            stagesError.hidden = stageCode() !== '';
+        });
     });
 
     document.getElementById('pdSave').addEventListener('click', save);

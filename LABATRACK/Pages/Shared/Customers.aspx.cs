@@ -28,7 +28,7 @@ namespace LABATRACK.Pages.Shared
 
         // DRAFT: Phase 2 takes the role from the signed-in account. Staff can add and search
         // customers; only the owner can edit one (CLAUDE.md, Roles).
-        protected bool IsOwner { get { return true; } }
+        protected bool IsOwner { get { return SampleData.IsOwner(Session); } }
 
         protected int TotalCustomers { get; private set; }
         protected int ShownCustomers { get; private set; }

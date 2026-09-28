@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using LABATRACK.Helpers;
 using LABATRACK.Security;
 
 namespace LABATRACK.Pages.Shared
@@ -16,8 +17,32 @@ namespace LABATRACK.Pages.Shared
             get { return "JobDetail.css"; }
         }
 
-        private static readonly string[] Stages =
-            { "Queued", "Washing", "Drying", "Folding", "Inspection", "Ready for pick-up", "Claimed" };
+        // DRAFT: the sample job is a Wash-Dry-Fold load, so its route has all three work stages.
+        // Phase 4 reads the stage flags copied onto the job from its service at creation.
+        private const string SampleRoute = "WDF";
+
+        // The job's route: Queued, the work stages its service includes (always in the order
+        // Washing, Drying, Folding), then Inspection, Ready for pick-up and Claimed. The stepper,
+        // the next step, and the rework choices all come from this, so a Wash-Dry job never
+        // shows Folding anywhere.
+        private static List<string> RouteSteps(string route)
+        {
+            var steps = new List<string> { "Queued" };
+            steps.AddRange(WorkStages(route));
+            steps.AddRange(new[] { "Inspection", "Ready for pick-up", "Claimed" });
+            return steps;
+        }
+
+        private static List<string> WorkStages(string route)
+        {
+            var work = new List<string>();
+            if (route.Contains("W")) work.Add("Washing");
+            if (route.Contains("D")) work.Add("Drying");
+            if (route.Contains("F")) work.Add("Folding");
+            return work;
+        }
+
+        private List<string> Stages;
 
         // Sample JobStatusHistory rows for LT-260921-004, including one failed inspection.
         private static readonly List<HistoryRow> SampleHistory = new List<HistoryRow>
@@ -33,6 +58,8 @@ namespace LABATRACK.Pages.Shared
             new HistoryRow("Ready for pick-up", "Claimed",           "Sep 22, 4:10 PM",  "jcruz",   ""),
         };
 
+        // DRAFT: the role comes from the draft sign-in until Phase 2 adds AuthService.
+        protected bool IsOwner { get { return SampleData.IsOwner(Session); } }
         protected string CurrentStage { get; private set; }
         protected string NextStage { get; private set; }
         protected bool IsVoided { get; private set; }
@@ -45,12 +72,22 @@ namespace LABATRACK.Pages.Shared
         {
             CurrentStage = PickPreviewStage(Request.QueryString["stage"]);
             IsVoided = CurrentStage == "Voided";
+            Stages = RouteSteps(SampleRoute);
 
             var history = BuildHistory();
             var payments = BuildPayments();
 
-            int current = Array.IndexOf(Stages, CurrentStage);
-            NextStage = current >= 0 && current < Stages.Length - 1 ? Stages[current + 1] : "";
+            int current = Stages.IndexOf(CurrentStage);
+            NextStage = current >= 0 && current < Stages.Count - 1 ? Stages[current + 1] : "";
+
+            // A failed inspection can only go back to a work stage this job actually has.
+            if (!IsPostBack)
+            {
+                ddlReworkStage.Items.Clear();
+                foreach (string stage in WorkStages(SampleRoute))
+                    ddlReworkStage.Items.Add(stage);
+                ddlReworkStage.SelectedIndex = ddlReworkStage.Items.Count - 1;
+            }
 
             rptStepper.DataSource = BuildSteps(history, current);
             rptStepper.DataBind();
@@ -61,7 +98,7 @@ namespace LABATRACK.Pages.Shared
 
             // Only the current stage gets an action.
             pnlQueued.Visible = CurrentStage == "Queued";
-            pnlAdvance.Visible = CurrentStage == "Washing" || CurrentStage == "Drying" || CurrentStage == "Folding";
+            pnlAdvance.Visible = WorkStages(SampleRoute).Contains(CurrentStage);
             pnlInspection.Visible = CurrentStage == "Inspection";
             pnlReady.Visible = CurrentStage == "Ready for pick-up";
             pnlClosed.Visible = CurrentStage == "Claimed" || IsVoided;
@@ -105,7 +142,7 @@ namespace LABATRACK.Pages.Shared
         private List<StepItem> BuildSteps(List<HistoryRow> history, int current)
         {
             var steps = new List<StepItem>();
-            for (int i = 0; i < Stages.Length; i++)
+            for (int i = 0; i < Stages.Count; i++)
             {
                 var step = new StepItem { Name = Stages[i], Number = i + 1 };
                 var entered = history.LastOrDefault(h => h.To == Stages[i]);

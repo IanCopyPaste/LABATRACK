@@ -32,7 +32,8 @@ namespace LABATRACK.Pages.Shared
         // The sample data is a snapshot of one morning, so ages and new timestamps are
         // measured from this moment rather than the real clock.
         private static readonly DateTime SampleNow = new DateTime(2026, 9, 22, 12, 0, 0);
-        private const string SignedInUser = "owner";   // DRAFT: Phase 2 reads this from AuthService
+        // DRAFT: Phase 2 reads the signed-in account from AuthService.
+        private string SignedInUser { get { return SampleData.Username(Session); } }
 
         // DRAFT: today's payments net of refunds (6 payments, 1 refund). Claiming a load adds
         // nothing, because every job is paid in full at drop-off.
@@ -80,7 +81,7 @@ namespace LABATRACK.Pages.Shared
                 return;
             }
 
-            string to = NextStage(job.Stage);
+            string to = NextStage(job.Stage, job.Route);
             Move(job, to);
             ShowNotice("info", job.Claim + " moved to " + to + ".");
             Bind();
@@ -104,17 +105,25 @@ namespace LABATRACK.Pages.Shared
 
         // Only the steps a card can take on its own. A failed inspection and a void both
         // need a reason, so those happen on JobDetail.
-        private static string NextStage(string stage)
+        // The next stage follows the job's own route: Queued, the work stages its service
+        // includes (in the order Washing, Drying, Folding), then Inspection, Ready, Claimed.
+        // So a Wash-Dry load goes from Drying straight to Inspection. Phase 4 moves this rule
+        // into StatusService.
+        private static string NextStage(string stage, string route)
         {
-            switch (stage)
-            {
-                case "Queued": return "Washing";
-                case "Washing": return "Drying";
-                case "Drying": return "Folding";
-                case "Folding": return "Inspection";
-                case "Inspection": return "Ready for pick-up";
-                default: return "Claimed";
-            }
+            var steps = RouteSteps(route);
+            int at = steps.IndexOf(stage);
+            return at >= 0 && at < steps.Count - 1 ? steps[at + 1] : "Claimed";
+        }
+
+        private static List<string> RouteSteps(string route)
+        {
+            var steps = new List<string> { "Queued" };
+            if (route.Contains("W")) steps.Add("Washing");
+            if (route.Contains("D")) steps.Add("Drying");
+            if (route.Contains("F")) steps.Add("Folding");
+            steps.AddRange(new[] { "Inspection", "Ready for pick-up", "Claimed" });
+            return steps;
         }
 
         private void Bind()
@@ -141,17 +150,29 @@ namespace LABATRACK.Pages.Shared
 
         // ---- Used by the markup ----
 
-        protected static string ActionLabel(string stage)
+        // The button names the step the card will take, which depends on the job's route.
+        protected static string ActionLabel(string stage, string route)
         {
-            switch (stage)
+            string next = NextStage(stage, route);
+            switch (next)
             {
-                case "Queued": return "Start washing";
-                case "Washing": return "Move to drying";
-                case "Drying": return "Move to folding";
-                case "Folding": return "Send to inspection";
-                case "Inspection": return "Pass";
+                case "Washing": return "Start washing";
+                case "Drying": return stage == "Queued" ? "Start drying" : "Move to drying";
+                case "Folding": return stage == "Queued" ? "Start folding" : "Move to folding";
+                case "Inspection": return "Send to inspection";
+                case "Ready for pick-up": return "Pass";
                 default: return "Mark claimed";
             }
+        }
+
+        /// <summary>On a card whose service skips stages, says which, so nobody looks for it in Folding.</summary>
+        protected static string RouteNote(string route)
+        {
+            var skipped = new List<string>();
+            if (!route.Contains("W")) skipped.Add("washing");
+            if (!route.Contains("D")) skipped.Add("drying");
+            if (!route.Contains("F")) skipped.Add("folding");
+            return skipped.Count == 0 ? "" : "No " + string.Join(" or ", skipped);
         }
 
         protected static string StageCss(string stage)
@@ -244,7 +265,15 @@ namespace LABATRACK.Pages.Shared
             {
                 Claim = claim, Customer = customer, Contact = contact, Service = service, WeightKg = kg, Total = total,
                 AddOns = addOns, DroppedOff = droppedOff, Stage = stage, StageSince = since, StageBy = by, Rework = rework,
+                Route = SampleRoute(service),
             };
+        }
+
+        // DRAFT: the route each sample service has on the Pricing page. Phase 4 reads the stage
+        // flags that were copied onto the job when it was created.
+        private static string SampleRoute(string service)
+        {
+            return service == "Wash-Dry" ? "WD" : "WDF";
         }
 
         [Serializable]
@@ -262,6 +291,7 @@ namespace LABATRACK.Pages.Shared
             public DateTime StageSince { get; set; }
             public string StageBy { get; set; }
             public string Rework { get; set; }   // why the load came back, while it is being redone
+            public string Route { get; set; }    // the work stages this job goes through: "WDF", "WD", ...
 
             // What the filter box matches against: claim number, name, and contact number.
             public string SearchText

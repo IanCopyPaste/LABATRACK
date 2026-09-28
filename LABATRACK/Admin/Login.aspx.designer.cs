@@ -20,6 +20,16 @@ namespace LABATRACK.Admin
         protected global::System.Web.UI.HtmlControls.HtmlForm form1;
 
         /// <summary>
+        /// pnlSignIn control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Panel pnlSignIn;
+
+        /// <summary>
+        /// pnlResetDone control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Panel pnlResetDone;
+
+        /// <summary>
         /// pnlError control.
         /// </summary>
         protected global::System.Web.UI.WebControls.Panel pnlError;
@@ -43,5 +53,70 @@ namespace LABATRACK.Admin
         /// btnSignIn control.
         /// </summary>
         protected global::System.Web.UI.WebControls.Button btnSignIn;
+
+        /// <summary>
+        /// pnlForgot control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Panel pnlForgot;
+
+        /// <summary>
+        /// pnlSent control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Panel pnlSent;
+
+        /// <summary>
+        /// pnlForgotForm control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Panel pnlForgotForm;
+
+        /// <summary>
+        /// txtResetUsername control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.TextBox txtResetUsername;
+
+        /// <summary>
+        /// lblResetUsernameError control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Label lblResetUsernameError;
+
+        /// <summary>
+        /// btnSendReset control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Button btnSendReset;
+
+        /// <summary>
+        /// pnlReset control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Panel pnlReset;
+
+        /// <summary>
+        /// txtResetNew control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.TextBox txtResetNew;
+
+        /// <summary>
+        /// lblResetNewError control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Label lblResetNewError;
+
+        /// <summary>
+        /// txtResetConfirm control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.TextBox txtResetConfirm;
+
+        /// <summary>
+        /// lblResetConfirmError control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Label lblResetConfirmError;
+
+        /// <summary>
+        /// btnSetPassword control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Button btnSetPassword;
+
+        /// <summary>
+        /// pnlExpired control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Panel pnlExpired;
     }
 }

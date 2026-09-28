@@ -66,6 +66,8 @@ Two roles: **Owner** (admin) and **Staff**. The owner can do everything staff ca
 | Edit an existing job order (wrong weight, service, customer detail) | No | Yes |
 | Edit customer records | No | Yes |
 | Create, disable, and reset staff accounts | No | Yes |
+| Change their own password (Settings) | No | Yes |
+| Reset their own forgotten password by email | No | Yes |
 | Change prices, services, add-ons, and settings | No | Yes |
 | Historical sales, reports, analytics, full history with voided jobs and who did what | No | Yes |
 
@@ -79,18 +81,22 @@ Two roles: **Owner** (admin) and **Staff**. The owner can do everything staff ca
 
 Stages: **Queued, Washing, Drying, Folding, Inspection, Ready for pick-up, Claimed**, plus **Voided**.
 
-Inspection is the quality check after folding (verify the finished laundry before shelving). The intake check at the counter is not a stage; it lives in the job's `Remarks` field.
+Inspection is the quality check after the last work stage (verify the finished laundry before shelving). The intake check at the counter is not a stage; it lives in the job's `Remarks` field.
 
-These are the only allowed transitions. `StatusService` enforces them and rejects everything else. No skipping.
+**Each service has its own route.** The owner chooses, per service, which of the three work stages it includes: Washing, Drying, Folding (at least one). The order never changes and the rest of the route is the same for every job:
+
+Queued → (the service's work stages, in the order Washing, Drying, Folding) → Inspection → Ready for pick-up → Claimed
+
+For example, Wash-Dry-Fold includes all three, and a Wash-Dry service skips Folding: Queued → Washing → Drying → Inspection. Which stages each service has is the owner's decision, set on the Pricing page; the draft's sample services are only examples. Inspection is always included. **Stages belong to the main services only.** Service add-ons and product add-ons never have stages: they ride along with the load, so the Pricing edit window shows the stage checkboxes only for a service, and `AddOns` has no stage columns.
+
+The route is copied onto the job when it is created (see Pricing rules, freeze at creation), so the job's route never changes under it. These are the only allowed transitions. `StatusService` enforces them and rejects everything else. No skipping within the job's route.
 
 | From | To | Notes |
 |---|---|---|
-| Queued | Washing | |
-| Washing | Drying | |
-| Drying | Folding | |
-| Folding | Inspection | |
+| Queued | the first work stage on the job's route | |
+| a work stage | the next work stage on the route, or Inspection after the last one | |
 | Inspection | Ready for pick-up | Pass. Triggers the ready email. |
-| Inspection | Washing, Drying, or Folding | Fail. Rework. Reason required. |
+| Inspection | a work stage on the job's route | Fail. Rework. Reason required. A stage the job does not have is never offered. |
 | Ready for pick-up | Claimed | Already paid in full at drop-off (see Payments). |
 | Queued | Voided | Reason required. Only from Queued. |
 
@@ -108,7 +114,9 @@ Claimed and Voided are final.
 - Total = laundry charge + sum of add-on lines, where a line is `Quantity * PriceAtCreation`.
 - Laundry charge = billable kilos x the service's rate per kilo, then raised to the minimum charge if lower. Add-ons are added after.
 - Billable kilos = weight rounded up to the next multiple of `RoundingIncrementKg` (default 1, so 3.2 kg bills as 4 kg).
-- Freeze the price at creation. Copy the service rate into `JobOrders.RatePerKgAtCreation` and each add-on price into `JobAddOns.PriceAtCreation`. Compute `TotalAmount` once and store it. Never recompute an old job from today's prices, or historical sales silently change when the owner edits a rate.
+- **Maximum weight per job.** The owner sets it on the Pricing page (stored in `Settings`, draft default 100 kg). A weight above it is refused when a job is created and when the owner edits a job, on screen and again in `PricingService`. A bigger load is split into two or more jobs.
+- Freeze the price at creation. Copy the service rate into `JobOrders.RatePerKgAtCreation` and each add-on price into `JobAddOns.PriceAtCreation`. Compute `TotalAmount` once and store it. Never recompute an old job from today's prices, or historical sales silently change when the owner edits a rate. The service's route (its work stages) is copied onto the job the same way.
+- **A service in use cannot be changed.** While any job with that service is still in the shop (anything not Claimed or Voided), the owner cannot edit the service at all: not its name, rate, stages, or Active status. The Pricing page shows it as in use, with how many loads, and its Edit button is off. It opens up again once the last of those loads is claimed or voided. The owner can always add a new service, so a change that cannot wait is made as a new service. Add-ons are not locked this way; their prices are frozen onto each job.
 - **Add-ons come in two kinds, and the difference is how they are charged.** A **service add-on** is extra work done to the load (extra rinse, stain treatment): it is charged once whatever the weight, so the form shows it as a checkbox and its quantity is always 1. A **product add-on** is a thing sold with the load (fabric conditioner, detergent sachet): it is priced per piece, so the form shows a quantity stepper and the line bills as quantity x unit price. Both live in `AddOns`, told apart by `Kind`, and both freeze their price onto the job the same way.
 - Add-ons are priced extras only. No stock, no deduction, no reorder alerts — a product's quantity is recorded on the job as something sold, not counted against an inventory. Keep each list to two or three.
 - **No rush, express, or same-day fee.** Every load runs on the same turnaround and the expected pick-up is always now + the turnaround hours in `Settings`. The shop will not charge for speed it often delivers anyway: a load paid as rush would frequently have finished that day regardless, so the fee sells the customer something they were already getting. Do not add a priority add-on, a rush flag on the job, or urgency-based ordering on the board.
@@ -122,7 +130,7 @@ Claimed and Voided are final.
 - Claiming needs no payment step, because every job was paid in full at drop-off. Ready for pick-up to Claimed is only a status change.
 - Creating a job saves the job, its add-ons, the first history row (Queued), and its payment in one `SqlTransaction`. All of it or none of it.
 - Voiding a job inserts an offsetting negative `Payments` row (a refund of everything paid on the job, same method) in the same transaction, so totals and the cash drawer stay correct.
-- **Owner edits that change the total** (for example a corrected weight). Allowed only while the job is not Claimed or Voided. The job update and one adjustment row in `Payments` for the difference are saved in one `SqlTransaction`:
+- **Owner edits that change the total** (for example a corrected weight). Allowed only while the job is not Claimed or Voided. The service itself can be changed only while the job is still Queued, because a different service can have a different route and a load already in, say, Folding may not have that stage on the new one. Weight, add-on, and customer corrections stay allowed until the job is claimed. The job update and one adjustment row in `Payments` for the difference are saved in one `SqlTransaction`:
   - New total higher: a positive row, the extra amount collected from the customer.
   - New total lower (the customer overpaid): a negative row, the difference refunded to the customer. The screen tells the owner exactly how much to give back.
   - When the extra amount is collected in cash, the same cash received and change rules as a new job apply.
@@ -140,14 +148,14 @@ Claimed and Voided are final.
 
 Proposed tables (confirm with the user before creating):
 
-- `Users` (username, password hash, salt, role, active flag, failed login count, locked until)
+- `Users` (username, password hash, salt, role, active flag, failed login count, locked until, recovery email, reset token hash, reset token expires at) — the last three are used only by the owner account (see Security rules)
 - `Customers` (name, contact number, email nullable, created at)
-- `Services` (name, rate per kg, active)
+- `Services` (name, rate per kg, active, includes washing, includes drying, includes folding) — the three stage flags are `BIT`, with a `CHECK` that at least one is set
 - `AddOns` (name, price, kind, active) — `kind` is `Service` or `Product`, with a `CHECK` constraint
-- `JobOrders` (claim number, customer, service, weight, billable kg, rate at creation, total, current status, remarks, expected pick-up, created at and by)
+- `JobOrders` (claim number, customer, service, weight, billable kg, rate at creation, the three stage flags copied from the service at creation, total, current status, remarks, expected pick-up, created at and by)
 - `JobAddOns` (job, add-on, quantity, price at creation) — `quantity` is always 1 for a service and 1 or more for a product, never 0; a line amount is `Quantity * PriceAtCreation`
 - `JobStatusHistory`, `Payments`, `NotificationLog`
-- `Settings` (key/value: minimum charge, rounding increment, unclaimed threshold in days, default turnaround hours, shop name, slip header)
+- `Settings` (key/value: minimum charge, rounding increment, maximum weight per job, unclaimed threshold in days, default turnaround hours, shop name, slip header)
 
 ## T-SQL conventions
 
@@ -185,7 +193,8 @@ Every query the application runs goes through a stored procedure: reads, inserts
 ## Notifications
 
 - Email only, sent through `EmailService`, with the message bodies built in `EmailTemplates.cs`.
-- Two emails: at drop-off (includes the claim number) and when the job becomes Ready for pick-up.
+- Two emails to customers: at drop-off (includes the claim number) and when the job becomes Ready for pick-up.
+- One email to the owner: the password reset link (see Security rules). It is not about a job, so it is not logged in `NotificationLog`, and its body is built in `EmailTemplates.cs` like the others.
 - A failed send must never block or roll back the job. Log every attempt in `NotificationLog` (Sent, Failed, or Skipped), and give staff a resend button on `JobDetail`.
 - SMTP credentials never go in source control.
 
@@ -193,7 +202,7 @@ Every query the application runs goes through a stored procedure: reads, inserts
 
 **Dashboard (staff and owner).** The active list is filtered by status, not by date: everything from Queued to Ready for pick-up stays on the board until it is Claimed or Voided. Sort oldest first and show the drop-off date on every row. Below it: jobs claimed today with today's total, and a "needs attention" list (unclaimed past the owner's threshold, plus jobs voided today). Staff see only today's total. The staff and owner dashboards call the same repository method. The small Repeater markup may be repeated in both pages, but the query and the rules may not.
 
-**JobDetail.** Show job ID and customer info once in a header. Below it, a stage stepper: completed stages show time and staff, the current stage is highlighted, future stages are greyed. The "advance" button appears only on the current stage. Voided is its own red state, not a step in the bar. Use a vertical timeline on narrow screens.
+**JobDetail.** Show job ID and customer info once in a header. Below it, a stage stepper that shows only the stages on that job's route: completed stages show time and staff, the current stage is highlighted, future stages are greyed. The "advance" button appears only on the current stage. Voided is its own red state, not a step in the bar. Use a vertical timeline on narrow screens.
 
 **Owner reports.** Daily and monthly sales, cash vs e-wallet split, most-availed services, average turnaround (first Queued to first Ready), unclaimed loads, and a comparison with the previous period. Daily sales and the cash split come from `Payments.PaidAt`, which is what the drawer check needs. Service popularity comes from the job's created date. Do not mix the two.
 
@@ -207,6 +216,8 @@ Charts are inline SVG drawn on the server by `Helpers/SvgChart.cs`. No chart lib
 - Hash passwords with PBKDF2 (`Rfc2898DeriveBytes`) and a per-user salt. Never store or log plain text.
 - The login error is always "Invalid username or password", including when a staff account tries the admin login. Never reveal which part was wrong.
 - Lock an account for a few minutes after five failed logins.
+- The owner changes their own password on `Admin/Settings.aspx`: current password first (so nobody can take over the account from a screen left signed in), then the new one typed twice, at least 8 characters and different from the current one. `AuthService` checks the current password against the stored hash; a wrong one counts as a failed login, so the five-try lock still applies. The new password gets a new salt and hash, and the owner stays signed in. Staff do not change their own; the owner resets theirs on `Admin/Staff.aspx`.
+- **Only the owner can reset a forgotten password by email.** "Forgot password?" on `Admin/Login.aspx` asks for the username. Only when it is an active Owner account with a recovery email (set on `Admin/Settings.aspx`) does `AuthService` make a reset link: 32 random bytes from `RNGCryptoServiceProvider`, of which only a SHA-256 hash is stored on the `Users` row, expiring 30 minutes later; a newer request replaces the older link. The page shows the same message whatever was typed, so it never reveals which usernames exist. The link opens `Admin/Login.aspx?token=...`; setting the new password checks the token again, saves a new salt and hash, clears the token (one use only), and clears the failed-login count and any lock. Staff have no email reset: the staff login tells them to ask the owner.
 - `Admin/Login.aspx` is the only anonymous page under `Admin/` (allow it with a `<location>` rule in `Web.config`, or the login page locks itself out). `AdminBasePage` redirects to `~/Admin/Login.aspx` itself, because Forms authentication has only one `loginUrl`.
 - HTML-encode all output. Do not disable request validation or ViewState MAC.
 - The connection string uses Windows authentication, so it contains no password and stays in `Web.config`. SMTP credentials are secrets: put them in an external config file (`configSource`) that is listed in `.gitignore`. Demo credentials from seed scripts are documented in the README and are never real passwords.
@@ -302,3 +313,4 @@ Ask the student before hard-coding any of these. Store them in `Settings`, not i
 4. Default turnaround hours used for the expected pick-up date on the slip.
 5. Whether rework may return to Drying or Folding, or only to Washing (default: any of the three).
 6. Whether the refund-on-void rule above matches what the student wants to demonstrate.
+7. Maximum weight per job (draft default 100 kg), set on the Pricing page.

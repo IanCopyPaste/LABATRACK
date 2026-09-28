@@ -54,7 +54,13 @@
                             </section>
 
                             <!-- 2. Load: service, weight, add-ons -->
-                            <section class="card">
+                            <%-- The price is worked out on screen as the cashier types: rate per service (by the
+                                 dropdown's value), minimum charge, rounding step and the maximum weight per job.
+                                 data-routes is each service's work stages, shown under the dropdown. DRAFT: these come
+                                 from Pricing and Settings in Phase 3, and the server works the total out again on save.
+                                 The form opens empty: no weight, no add-ons and no cash, so there is no total until
+                                 the load is weighed. --%>
+                            <section class="card" id="loadCard" data-rates="1:40,2:35,3:60" data-routes="1:WDF,2:WD,3:WDF" data-minimum="120" data-rounding="1" data-max-weight="<%= SampleMaxWeightKg %>">
                                 <div class="card-h"><div class="title"><span class="step-no">2</span><div><h2>Load</h2><div class="sub">Weigh the laundry and choose the service</div></div></div></div>
                                 <div class="card-b form">
                                     <div class="form-row">
@@ -65,11 +71,13 @@
                                                 <asp:ListItem Value="2">Wash-Dry · ₱35.00/kg</asp:ListItem>
                                                 <asp:ListItem Value="3">Comforter / Bulky · ₱60.00/kg</asp:ListItem>
                                             </asp:DropDownList>
+                                            <span class="hint" id="serviceRoute">Stages: Washing → Drying → Folding → Inspection</span>
                                         </div>
                                         <div class="field">
                                             <label for="txtWeight">Weight (kg)</label>
-                                            <asp:TextBox ID="txtWeight" runat="server" Text="5.1" />
-                                            <span class="hint">Rounded up to the next 1 kg: bills as 6 kg.</span>
+                                            <asp:TextBox ID="txtWeight" runat="server" inputmode="decimal" autocomplete="off" MaxLength="6" />
+                                            <span class="hint" id="weightHint">Weigh the load, then type the kilos shown on the scale.</span>
+                                            <span class="error-text" id="weightError" hidden>Enter the weight in kilos, for example 5.1.</span>
                                         </div>
                                     </div>
                                     <%-- Two kinds of add-on. A service is work done to the load, so it is
@@ -79,7 +87,7 @@
                                         <span class="label">Service add-ons</span>
                                         <span class="hint">Extra work on the load. Charged once, whatever the weight.</span>
                                         <div class="grid grid-2" style="gap:10px; margin-top:8px;">
-                                            <label class="check"><input type="checkbox" checked="checked" data-service data-name="Extra rinse" data-price="20.00" />Extra rinse<span class="price num">₱20.00</span></label>
+                                            <label class="check"><input type="checkbox" data-service data-name="Extra rinse" data-price="20.00" />Extra rinse<span class="price num">₱20.00</span></label>
                                             <label class="check"><input type="checkbox" data-service data-name="Stain treatment" data-price="30.00" />Stain treatment<span class="price num">₱30.00</span></label>
                                         </div>
                                     </div>
@@ -87,15 +95,15 @@
                                         <span class="label">Product add-ons</span>
                                         <span class="hint">Items sold with the load. Set how many.</span>
                                         <div class="stack" style="gap:10px; margin-top:8px;">
-                                            <div class="product-row is-on" data-product data-name="Fabric conditioner" data-price="15.00">
+                                            <div class="product-row is-zero" data-product data-name="Fabric conditioner" data-price="15.00">
                                                 <span class="product-name">Fabric conditioner</span>
                                                 <span class="price num">₱15.00 each</span>
                                                 <div class="qty">
-                                                    <button type="button" data-qty-step="-1" aria-label="One less fabric conditioner"><%= Icons.Get("minus", "ico-sm") %></button>
-                                                    <input type="text" inputmode="numeric" value="2" data-qty aria-label="Fabric conditioner quantity" />
+                                                    <button type="button" data-qty-step="-1" aria-label="One less fabric conditioner" disabled="disabled"><%= Icons.Get("minus", "ico-sm") %></button>
+                                                    <input type="text" inputmode="numeric" value="0" data-qty aria-label="Fabric conditioner quantity" />
                                                     <button type="button" data-qty-step="1" aria-label="One more fabric conditioner"><%= Icons.Get("plus", "ico-sm") %></button>
                                                 </div>
-                                                <span class="line-total num">₱30.00</span>
+                                                <span class="line-total num">₱0.00</span>
                                             </div>
                                             <div class="product-row is-zero" data-product data-name="Detergent sachet" data-price="12.00">
                                                 <span class="product-name">Detergent sachet</span>
@@ -124,7 +132,7 @@
                             </section>
 
                             <!-- 3. Payment: full amount only, collected now -->
-                            <section class="card" id="paymentCard" data-laundry="240.00">
+                            <section class="card" id="paymentCard">
                                 <div class="card-h"><div class="title"><span class="step-no">3</span><div><h2>Payment</h2><div class="sub">Full payment is collected now. No partial payments or balances.</div></div></div></div>
                                 <div class="card-b form">
                                     <div class="field">
@@ -137,9 +145,9 @@
                                     <div id="cashFields" class="form-row">
                                         <div class="field">
                                             <label for="txtCashReceived">Cash received</label>
-                                            <div class="input-prefix"><span>₱</span><asp:TextBox ID="txtCashReceived" runat="server" Text="500.00" autocomplete="off" /></div>
+                                            <div class="input-prefix"><span>₱</span><asp:TextBox ID="txtCashReceived" runat="server" autocomplete="off" /></div>
                                             <div class="quick-cash">
-                                                <button type="button" class="btn btn-sm" id="btnExact" data-cash="290">Exact</button>
+                                                <button type="button" class="btn btn-sm" id="btnExact" data-cash="" disabled="disabled">Exact</button>
                                                 <button type="button" class="btn btn-sm" data-cash="400">₱400</button>
                                                 <button type="button" class="btn btn-sm" data-cash="500">₱500</button>
                                                 <button type="button" class="btn btn-sm" data-cash="1000">₱1,000</button>
@@ -147,15 +155,15 @@
                                         </div>
                                         <div class="field">
                                             <span class="label">Change to give</span>
-                                            <div id="changeBox" class="change-box">
+                                            <div id="changeBox" class="change-box idle">
                                                 <span class="small" id="changeLabel">Change</span>
-                                                <span id="changeAmount" class="change-amount num">₱210.00</span>
+                                                <span id="changeAmount" class="change-amount num">Enter the weight first</span>
                                             </div>
                                         </div>
                                     </div>
                                     <div id="ewalletNote" class="notice notice-info" style="display:none;">
                                         <%= Icons.Get("smartphone", "ico-sm") %>
-                                        <span>Confirm the customer sent exactly <strong id="ewalletTotal">₱290.00</strong> before saving. E-wallet is recorded only; it is not verified by the system.</span>
+                                        <span>Confirm the customer sent exactly <strong id="ewalletTotal">—</strong> before saving. E-wallet is recorded only; it is not verified by the system.</span>
                                     </div>
                                 </div>
                             </section>
@@ -173,24 +181,25 @@
                                          service is ticked or a product quantity changes. The server renders the
                                          same rows first, so the summary is right before the script runs. --%>
                                     <dl class="dl" id="sumLines">
-                                        <dt>Wash-Dry-Fold</dt><dd>₱40.00 / kg</dd>
-                                        <dt>5.1 kg &rarr; billable</dt><dd>6 kg</dd>
-                                        <dt>Laundry charge</dt><dd>₱240.00</dd>
-                                        <dt class="small">Minimum ₱120.00</dt><dd class="small muted">not needed</dd>
-                                        <dt class="addon-line">Extra rinse</dt><dd class="addon-line">₱20.00</dd>
-                                        <dt class="addon-line">Fabric conditioner &times; 2</dt><dd class="addon-line">₱30.00</dd>
+                                        <dt id="sumService">Wash-Dry-Fold</dt><dd id="sumRate">₱40.00 / kg</dd>
+                                        <dt id="sumWeight">Weight &rarr; billable</dt><dd id="sumBillable">—</dd>
+                                        <dt>Laundry charge</dt><dd id="sumLaundry">—</dd>
+                                        <dt class="small" id="sumMinLabel">Minimum ₱120.00</dt><dd class="small muted" id="sumMin">—</dd>
                                     </dl>
                                     <div class="divider" style="margin:14px 0;"></div>
-                                    <div class="total-line"><span>Total</span><span class="num" id="sumTotal">₱290.00</span></div>
+                                    <div class="total-line"><span>Total</span><span class="num" id="sumTotal">—</span></div>
                                     <dl class="dl" id="cashSummary" style="margin-top:12px;">
-                                        <dt>Cash received</dt><dd id="sumReceived">₱500.00</dd>
-                                        <dt class="strong" style="color:var(--text);">Change</dt><dd class="strong" id="sumChange" style="color:var(--success);">₱210.00</dd>
+                                        <dt>Cash received</dt><dd id="sumReceived">—</dd>
+                                        <dt class="strong" style="color:var(--text);">Change</dt><dd class="strong" id="sumChange" style="color:var(--success);">—</dd>
                                     </dl>
                                     <div class="status-row" style="margin-top:14px;">
                                         <span class="muted small">Payment</span>
                                         <span class="pill pill-ok" id="sumMethod">Paid in full &middot; Cash</span>
                                     </div>
                                     <asp:Label ID="lblPaymentError" runat="server" CssClass="error-text" Visible="false" />
+                                    <%-- DRAFT ONLY: the total the page showed, so the draft save can check the cash against it.
+                                         Phase 3 ignores this and works the total out again with PricingService. --%>
+                                    <asp:HiddenField ID="hfShownTotal" runat="server" />
                                 </div>
                                 <div class="card-f" style="flex-direction:column;">
                                     <%-- DRAFT: passes the payment to the slip in the query string so the design can be

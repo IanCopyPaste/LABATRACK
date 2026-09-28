@@ -59,6 +59,9 @@
                                                 <asp:ListItem Value="2" Selected="True">Wash-Dry</asp:ListItem>
                                                 <asp:ListItem Value="3">Comforter / Bulky</asp:ListItem>
                                             </asp:DropDownList>
+                                            <%-- A different service can have a different route, so it can only be changed
+                                                 before any work starts. The server refuses it too; this is only the hint. --%>
+                                            <% if (!ServiceChangeAllowed) { %><span class="hint">Locked: the load has left Queued, so the service (and its stages) can no longer change.</span><% } %>
                                         </div>
                                         <div class="field">
                                             <label for="txtWeight">Weight (kg)</label>

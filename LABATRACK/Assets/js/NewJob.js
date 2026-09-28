@@ -3,8 +3,22 @@
 // Display only: on save the server recomputes the total from the stored prices and checks
 // the cash again, and those are the values that are stored.
 (function () {
-    var paymentCard = document.getElementById('paymentCard');
-    var laundry = parseFloat(paymentCard.getAttribute('data-laundry'));   // written by the page
+    var loadCard = document.getElementById('loadCard');
+    var serviceBox = document.getElementById('ddlService');
+    var weightBox = document.getElementById('txtWeight');
+    var minimum = parseFloat(loadCard.getAttribute('data-minimum'));     // written by the page
+    var rounding = parseFloat(loadCard.getAttribute('data-rounding'));
+    var maxWeight = parseFloat(loadCard.getAttribute('data-max-weight'));  // set on the Pricing page
+    var rates = {};                                                       // service value -> rate per kg
+    loadCard.getAttribute('data-rates').split(',').forEach(function (pair) {
+        var p = pair.split(':');
+        rates[p[0]] = parseFloat(p[1]);
+    });
+    var routes = {};                                                      // service value -> work stages, e.g. "WD"
+    loadCard.getAttribute('data-routes').split(',').forEach(function (pair) {
+        var p = pair.split(':');
+        routes[p[0]] = p[1];
+    });
     var cash = document.getElementById('txtCashReceived');
     var rbCash = document.getElementById('rbCash');
     var rbEwallet = document.getElementById('rbEwallet');
@@ -13,6 +27,14 @@
     var sumLines = document.getElementById('sumLines');
     var services = document.querySelectorAll('[data-service]');
     var products = document.querySelectorAll('[data-product]');
+
+    // The parts of the page the price breakdown writes to, looked up once: the breakdown
+    // runs on every keystroke in the weight box.
+    var breakdown = {};
+    ['weightError', 'weightHint', 'serviceRoute', 'sumService', 'sumRate', 'sumWeight', 'sumBillable',
+     'sumLaundry', 'sumMinLabel', 'sumMin'].forEach(function (id) {
+        breakdown[id] = document.getElementById(id);
+    });
 
     function peso(n) {
         if (!isFinite(n)) { return '—'; }
@@ -79,27 +101,85 @@
         });
     }
 
+    // "WD" -> "Washing → Drying → Inspection". The route is copied onto the job when it is
+    // saved, so the cashier sees here which stages this load will go through.
+    function routeText(code) {
+        var names = { W: 'Washing', D: 'Drying', F: 'Folding' };
+        var steps = (code || '').split('').map(function (c) { return names[c]; });
+        return steps.concat('Inspection').join(' → ');
+    }
+
+    function kg(n) {
+        return (Math.round(n * 10) / 10).toFixed(1).replace(/\.0$/, '') + ' kg';
+    }
+
+    // The laundry charge, the way PricingService will work it out: round the weight up to the
+    // next rounding step, times the service's rate, then raised to the minimum if lower.
+    // Returns NaN when the weight is not a usable number.
+    function laundryCharge() {
+        var text = weightBox.value.trim().replace(',', '.');
+        var weight = /^\d{1,3}(\.\d{1,2})?$/.test(text) ? parseFloat(text) : NaN;
+        var tooHeavy = weight > maxWeight;
+        var ok = weight > 0 && !tooHeavy;
+        breakdown.weightError.textContent = tooHeavy
+            ? 'One job can be at most ' + kg(maxWeight) + '. Split a bigger load into two or more jobs.'
+            : 'Enter the weight in kilos, for example 5.1.';
+        breakdown.weightError.hidden = ok || text === '';
+
+        var option = serviceBox.options[serviceBox.selectedIndex];
+        var rate = rates[option.value];
+        breakdown.sumService.textContent = option.text.split(' · ')[0];
+        breakdown.sumRate.textContent = peso(rate) + ' / kg';
+        breakdown.serviceRoute.textContent = 'Stages: ' + routeText(routes[option.value]);
+
+        if (!ok) {
+            breakdown.weightHint.textContent = 'Weigh the load, then type the kilos shown on the scale.';
+            breakdown.sumWeight.textContent = 'Weight → billable';
+            breakdown.sumBillable.textContent = breakdown.sumLaundry.textContent = breakdown.sumMin.textContent = '—';
+            return NaN;
+        }
+
+        // Worked in thousandths so 3.0 kg / 0.5 does not come out as 6.0000001 steps.
+        var billable = Math.ceil(Math.round(weight / rounding * 1000) / 1000) * rounding;
+        var charge = billable * rate;
+        var raised = charge < minimum;
+
+        breakdown.weightHint.textContent = 'Rounded up to the next ' + kg(rounding) + ': bills as ' + kg(billable) + '.';
+        breakdown.sumWeight.textContent = kg(weight) + ' → billable';
+        breakdown.sumBillable.textContent = kg(billable);
+        breakdown.sumLaundry.textContent = peso(Math.max(charge, minimum));
+        breakdown.sumMinLabel.textContent = 'Minimum ' + peso(minimum);
+        breakdown.sumMin.textContent = raised ? 'applied (was ' + peso(charge) + ')' : 'not needed';
+        breakdown.sumMin.className = 'small ' + (raised ? 'strong' : 'muted');
+        return Math.max(charge, minimum);
+    }
+
     function update() {
         paintProducts();
 
         var lines = addOnLines();
         paintSummary(lines);
 
+        var laundry = laundryCharge();
         var total = lines.reduce(function (sum, line) { return sum + line.amount; }, laundry);
+        document.getElementById('hfShownTotal').value = isFinite(total) ? total.toFixed(2) : '';
         document.getElementById('sumTotal').textContent = peso(total);
         document.getElementById('ewalletTotal').textContent = peso(total);
-        if (isFinite(total)) { exactBtn.setAttribute('data-cash', total.toFixed(2)); }
+        exactBtn.setAttribute('data-cash', isFinite(total) ? total.toFixed(2) : '');
+        exactBtn.disabled = !isFinite(total);   // no exact amount until there is a total
 
         var isCash = rbCash.checked;
         document.getElementById('cashFields').style.display = isCash ? '' : 'none';
         document.getElementById('cashSummary').style.display = isCash ? '' : 'none';
         document.getElementById('ewalletNote').style.display = isCash ? 'none' : '';
 
-        // If the total cannot be worked out here, say nothing rather than print NaN, and
-        // leave the button alone: the server checks the cash on save either way.
+        // No total without a weight: say what is missing rather than print NaN, and hold the
+        // save until there is a price to collect.
         if (!isFinite(total)) {
-            paintChange('idle', 'Change', '—');
-            createBtn.disabled = false;
+            paintChange('idle', 'Change', 'Enter the weight first');
+            document.getElementById('sumReceived').textContent = '—';
+            document.getElementById('sumChange').textContent = '—';
+            createBtn.disabled = true;
             return;
         }
 
@@ -134,6 +214,8 @@
     }
 
     cash.addEventListener('input', update);
+    serviceBox.addEventListener('change', update);
+    weightBox.addEventListener('input', update);
     rbCash.addEventListener('change', update);
     rbEwallet.addEventListener('change', update);
     Array.prototype.forEach.call(services, function (box) {
@@ -153,7 +235,9 @@
     });
     document.querySelectorAll('[data-cash]').forEach(function (b) {
         b.addEventListener('click', function () {
-            cash.value = parseFloat(b.getAttribute('data-cash')).toFixed(2);
+            var amount = parseFloat(b.getAttribute('data-cash'));
+            if (isNaN(amount)) { return; }
+            cash.value = amount.toFixed(2);
             update();
         });
     });

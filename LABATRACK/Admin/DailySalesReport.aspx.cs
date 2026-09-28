@@ -25,7 +25,7 @@ namespace LABATRACK.Admin
 
         private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
         private const string ShopName = "LabaTrack Laundry Shop";   // DRAFT: Phase 2 reads it from Settings
-        private const string PreparedBy = "owner";                  // DRAFT: the signed-in user
+        private string PreparedBy { get { return SampleData.Username(Session); } }   // DRAFT: Phase 2 uses AuthService
 
         protected DateTime Day { get; private set; }
         protected bool IsToday { get; private set; }

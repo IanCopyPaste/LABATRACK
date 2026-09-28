@@ -12,12 +12,14 @@ namespace LABATRACK.Pages.Shared
             get { return "NewJob.css"; }
         }
 
-        private const decimal SampleTotal = 290.00m;   // DRAFT: Phase 3 gets this from PricingService
-
         protected override string ActiveNav
         {
             get { return "NewJob"; }
         }
+
+        // DRAFT: the maximum weight per job. Phase 3 reads it from Settings, where the owner sets
+        // it on the Pricing page. The page script shows the limit; the check below is the rule.
+        protected const int SampleMaxWeightKg = 100;
 
         protected void Page_Load(object sender, EventArgs e)
         {
@@ -25,6 +27,26 @@ namespace LABATRACK.Pages.Shared
 
         protected void btnCreate_Click(object sender, EventArgs e)
         {
+            decimal weight;
+            if (!decimal.TryParse(txtWeight.Text.Trim().Replace(',', '.'), NumberStyles.Number, CultureInfo.InvariantCulture, out weight)
+                || weight <= 0 || weight > SampleMaxWeightKg)
+            {
+                lblPaymentError.Text = "Enter a weight above 0 kg and at most " + SampleMaxWeightKg + " kg.";
+                lblPaymentError.Visible = true;
+                return;
+            }
+
+            // DRAFT: the total the page showed. Phase 3 never uses a number from the browser:
+            // it works the total out again with PricingService from the service, the weight
+            // and the add-ons, and checks the cash against that.
+            decimal total;
+            if (!decimal.TryParse(hfShownTotal.Value, NumberStyles.Number, CultureInfo.InvariantCulture, out total) || total <= 0)
+            {
+                lblPaymentError.Text = "Enter the weight so the total can be worked out.";
+                lblPaymentError.Visible = true;
+                return;
+            }
+
             if (rbEwallet.Checked)
             {
                 // E-wallet is always the exact total, so there is no cash or change.
@@ -36,9 +58,9 @@ namespace LABATRACK.Pages.Shared
             decimal cashReceived;
             string typed = txtCashReceived.Text.Replace(",", "").Trim();
             if (!decimal.TryParse(typed, NumberStyles.Number, CultureInfo.InvariantCulture, out cashReceived)
-                || cashReceived < SampleTotal)
+                || cashReceived < total)
             {
-                lblPaymentError.Text = "Cash received must be at least the total of ₱" + SampleTotal.ToString("N2") + ".";
+                lblPaymentError.Text = "Cash received must be at least the total of ₱" + total.ToString("N2") + ".";
                 lblPaymentError.Visible = true;
                 return;
             }

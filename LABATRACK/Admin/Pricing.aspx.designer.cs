@@ -25,6 +25,11 @@ namespace LABATRACK.Admin
         protected global::System.Web.UI.WebControls.Literal litNav;
 
         /// <summary>
+        /// rptServices control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Repeater rptServices;
+
+        /// <summary>
         /// txtMinimumCharge control.
         /// </summary>
         protected global::System.Web.UI.WebControls.TextBox txtMinimumCharge;
@@ -33,5 +38,10 @@ namespace LABATRACK.Admin
         /// ddlRounding control.
         /// </summary>
         protected global::System.Web.UI.WebControls.DropDownList ddlRounding;
+
+        /// <summary>
+        /// txtMaxWeight control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.TextBox txtMaxWeight;
     }
 }
