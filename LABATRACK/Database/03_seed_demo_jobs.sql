@@ -4,8 +4,9 @@
     forty job orders over the last three weeks, with their add-ons, status history and payments.
     Run it after 02_seed_settings.sql, on a database with no jobs yet.
 
-    It covers every stage, a load sent back from inspection (rework), two voided jobs with their
-    refunds (one of a down payment), cash payments with change and e-wallet payments, down
+    It covers every stage, a load sent back from inspection (rework), two voided jobs (one whose
+    refund was handed back at once, one of a down payment whose refund is still waiting for the
+    customer: its demo refund code is K7M-2QX), cash payments with change and e-wallet payments, down
     payments with the balance paid when the load was claimed, loads still in the shop with a
     balance, an owner's correction that raised the total (paid as a balance at claim), and loads
     left unclaimed for over a week.
@@ -19,8 +20,9 @@
     (the starting minimum in 02_seed_settings.sql). Hand check after running it:
         SELECT v.JobId, j.CurrentStatus, v.TotalAmount, v.AmountPaid FROM dbo.vw_JobPayments AS v
         JOIN dbo.JobOrders AS j ON j.JobId = v.JobId WHERE v.AmountPaid <> v.TotalAmount;
-    returns only the two voided jobs (paid and refunded, so AmountPaid is 0) and the loads still in
-    the shop with a balance. No claimed job appears: every claimed load was paid in full.
+    returns only the voided job that was refunded at once (paid and refunded, so AmountPaid is 0), the
+    voided job whose refund is still waiting (AmountPaid 60), and the loads still in the shop with a
+    balance. No claimed job appears: every claimed load was paid in full.
 
     The email log rows are examples only: no email was really sent for these demo jobs.
 
@@ -341,6 +343,7 @@ INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, Change
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Voided', DATEADD(MINUTE, 915, DATEADD(DAY, -11, @Today)), @arivera, N'Duplicate order, the load was entered twice');
 INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, RecordedByUserId) VALUES (@JobId, N'Drop-off', 120.00, N'Cash', 120.00, @At, @arivera);
 INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, RecordedByUserId) VALUES (@JobId, N'Void refund', -120.00, N'Cash', NULL, DATEADD(MINUTE, 915, DATEADD(DAY, -11, @Today)), @arivera);
+INSERT INTO dbo.Refunds (JobId, Amount, Status, CreatedAt, CreatedByUserId, ReleasedAt, ReleasedByUserId, ReleasedHow) VALUES (@JobId, 120.00, N'Released', DATEADD(MINUTE, 915, DATEADD(DAY, -11, @Today)), @arivera, DATEADD(MINUTE, 915, DATEADD(DAY, -11, @Today)), @arivera, N'At void');
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Drop-off', NULL, N'Skipped', N'The customer has no email address.', 0, DATEADD(SECOND, 5, @At), @arivera);
 
 /* 14. Aileen Soriano, Wash-Dry-Fold 5.5 kg, Claimed: 6.00 kg x 40.00 = laundry 240.00; total 270.00 */
@@ -780,7 +783,8 @@ INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, Change
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Voided', DATEADD(MINUTE, -75, @Now), @jcruz, N'Customer cancelled, wrong bag');
 -- A down payment of 60.00; the balance of 60.00 is paid before the load is claimed.
 INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, RecordedByUserId) VALUES (@JobId, N'Drop-off', 60.00, N'Cash', 100.00, @At, @jcruz);
-INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, RecordedByUserId) VALUES (@JobId, N'Void refund', -60.00, N'Cash', NULL, DATEADD(MINUTE, -75, @Now), @jcruz);
+-- Voided while the customer was away: the 60.00 refund is waiting. Demo refund code: K7M-2QX (use it on the job page).
+INSERT INTO dbo.Refunds (JobId, Amount, Status, CodeHash, CodeSalt, CreatedAt, CreatedByUserId) VALUES (@JobId, 60.00, N'Pending', 0x4B103A9F44CDBB552BE0586F2E4CC49F930D076A8646EDB8E871376ADFC2BCA9, 0x5A1D0C0DE00DFACE1234567890ABCDEF, DATEADD(MINUTE, -75, @Now), @jcruz);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Drop-off', NULL, N'Skipped', N'The customer has no email address.', 0, DATEADD(SECOND, 5, @At), @jcruz);
 
 /* 41. Grace Villanueva, Wash-Dry-Fold 1.5 kg, Queued: 2.00 kg x 40.00 = laundry 120.00; total 120.00 */

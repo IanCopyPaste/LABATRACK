@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Web;
+using LABATRACK.Helpers;
 using LABATRACK.Models;
 using LABATRACK.Security;
 using LABATRACK.Services;
@@ -49,6 +50,8 @@ namespace LABATRACK.Admin
             rptUnclaimed.DataBind();
             rptVoided.DataSource = Data.VoidedToday;
             rptVoided.DataBind();
+            rptRefunds.DataSource = Data.RefundsWaitingEarlier;
+            rptRefunds.DataBind();
             rptClaimed.DataSource = Data.ClaimedToday;
             rptClaimed.DataBind();
         }
@@ -96,8 +99,13 @@ namespace LABATRACK.Admin
 
         protected static string VoidNote(JobOrder job)
         {
-            return "Voided " + job.StatusSince.ToString("h:mm tt", Inv) + " by " + job.StatusBy
-                 + " · “" + job.StatusReason + "” · " + (job.PaymentMethod == null ? "nothing was paid" : "payment refunded");
+            return RefundNotes.ForVoid(job);
+        }
+
+        /// <summary>A refund from an earlier day that the customer has not collected yet.</summary>
+        protected string RefundNote(JobOrder job)
+        {
+            return RefundNotes.Waiting(job, Data.Now);
         }
 
         protected static string PaymentBadgeFor(JobOrder job)

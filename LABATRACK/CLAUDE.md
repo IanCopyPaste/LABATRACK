@@ -59,6 +59,8 @@ Two roles: **Owner** (admin) and **Staff**. The owner can do everything staff ca
 |---|---|---|
 | Create a job order, print the slip, advance status, mark claimed | Yes | Yes |
 | Void a job that is still Queued (reason required) | Yes | Yes |
+| Hand a waiting refund to the customer who gives the refund code, or send them a new code | Yes | Yes |
+| Release a refund without the code (reason required, recorded as an owner override) | No | Yes |
 | Add and search customers | Yes | Yes |
 | Search past jobs by claim number or customer name | Yes | Yes |
 | Resend a notification | Yes | Yes |
@@ -71,7 +73,7 @@ Two roles: **Owner** (admin) and **Staff**. The owner can do everything staff ca
 | Change prices, services, add-ons, and settings | No | Yes |
 | Historical sales, reports, analytics, full history with voided jobs and who did what | No | Yes |
 
-- Staff can void freely on purpose, because the owner may be unreachable. Voiding is not deleting (see Data rules).
+- Staff can void freely on purpose, because the owner may be unreachable. Voiding is not deleting (see Data rules). A refund is not paid out just because a job was voided: see Refunds under Payment rules.
 - Staff cannot edit a job. A wrong weight is fixed by the owner, or by voiding and re-creating a Queued job.
 - Enforce roles on the server. Every page in `Admin/` inherits `AdminBasePage`, and `Web.config` also denies that folder to staff. Hiding a menu link is not security.
 - Staff log in at `/Login.aspx`. The owner logs in at `/Admin/Login.aspx`. Both use one `AuthService`.
@@ -98,7 +100,7 @@ The route is copied onto the job when it is created (see Pricing rules, freeze a
 | Inspection | Ready for pick-up | Pass. Triggers the ready email. |
 | Inspection | a work stage on the job's route | Fail. Rework. Reason required. A stage the job does not have is never offered. |
 | Ready for pick-up | Claimed | Only with nothing owed: the balance is collected in the same save (see Payment rules). |
-| Queued | Voided | Reason required. Only from Queued. |
+| Queued | Voided | Reason required. Only from Queued. Anything paid becomes a refund (see Payment rules). |
 
 //use smtp setup for a while for email sending
 
@@ -113,7 +115,7 @@ Claimed and Voided are final.
 
 - Total = laundry charge + sum of add-on lines, where a line is `Quantity * PriceAtCreation`.
 - Laundry charge = billable kilos x the service's rate per kilo, then raised to the minimum charge if lower. Add-ons are added after.
-- Billable kilos = weight rounded up to the next multiple of `RoundingIncrementKg` (default 1, so 3.2 kg bills as 4 kg).
+- Billable kilos = weight rounded up to the next multiple of `RoundingIncrementKg`. The owner chooses the step on the Pricing page from a dropdown of 0.1 kg to 1 kg in tenths (`ShopSettings.RoundingChoices`; default 1, so 3.2 kg bills as 4 kg; with 0.1 kg it bills as 3.2 kg, with 0.5 kg as 3.5 kg). The choice is frozen on each job (`RoundingIncrementKgAtCreation`). The page's scripts work in hundredths of a kilo (whole numbers) so a 0.1 step never leaves a floating-point remainder; the server uses `decimal`.
 - **Minimum down payment.** The owner sets it on the Pricing page too, as a percentage of the total (see Payment rules).
 - **Maximum weight per job.** The owner sets it on the Pricing page (stored in `Settings`, draft default 100 kg). A weight above it is refused when a job is created and when the owner edits a job, on screen and again in `PricingService`. A bigger load is split into two or more jobs.
 - Freeze the price at creation. Copy the service rate into `JobOrders.RatePerKgAtCreation` and each add-on price into `JobAddOns.PriceAtCreation`. Compute `TotalAmount` once and store it. Never recompute an old job from today's prices, or historical sales silently change when the owner edits a rate. The service's route (its work stages) is copied onto the job the same way.
@@ -127,14 +129,22 @@ Claimed and Voided are final.
 The proposal (scope, payment recording) says the system records whether a job order is **paid, partially paid, or unpaid**. The shop's rules that follow from it are decided and live in `PaymentService`.
 
 - **At drop-off the customer pays in full, or at least a minimum down payment.** The minimum is a percentage of the total that the owner sets on the Pricing page (`Settings.MinimumDownPaymentPercent`, default 50). Every choice from that minimum up to the whole total is allowed. 100 means full payment only; 0 also allows paying nothing now (pay at pick-up). The minimum is rounded up to the centavo (50% of ₱135.00 is ₱67.50).
-- **Payment status is worked out, never stored.** Paid when `AmountPaid` from `vw_JobPayments` is at least the total, Partially paid when something was paid but not all, Unpaid when nothing is paid (`PaymentService.StatusOf`). The balance is total − paid. So the status can never go stale, and a voided job (paid and refunded) owes nothing.
-- The payment is a row in `Payments` (job, kind, amount, method Cash or E-wallet, timestamp, staff). `Amount` is always what the shop keeps, never the cash the customer handed over, so the drawer totals stay correct. Kinds: `Drop-off` (paid when the job was created), `Balance` (paid later), `Adjustment` (an owner's correction that refunds an overpayment), `Void refund`. A job paid nothing at drop-off has no drop-off row.
+- **Payment status is worked out, never stored.** Paid when `AmountPaid` from `vw_JobPayments` is at least the total, Partially paid when something was paid but not all, Unpaid when nothing is paid (`PaymentService.StatusOf`). The balance is total − paid. So the status can never go stale, and a voided job owes no balance (what it paid is a refund owed back to the customer, or already given back).
+- The payment is a row in `Payments` (job, kind, amount, method Cash or E-wallet, timestamp, staff). `Amount` is always what the shop keeps, never the cash the customer handed over, so the drawer totals stay correct. Kinds: `Drop-off` (paid when the job was created), `Balance` (paid later), `Adjustment` (an owner's correction that refunds an overpayment), `Void refund` (written when a voided job's refund is handed over). A job paid nothing at drop-off has no drop-off row.
 - **Cash and change.** For cash, staff type the amount paid now and the cash received (`Assets/js/NewJob.js`, and `Assets/js/JobDetail.js` for later payments). The page shows the change while they type, but only displays it. On save, the server checks that the cash covers the amount being paid and works out change = cash received − amount itself; it never trusts the browser's number. Cash received is stored on the payment (`Payments.CashReceived`, nullable, cash only), so the slip and job page can show "Cash received" and "Change" again.
 - E-wallet is only a declared method that staff selects. No gateway, no webhooks, no verification. The amount is exactly what is being paid, and there is no change.
 - **The balance can be paid any time while the load is in the shop**, in one or more payments, on the job page ("Take a payment", `PaymentService.Collect`). A payment cannot be more than the balance, and the page's shown balance is sent back and checked, so two staff cannot take the same money twice.
 - **A load is never claimed with a balance.** At Ready for pick-up, "Collect ₱X and mark claimed" (`StatusService.Claim`) takes the whole balance and marks the job Claimed in one `SqlTransaction`. A plain move to Claimed is refused while anything is owed, in `StatusService` itself, not only on the page. A fully paid load is claimed as before, with no payment step. The job board shows a Collect link instead of Mark claimed for a Ready load that still owes money.
 - Creating a job saves the job, its add-ons, the first history row (Queued), and what was paid now in one `SqlTransaction`. All of it or none of it.
-- Voiding a job inserts an offsetting negative `Payments` row for each method it was paid with (a refund of everything paid on the job, same method) in the same transaction, so totals and the cash drawer stay correct. A job with nothing paid needs no refund row.
+- **Refunds (`RefundService`, the `Refunds` table).** Voiding a job that had paid something creates one refund record for everything paid, and the refund can be handed over **exactly once**. This closes the ways a refund could be abused: the same claim number shown twice, two staff pressing the button together, or another person collecting it.
+  - **The customer is at the counter** (the "customer is here" box on the void form, ticked by default): the refund is released in the same transaction as the void.
+  - **The customer is away:** the refund is **Pending**. Nothing has left the drawer, so no negative `Payments` row exists yet; the money still shows as paid until it is handed over. A **refund code** (6 characters from an alphabet without I, L, O, 0, 1, drawn from `RNGCryptoServiceProvider`) is emailed to the customer in the cancellation email. Only its PBKDF2 hash and salt are stored (like a password), so nobody at the shop can read it back. The claim number on the slip is not enough to collect a refund.
+  - **Handing it over** (`ReleaseWithCode`, on the voided job's page, staff or owner): the right code releases it. The release is a guarded `UPDATE ... WHERE Status = 'Pending'` inside a transaction that locks the refund row, so of any number of simultaneous tries exactly one succeeds and the rest are told it was already given (with when and by whom). Only then are the negative `Void refund` payments written (one per method it was paid with, same method), dated now and recorded under the person who handed the money over, so the day''s drawer figures stay right.
+  - **Wrong codes** are counted, saved even though the try is refused. After 5 the refund is locked and even the right code is refused; only the owner can release it.
+  - **Owner override** (`ReleaseByOwner`): for a customer with no email, a lost code, or a locked refund. The owner must give a reason (up to 200 characters); the refund records how it was released (At void, Code, or Owner override), by whom, when, and the reason. The service checks the account''s role itself, not only the page.
+  - **A new code** (`ReissueCode`, staff or owner) emails a fresh code to the address on file. The old code stops working only once the new email has really been sent, so a failed email leaves the customer with the code they have. A customer with no email cannot be sent one.
+  - A job with nothing paid has no refund record. Voided and refunded jobs keep their history; nothing is deleted.
+  - Refunds waiting are listed on both dashboards under "Needs attention", with the money the shop is holding for them, and on the voided job''s page. Sales figures count money on the day it was received and net refunds on the day they are handed over, so a refund that is still waiting is still inside the sales figures until then.
 - **Owner edits that change the total** (for example a corrected weight). Allowed only while the job is not Claimed or Voided. The service itself can be changed only while the job is still Queued, because a different service can have a different route and a load already in, say, Folding may not have that stage on the new one. Weight, add-on, and customer corrections stay allowed until the job is claimed. The job update and any refund row are saved in one `SqlTransaction`. A correction never takes money on the spot:
   - New total higher than what was paid: the difference is simply a bigger balance, collected before pick-up like any balance. No payment row.
   - New total below what was already paid (the customer overpaid): a negative `Adjustment` row refunds the excess, and the screen tells the owner exactly how much to give back. The owner picks Cash or E-wallet for it; it defaults to the job's original method.
@@ -161,9 +171,10 @@ Tables, as built in `01_schema.sql` (the student asked for the backend to be bui
 - `JobAddOns` (job, add-on, quantity, price at creation) — `quantity` is always 1 for a service and 1 or more for a product, never 0; a line amount is `Quantity * PriceAtCreation`. Added: `AddedAt` and `RemovedAt`: an add-on the owner takes off a job is marked removed, never deleted (a filtered unique index allows one current line per add-on)
 - `JobStatusHistory` (job, from, to, changed at, changed by, reason)
 - `Payments` (job, amount, method, cash received, paid at, recorded by) — added: `Kind` (`Drop-off`, `Adjustment`, `Void refund`), so each row says what it was
+- `Refunds` (job, unique; amount; status `Pending` or `Released`; the refund code's hash and salt, erased once released; wrong tries; created at and by; released at, by, and how: `At void`, `Code` or `Owner override`; the owner's reason) — one row per voided job that had paid something, with `CHECK`s that a Released row says who, when and how, and that an override has a reason
 - `NotificationLog` (job, kind `Drop-off`, `Ready`, `Modified` or `Voided`, recipient, status `Sent`/`Failed`/`Skipped`, detail, resend flag, attempted at and by)
 - `Settings` (key/value: minimum charge, rounding increment, maximum weight per job, minimum down payment percent, unclaimed threshold in days, default turnaround hours, shop name, slip header, and the rework stages allowed after a failed inspection)
-- Views: `vw_JobPayments` (the amount paid per job, net of refunds, also split by method; the balance is the total minus it) and `vw_JobList` (a job with its customer, service, latest status change and add-ons, the one shape every job screen reads)
+- Views: `vw_JobPayments` (the amount paid per job, net of refunds, also split by method; the balance is the total minus it) and `vw_JobList` (a job with its customer, service, latest status change, add-ons and, for a voided job, its refund; the one shape every job screen reads)
 
 ## T-SQL conventions
 
@@ -202,9 +213,9 @@ Every query the application runs goes through a stored procedure: reads, inserts
 ## Notifications
 
 - Email only, sent through `EmailService`, with the message bodies built in `EmailTemplates.cs`.
-- Four emails to customers: at drop-off (includes the claim number and, for a down payment, the balance due); **when the owner corrects the order** (what changed, the order as it now stands, any balance or refund, and what to do: ask for an updated slip, pay the balance before pick-up); **when the order is voided** (the reason, the refund, and what to do next: the claim number is no longer valid, how to get the refund, collect any laundry still at the shop, contact the shop with questions); and when the job becomes Ready for pick-up (with any balance still to pay).
+- Four emails to customers: at drop-off (includes the claim number and, for a down payment, the balance due); **when the owner corrects the order** (what changed, the order as it now stands, any balance or refund, and what to do: ask for an updated slip, pay the balance before pick-up); **when the order is voided** (the reason, the refund and whether it was already given back or is waiting, the refund code for a waiting refund, and what to do next: the claim number is no longer valid, come with the code, collect any laundry still at the shop, contact the shop with questions); and when the job becomes Ready for pick-up (with any balance still to pay).
   - The update email is sent by `JobOrderService.SaveEdit` after the correction is saved, only when something the customer cares about changed (name, contact number, email address, service, weight, an add-on, or the total). A corrected remark alone is the shop's own note and sends nothing. The list of changes is built at the moment of the save (`EditSummary`), while the old values are still known.
-  - The void email is sent by `StatusService.Void` after the void and its refund are saved. Because the reason and the refunds are read from the job's own rows, a resend says the same as the first email, so the voided job's page has a "Resend cancellation email" button.
+  - The void email is sent by `StatusService.Void` after the void and its refund are saved. The reason and the refund are read from the job's own rows, so a resend says the same as the first email, and the voided job's page has a "Resend cancellation email" button. The refund code is shown only in the email (the system keeps just its hash), so for a waiting refund the same button sends a NEW code instead (`RefundService.ReissueCode`).
 - One email to the owner: the password reset link (see Security rules). It is not about a job, so it is not logged in `NotificationLog`, and its body is built in `EmailTemplates.cs` like the others.
 - A failed send must never block or roll back the job. Log every attempt in `NotificationLog` (Sent, Failed, or Skipped), and give staff a resend button on `JobDetail`.
 - SMTP credentials never go in source control.
@@ -221,9 +232,15 @@ Every list of jobs shows how a job stands on payment (Paid in full, Partial with
 
 **Number boxes and loading feedback.** A box that takes a number keeps letters out (`Assets/js/NumericInput.js`): it reads the box's `inputmode`, so every existing and future box with `inputmode="decimal"` (digits and one dot: weight, pesos, cash), `"numeric"` (digits only: quantities, percentages) or `"tel"` (digits, space, `+ - ( )`: contact numbers) is covered without extra markup; a wrong key is not typed and pasted text is cleaned. Any new number box must therefore carry the right `inputmode`. `Assets/js/Loading.js` (on every page with buttons or links) puts a spinner on the button that was pressed, slides a thin bar along the top of the window, and ignores a second press while the first is being sent, so a payment or a job cannot be sent twice by a double click. It does not disable the button, because a disabled button is left out of the posted form and the server reads which button was pressed. The spinner is a background picture (`Assets/icons/spinner-light.svg` and `spinner-dark.svg`) so that it also works on `<input type="submit">`. Both are display only: the server checks every number and every rule again.
 
+**Customers.** Staff add and search; the owner edits a customer in a window of its own (a `<dialog>` filled from the row by `Assets/js/Customers.js`, the same pattern as managing a staff account), not by loading the customer back into the add form. The window posts to the server, which checks everything again (`CustomerService`); a refused save draws it open again with what was typed and what is wrong.
+
+**New job: saved numbers.** The contact box drops down the saved numbers as the cashier types (`Assets/js/CustomerSuggest.js`): every saved customer is written into the page as a list (most recent first), the digits typed are matched anywhere in a number (numbers that start with them first), and clicking one, or pressing Enter on the highlighted one, fills the box and presses Find. Arrow keys move and Esc closes. It only helps the cashier choose; Find and the save still check the number on the server.
+
+**Quick amounts.** Under a cash box, buttons fill the usual amounts: on New job Exact, ₱400, ₱500 and ₱1,000; on the job page (taking a payment, and collecting the balance at claim) Exact, ₱100, ₱200, ₱500 and ₱1,000, plus a "Full balance" button under the amount being paid. They only fill the box; the change is worked out and checked the same way as when it is typed.
+
 **Menu and password boxes.** The menu collapses to its icons on wide screens (`Assets/js/Sidebar.js`); the choice is kept in the `lt-sidebar` cookie, which `NavBar.cs` reads, so the next page is drawn the same way without a flicker. Every password box has a show/hide button (`Assets/js/ShowPassword.js`, buttons marked `data-reveal`); boxes go back to hidden when the form is sent.
 
-**JobDetail.** Show job ID and customer info once in a header. Below it, a stage stepper that shows only the stages on that job's route: completed stages show time and staff, the current stage is highlighted, future stages are greyed. The "advance" button appears only on the current stage. Voided is its own red state, not a step in the bar. Use a vertical timeline on narrow screens. The Payment card lists every payment with its cash and change, then what is paid so far and the balance due; while something is owed it offers "Take a payment" (part or all of the balance), and at Ready for pick-up the release card collects the balance and marks the job claimed in one save. The card's status pill says Paid in full, Partially paid or Unpaid.
+**JobDetail.** Show job ID and customer info once in a header. Below it, a stage stepper that shows only the stages on that job's route: completed stages show time and staff, the current stage is highlighted, future stages are greyed. The "advance" button appears only on the current stage. Voided is its own red state, not a step in the bar. Use a vertical timeline on narrow screens. The Payment card lists every payment with its cash and change, then what is paid so far and the balance due; while something is owed it offers "Take a payment" (part or all of the balance), and at Ready for pick-up the release card collects the balance and marks the job claimed in one save. The card's status pill says Paid in full, Partially paid or Unpaid. A voided job with money paid shows a Refund card: while the refund waits, a field for the refund code and a "Give the refund" button (with how many tries are left), "Send a new code", and, for the owner only, "Release without the code" with a required reason; once handed over it says how, by whom and when. The void form has a "customer is here" box (ticked by default) that chooses between handing the refund over now and keeping it waiting, and the confirmation question changes with it.
 
 **Owner reports.** Daily and monthly sales, cash vs e-wallet split, most-availed services, average turnaround (first Queued to first Ready), unclaimed loads, and a comparison with the previous period. Daily sales and the cash split come from `Payments.PaidAt`, which is what the drawer check needs. Service popularity comes from the job's created date. Do not mix the two.
 
@@ -239,6 +256,7 @@ Charts are inline SVG drawn on the server by `Helpers/SvgChart.cs`. No chart lib
 - Lock an account for a few minutes after five failed logins.
 - The owner changes their own password on `Admin/Settings.aspx`: current password first (so nobody can take over the account from a screen left signed in), then the new one typed twice, at least 8 characters and different from the current one. `AuthService` checks the current password against the stored hash; a wrong one counts as a failed login, so the five-try lock still applies. The new password gets a new salt and hash, and the owner stays signed in. Staff do not change their own. The owner sets a new one in that staff member's Manage window on `Admin/Staff.aspx`: at least 8 characters, and a blank box keeps the current password. A new password gets a new salt and hash and also clears the failed-login count and any lock. The same window renames the account and switches it between Active and Inactive; it never manages the owner account (`usp_Users_UpdateStaff` only touches `Role = 'Staff'`).
 - **Only the owner can reset a forgotten password by email.** "Forgot password?" on `Admin/Login.aspx` asks for the username. Only when it is an active Owner account with a recovery email (set on `Admin/Settings.aspx`) does `AuthService` make a reset link: 32 random bytes from `RNGCryptoServiceProvider`, of which only a SHA-256 hash is stored on the `Users` row, expiring 30 minutes later; a newer request replaces the older link. The page shows the same message whatever was typed, so it never reveals which usernames exist. The link opens `Admin/Login.aspx?token=...`; setting the new password checks the token again, saves a new salt and hash, clears the token (one use only), and clears the failed-login count and any lock. Staff have no email reset: the staff login tells them to ask the owner.
+- **A refund is protected like a password.** The refund code emailed for a waiting refund is stored only as a PBKDF2 hash with a per-refund salt (`RefundService`, `PasswordHasher`), is compared without giving away how much of a guess was right, and is erased once used. Wrong tries are counted and limited to five. Never log or display a code after it has been emailed, and never let a refund be released without the row lock and the guarded `UPDATE` described under Payment rules.
 - `Admin/Login.aspx` is the only anonymous page under `Admin/` (allow it with a `<location>` rule in `Web.config`, or the login page locks itself out). `AdminBasePage` redirects to `~/Admin/Login.aspx` itself, because Forms authentication has only one `loginUrl`.
 - HTML-encode all output. Do not disable request validation or ViewState MAC.
 - The connection string uses Windows authentication, so it contains no password and stays in `Web.config`. SMTP credentials are secrets: they live in `Secrets.config`, which `Web.config` reads with `<appSettings file="Secrets.config" />` (the `file` attribute, so the site still starts when the file is missing) and which is listed in `.gitignore`. It holds the Gmail address and app password; the local copy starts with two `PUT-YOUR-...` placeholders, and `EmailService` treats email as not set up until they are replaced. `README.md` shows the file's content for a fresh copy. Demo credentials from seed scripts are documented in the README and are never real passwords.
@@ -280,6 +298,7 @@ LabaTrack/
 │   ├── AuthService.cs        *
 │   ├── JobOrderService.cs    creating a job and the owner's corrections
 │   ├── PaymentService.cs     *  the payment rules: down payment, balance, change, paid / partial / unpaid
+│   ├── RefundService.cs      *  a voided job's refund: handed over once, the refund code, owner override
 │   ├── CustomerService.cs    customer checks (one customer per contact number)
 │   ├── ClaimNumberGenerator.cs
 │   ├── EmailService.cs
@@ -296,6 +315,7 @@ LabaTrack/
 │   ├── Icons.cs              inlines SVG icons from Assets/icons
 │   ├── MoveConfirm.cs        the words of the "move this job?" confirmation window
 │   ├── PaymentBadge.cs       the Paid / Partial / Unpaid label on the job lists
+│   ├── RefundNotes.cs        the one-line refund notes on the dashboards
 │   └── EmailTemplates.cs     email subjects and bodies
 ├── Database/
 │   ├── 01_schema.sql         *
@@ -338,7 +358,7 @@ Do not build these, and do not add hooks "for later" without asking: SMS, paymen
 
 Ask the student before hard-coding any of these. Store them in `Settings`, not in code.
 
-1. Real rate per kilo for each service, the minimum charge, and the rounding increment (default 1 kg).
+1. Real rate per kilo for each service, the minimum charge, and the rounding increment (a dropdown from 0.1 kg to 1 kg, default 1 kg).
 2. Claim number format (suggested: `LT-yyMMdd-###`).
 3. Days before an unclaimed load is flagged.
 4. Default turnaround hours used for the expected pick-up date on the slip.

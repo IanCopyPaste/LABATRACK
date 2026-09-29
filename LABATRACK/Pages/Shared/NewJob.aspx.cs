@@ -95,6 +95,13 @@ namespace LABATRACK.Pages.Shared
             rptServiceAddOns.DataBind();
             rptProducts.DataSource = addOns.Where(a => a.IsProduct);
             rptProducts.DataBind();
+
+            // The saved numbers for the dropdown under the contact box: the customers who came most recently first.
+            rptSuggest.DataSource = CustomerRepository.Search(null, null)
+                                                      .OrderByDescending(c => c.LastDropOff ?? c.CreatedAt)
+                                                      .ThenBy(c => c.Name)
+                                                      .ToList();
+            rptSuggest.DataBind();
         }
 
         protected override void OnPreRender(EventArgs e)
@@ -330,6 +337,18 @@ namespace LABATRACK.Pages.Shared
         }
 
         // ---- Used by the markup ----
+
+        /// <summary>The number without spaces, dashes or a plus sign: what CustomerSuggest.js matches typed digits against.</summary>
+        protected static string DigitsOf(string contact)
+        {
+            return CustomerService.Digits(contact);
+        }
+
+        /// <summary>"3 orders" or "no orders yet", shown beside a saved number in the dropdown.</summary>
+        protected static string SuggestNote(Customer c)
+        {
+            return c.JobCount == 0 ? "no orders yet" : c.JobCount + (c.JobCount == 1 ? " order" : " orders");
+        }
 
         protected static string PriceData(decimal price)
         {

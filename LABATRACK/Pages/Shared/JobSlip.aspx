@@ -69,6 +69,8 @@
             <% if (NothingPaid) { %><div class="row" style="margin-top:4px;"><span class="lbl">Paid at drop-off</span><span>0.00</span></div><% } %>
             <% if (Job.Balance > 0) { %><div class="row bal" style="margin-top:4px;"><span>BALANCE DUE</span><span>₱<%: Money(Job.Balance) %></span></div>
             <div class="item-sub">To be paid before the laundry is released.</div><% } %>
+            <% if (Job.RefundPending) { %><div class="row bal" style="margin-top:4px;"><span>REFUND WAITING</span><span>₱<%: Money(Job.RefundAmount) %></span></div>
+            <div class="item-sub">Given back once, to the customer who gives the refund code.</div><% } %>
             <% } %>
             <div style="margin-top:6px;"><span class="status"><%: Stamp %></span> <span class="lbl" style="font-size:11px;">&nbsp;<%: DropOff != null ? DropOff.Method + " · " + DropOff.PaidAt.ToString("MMM d h:mm tt") : "" %></span></div>
 

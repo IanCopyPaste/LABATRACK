@@ -26,6 +26,7 @@ namespace LABATRACK.Services
             public List<JobOrder> VoidedToday { get; set; }
             public List<JobOrder> Unclaimed { get; set; }      // ready for UnclaimedDays days or more
             public int UnclaimedDays { get; set; }
+            public List<JobOrder> RefundsWaiting { get; set; } // voided jobs whose refund the customer has not collected yet
             public DateTime Now { get; set; }
 
             public int CountAt(string stage)
@@ -33,9 +34,21 @@ namespace LABATRACK.Services
                 return Active.Count(j => j.CurrentStatus == stage);
             }
 
+            /// <summary>Refunds waiting from an earlier day. Today's voids are already listed as voided today.</summary>
+            public List<JobOrder> RefundsWaitingEarlier
+            {
+                get { return RefundsWaiting.Where(j => VoidedToday.All(v => v.JobId != j.JobId)).ToList(); }
+            }
+
+            /// <summary>The money the shop is holding that belongs to customers whose refund is waiting.</summary>
+            public decimal RefundsWaitingTotal
+            {
+                get { return RefundsWaiting.Sum(j => j.RefundAmount); }
+            }
+
             public int NeedsAttention
             {
-                get { return Unclaimed.Count + VoidedToday.Count; }
+                get { return Unclaimed.Count + VoidedToday.Count + RefundsWaitingEarlier.Count; }
             }
         }
 
@@ -61,6 +74,7 @@ namespace LABATRACK.Services
                 // with a 7-day threshold. So "ready before midnight of (today - days + 1)".
                 Unclaimed = JobOrderRepository.GetReadyBefore(today.AddDays(1 - days)),
                 UnclaimedDays = days,
+                RefundsWaiting = JobOrderRepository.GetPendingRefunds(),
             };
         }
 

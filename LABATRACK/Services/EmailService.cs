@@ -75,13 +75,13 @@ namespace LABATRACK.Services
         /// <summary>The drop-off email: the claim number, the load, the total, and the expected pick-up.</summary>
         public static void SendDropOff(int jobId, int userId, bool isResend)
         {
-            SendToCustomer(jobId, NotificationLogEntry.DropOffKind, userId, isResend, null);
+            SendToCustomer(jobId, NotificationLogEntry.DropOffKind, userId, isResend, null, null);
         }
 
         /// <summary>The ready-for-pick-up email, sent when a load passes inspection.</summary>
         public static void SendReady(int jobId, int userId, bool isResend)
         {
-            SendToCustomer(jobId, NotificationLogEntry.ReadyKind, userId, isResend, null);
+            SendToCustomer(jobId, NotificationLogEntry.ReadyKind, userId, isResend, null, null);
         }
 
         /// <summary>
@@ -90,13 +90,18 @@ namespace LABATRACK.Services
         /// </summary>
         public static void SendModified(int jobId, int userId, EditSummary summary)
         {
-            SendToCustomer(jobId, NotificationLogEntry.ModifiedKind, userId, false, summary);
+            SendToCustomer(jobId, NotificationLogEntry.ModifiedKind, userId, false, summary, null);
         }
 
-        /// <summary>The order-cancelled email, sent when a job is voided: the reason, the refund and what to do next.</summary>
-        public static void SendVoided(int jobId, int userId, bool isResend)
+        /// <summary>
+        /// The order-cancelled email, sent when a job is voided: the reason, the refund and what to do
+        /// next. <paramref name="refundCode"/> is the code to collect a waiting refund with; it is shown
+        /// only in this email, since the system keeps just its hash. Returns Sent, Failed or Skipped
+        /// (the customer has no email address).
+        /// </summary>
+        public static string SendVoided(int jobId, int userId, bool isResend, string refundCode)
         {
-            SendToCustomer(jobId, NotificationLogEntry.VoidedKind, userId, isResend, null);
+            return SendToCustomer(jobId, NotificationLogEntry.VoidedKind, userId, isResend, null, refundCode);
         }
 
         /// <summary>
@@ -117,24 +122,25 @@ namespace LABATRACK.Services
             }
         }
 
-        private static void SendToCustomer(int jobId, string kind, int userId, bool isResend, EditSummary summary)
+        /// <summary>Sends one customer email and logs the attempt. Returns Sent, Failed or Skipped (null if the job is gone).</summary>
+        private static string SendToCustomer(int jobId, string kind, int userId, bool isResend, EditSummary summary, string refundCode)
         {
             string recipient = null;
             try
             {
                 JobOrder job = JobOrderRepository.GetById(jobId);
-                if (job == null) return;
+                if (job == null) return null;
                 recipient = job.CustomerEmail;
 
                 if (string.IsNullOrWhiteSpace(recipient))
                 {
                     Log(jobId, kind, null, NotificationLogEntry.Skipped, "The customer has no email address.", isResend, userId);
-                    return;
+                    return NotificationLogEntry.Skipped;
                 }
                 if (!IsConfigured)
                 {
                     Log(jobId, kind, recipient, NotificationLogEntry.Failed, "Email is not set up yet: put the shop's email address and app password in Secrets.config.", isResend, userId);
-                    return;
+                    return NotificationLogEntry.Failed;
                 }
 
                 ShopSettings settings = SettingsRepository.Get();
@@ -151,10 +157,25 @@ namespace LABATRACK.Services
                         body = EmailTemplates.ModifiedBody(settings, job, summary);
                         break;
                     case NotificationLogEntry.VoidedKind:
-                        // The refunds come from the job's own payment rows, so a resend says the same as the first email.
-                        List<Payment> refunds = PaymentRepository.GetByJob(jobId).Where(p => p.Kind == Payment.VoidRefund).ToList();
+                        // How the refund is split by method comes from the job's own payments: still what was paid
+                        // while the refund waits, and the refund rows once it has been handed over. So a resend
+                        // says the same as the first email.
+                        decimal cash = 0m, ewallet = 0m;
+                        if (job.RefundPending)
+                        {
+                            JobPayments paid = PaymentRepository.GetJobTotals(jobId);
+                            cash = paid.CashPaid;
+                            ewallet = paid.EwalletPaid;
+                        }
+                        else if (job.RefundStatus == Refund.Released)
+                        {
+                            foreach (Payment refund in PaymentRepository.GetByJob(jobId).Where(p => p.Kind == Payment.VoidRefund))
+                            {
+                                if (refund.Method == Payment.Cash) cash -= refund.Amount; else ewallet -= refund.Amount;
+                            }
+                        }
                         subject = EmailTemplates.VoidedSubject(settings, job);
-                        body = EmailTemplates.VoidedBody(settings, job, refunds);
+                        body = EmailTemplates.VoidedBody(settings, job, cash, ewallet, refundCode);
                         break;
                     default:
                         subject = EmailTemplates.DropOffSubject(settings, job);
@@ -164,6 +185,7 @@ namespace LABATRACK.Services
 
                 Send(recipient, subject, body);
                 Log(jobId, kind, recipient, NotificationLogEntry.Sent, null, isResend, userId);
+                return NotificationLogEntry.Sent;
             }
             catch (Exception ex)
             {
@@ -175,9 +197,9 @@ namespace LABATRACK.Services
                 {
                     // Even the log could not be written (the database is down). The job is saved; move on.
                 }
+                return NotificationLogEntry.Failed;
             }
         }
-
         private static void Log(int jobId, string kind, string recipient, string status, string detail, bool isResend, int userId)
         {
             if (detail != null && detail.Length > 400) detail = detail.Substring(0, 400);

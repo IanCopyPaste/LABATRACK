@@ -57,7 +57,9 @@ namespace LABATRACK.Admin
                 ShowSavedNotice();
                 ShopSettings s = SettingsRepository.Get();
                 txtMinimumCharge.Text = s.MinimumCharge.ToString("0.00", Inv);
-                ddlRounding.SelectedValue = s.RoundingIncrementKg == 0.5m ? "0.5" : "1";
+                FillRoundingChoices();
+                ListItem current = ddlRounding.Items.FindByValue(RoundingValue(s.RoundingIncrementKg));
+                ddlRounding.SelectedValue = current != null ? current.Value : "1";   // a value not in the list falls back to 1 kg
                 txtMaxWeight.Text = s.MaxWeightKg.ToString("0.##", Inv);
                 txtMinDownPayment.Text = s.MinimumDownPaymentPercent.ToString(Inv);
             }
@@ -73,6 +75,19 @@ namespace LABATRACK.Admin
 
         // ------------------------------------------------------------ Pricing rules
 
+        /// <summary>The dropdown's choices: 0.1 kg to 1 kg in steps of 0.1.</summary>
+        private void FillRoundingChoices()
+        {
+            ddlRounding.Items.Clear();
+            foreach (decimal step in ShopSettings.RoundingChoices)
+                ddlRounding.Items.Add(new ListItem(RoundingValue(step) + " kg", RoundingValue(step)));
+        }
+
+        private static string RoundingValue(decimal step)
+        {
+            return step.ToString("0.#", Inv);   // 0.1 -> "0.1", 1.00 -> "1"
+        }
+
         private void SaveRules()
         {
             bool ok = true;
@@ -85,7 +100,13 @@ namespace LABATRACK.Admin
             int minDown;
             if (!int.TryParse(txtMinDownPayment.Text.Trim().TrimEnd('%').Trim(), NumberStyles.None, Inv, out minDown) || minDown > 100)
                 ok = ShowError(lblMinDownError, "Enter a whole percentage from 0 to 100, for example 50.");
-            decimal rounding = ddlRounding.SelectedValue == "0.5" ? 0.5m : 1m;
+            // The rounding step is one of the dropdown's choices (0.1 to 1 kg in tenths); anything else is refused.
+            decimal rounding;
+            if (!decimal.TryParse(ddlRounding.SelectedValue, NumberStyles.Number, Inv, out rounding) || !ShopSettings.IsValidRounding(rounding))
+            {
+                ShowNotice("warn", "Choose how far the weight is rounded up, from 0.1 kg to 1 kg.");
+                ok = false;
+            }
             if (!ok) return;
 
             SettingsRepository.Set(ShopSettings.MinimumChargeKey, minimum);

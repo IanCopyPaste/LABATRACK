@@ -11,4 +11,18 @@
 .found { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: var(--radius-sm); background: var(--success-soft); color: #17613f; }
 .summary { position: sticky; top: 20px; }
 .status-row { display: flex; justify-content: space-between; align-items: center; }
-.quick-cash { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* Saved numbers dropping down under the contact box (CustomerSuggest.js) */
+.suggest-wrap { position: relative; }
+.suggest {
+  position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 40; margin: 0; padding: 4px; list-style: none;
+  max-height: 300px; overflow-y: auto; background: var(--surface); border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm); box-shadow: 0 8px 24px rgba(20, 35, 60, .14);
+}
+.suggest li { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; padding: 8px 10px; border-radius: 6px; cursor: pointer; }
+.suggest li.is-active { background: var(--primary-soft); }
+.suggest li[hidden] { display: none; }
+.suggest-number { font-family: ui-monospace, Consolas, monospace; font-weight: 600; white-space: nowrap; }
+.suggest-name { color: var(--muted); font-size: 12.5px; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.suggest .suggest-empty { display: block; cursor: default; color: var(--muted); font-size: 12.5px; }
+.suggest .suggest-empty[hidden] { display: none; }

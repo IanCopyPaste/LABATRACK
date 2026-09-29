@@ -10,7 +10,7 @@ namespace LABATRACK.Services
     /// Moves a job through its stages. It is the only code that changes a job's status, and it
     /// allows only these moves (everything else is refused):
     ///
-    ///   Queued            -> the first work stage on the job's route, or Voided (reason required)
+    ///   Queued            -> the first work stage on the job's route, or Voided (reason required; anything paid is refunded, see RefundService)
     ///   a work stage      -> the next work stage on the route, or Inspection after the last one
     ///   Inspection        -> Ready for pick-up (pass; sends the ready email)
     ///   Inspection        -> a work stage on the route (fail: rework, reason required)
@@ -194,13 +194,15 @@ namespace LABATRACK.Services
 
         /// <summary>
         /// Cancels a job that is still Queued. A reason is required. The job is not deleted: it is
-        /// marked Voided and keeps its row, the reason, who did it and when. Everything paid on it
-        /// is refunded in the same transaction, as a negative payment in each method it was paid
-        /// with, so the day's total and the cash drawer stay right.
+        /// marked Voided and keeps its row, the reason, who did it and when. If anything was paid on
+        /// it, the refund is recorded in the same transaction (RefundService): handed over at once when
+        /// <paramref name="refundNow"/> (the customer is at the counter), otherwise kept waiting for
+        /// them, and they are emailed a refund code to collect it with. Nothing paid, nothing to refund.
         /// </summary>
-        public static void Void(int jobId, string reason, int userId)
+        public static void Void(int jobId, string reason, bool refundNow, int userId)
         {
             reason = CheckReason(reason, "Enter the reason for voiding this job.");
+            string refundCode = null;
             using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
             {
                 conn.Open();
@@ -211,18 +213,16 @@ namespace LABATRACK.Services
 
                     // What was paid, net of any earlier refund, read from vw_JobPayments.
                     JobPayments paid = PaymentRepository.GetJobTotals(conn, tx, jobId);
-                    if (paid.CashPaid > 0)
-                        PaymentRepository.Insert(conn, tx, jobId, Payment.VoidRefund, -paid.CashPaid, Payment.Cash, null, userId);
-                    if (paid.EwalletPaid > 0)
-                        PaymentRepository.Insert(conn, tx, jobId, Payment.VoidRefund, -paid.EwalletPaid, Payment.Ewallet, null, userId);
+                    if (paid.AmountPaid > 0)
+                        refundCode = RefundService.CreateForVoid(conn, tx, jobId, paid, refundNow, userId);
 
                     tx.Commit();
                 }
             }
 
-            // The customer is told it was cancelled, with the reason and what to do next. The job is
-            // already voided and refunded; a failed email never undoes that.
-            EmailService.SendVoided(jobId, userId, false);
+            // The customer is told it was cancelled, with the reason, the refund and what to do next (and,
+            // for a refund that waits, the code). The job is already voided; a failed email never undoes that.
+            EmailService.SendVoided(jobId, userId, false, refundCode);
         }
 
         // ------------------------------------------------------------ Pieces

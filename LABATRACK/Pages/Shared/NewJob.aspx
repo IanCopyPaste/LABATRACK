@@ -33,7 +33,22 @@
                                     <div class="search-row" style="align-items:flex-end;">
                                         <div class="field">
                                             <label for="txtSearchContact">Contact number</label>
-                                            <asp:TextBox ID="txtSearchContact" runat="server" MaxLength="20" inputmode="tel" autocomplete="off" placeholder="0917 555 0123" data-find-box="true" />
+                                            <%-- Saved numbers drop down as the cashier types (CustomerSuggest.js); clicking one fills the
+                                                 box and presses Find. The list is every saved customer, most recent first. --%>
+                                            <div class="suggest-wrap">
+                                                <asp:TextBox ID="txtSearchContact" runat="server" MaxLength="20" inputmode="tel" autocomplete="off" placeholder="0917 555 0123" data-find-box="true" data-suggest="numberList" />
+                                                <ul id="numberList" class="suggest" role="listbox" aria-label="Saved contact numbers" hidden>
+                                                    <asp:Repeater ID="rptSuggest" runat="server">
+                                                        <ItemTemplate>
+                                                            <li role="option" data-number="<%#: Eval("ContactNumber") %>" data-digits="<%#: DigitsOf((string)Eval("ContactNumber")) %>" data-name="<%#: Eval("Name") %>">
+                                                                <span class="suggest-number"><%#: Eval("ContactNumber") %></span>
+                                                                <span class="suggest-name"><%#: Eval("Name") %> &middot; <%# SuggestNote((LABATRACK.Models.Customer)Container.DataItem) %></span>
+                                                            </li>
+                                                        </ItemTemplate>
+                                                    </asp:Repeater>
+                                                    <li class="suggest-empty" hidden>No saved number matches. Press Find to add a new customer.</li>
+                                                </ul>
+                                            </div>
                                         </div>
                                         <button type="submit" name="action" value="find" class="btn"><%= Icons.Get("search", "ico-sm") %>Find</button>
                                     </div>
@@ -248,6 +263,7 @@
 
     <script src="<%= AssetUrl.Get("~/Assets/js/Sidebar.js") %>"></script>
     <script src="<%= AssetUrl.Get("~/Assets/js/Confirm.js") %>"></script>
+    <script src="<%= AssetUrl.Get("~/Assets/js/CustomerSuggest.js") %>"></script>
     <script src="<%= AssetUrl.Get("~/Assets/js/NewJob.js") %>"></script>
 </body>
 </html>

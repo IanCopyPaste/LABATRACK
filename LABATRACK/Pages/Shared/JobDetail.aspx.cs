@@ -38,17 +38,64 @@ namespace LABATRACK.Pages.Shared
         // The questions Confirm.js asks before a button moves the job (Helpers/MoveConfirm.cs) or voids it.
         protected string MoveTitle { get { return NextStage == null ? "" : MoveConfirm.Title(Job); } }
         protected string MoveText { get { return NextStage == null ? "" : MoveConfirm.Text(Job); } }
-        protected string VoidText
+
+        // Voiding asks first (Confirm.js). When something was paid there are two answers, chosen by the
+        // "customer is here" box, and JobDetail.js swaps between them and adds the reason typed.
+        private string VoidBase { get { return Job.CustomerName + " · " + Job.ServiceName + "\n\n"; } }
+        private const string VoidEnd = " A voided job can't be undone; it stays in history with the reason.";
+
+        /// <summary>The customer is at the counter: the refund is handed over in the same save.</summary>
+        protected string VoidTextNow
         {
             get
             {
-                return Job.CustomerName + " · " + Job.ServiceName + "\n\n"
-                     + (Job.AmountPaid > 0
-                        ? "The job is cancelled and the " + Peso(Job.AmountPaid) + " paid is refunded, by the same method it was paid."
-                        : "The job is cancelled. Nothing was paid, so nothing is refunded.")
-                     + " A voided job can't be undone; it stays in history with the reason.";
+                return VoidBase + (Job.AmountPaid > 0
+                    ? "The job is cancelled and the " + Peso(Job.AmountPaid) + " paid is refunded now, the same way it was paid. Hand it to the customer."
+                    : "The job is cancelled. Nothing was paid, so nothing is refunded.") + VoidEnd;
             }
         }
+
+        /// <summary>The customer is not here: the refund waits, and they are emailed a code to collect it with.</summary>
+        protected string VoidTextLater
+        {
+            get
+            {
+                return VoidBase + "The job is cancelled. The " + Peso(Job.AmountPaid) + " paid is NOT handed out now: it waits for the customer, "
+                     + (string.IsNullOrEmpty(Job.CustomerEmail)
+                        ? "who has no email address, so no refund code can be sent and the owner will have to release it."
+                        : "who is emailed a refund code and collects it at the counter. It can be given only once.") + VoidEnd;
+            }
+        }
+
+        protected string VoidText { get { return VoidNowChecked || Job.AmountPaid <= 0 ? VoidTextNow : VoidTextLater; } }
+
+        /// <summary>The "customer is here" box starts ticked (the usual case), and stays as it was after a refused void.</summary>
+        protected bool VoidNowChecked
+        {
+            get { return !(IsPostBack && Request.Form["action"] == "void") || Request.Form["voidNow"] == "1"; }
+        }
+
+        // ---- The refund of a voided job ----
+
+        protected bool HasRefund { get { return IsVoided && Job.RefundStatus != null; } }
+
+        /// <summary>How a handed-over refund was released, in words, for the Refund card.</summary>
+        protected string RefundHow
+        {
+            get
+            {
+                switch (Job.RefundReleasedHow)
+                {
+                    case Refund.AtVoid: return "Given back when the job was voided, with the customer at the counter.";
+                    case Refund.WithCode: return "Given back to the customer who gave the refund code.";
+                    case Refund.OwnerOverride: return "Released by the owner without the code.";
+                    default: return "";
+                }
+            }
+        }
+        protected int MaxWrongCodes { get { return RefundService.MaxWrongCodes; } }
+        protected bool RefundLocked { get { return Job.RefundPending && Job.RefundFailedAttempts >= RefundService.MaxWrongCodes; } }
+        protected int WrongCodesLeft { get { return Math.Max(0, RefundService.MaxWrongCodes - Job.RefundFailedAttempts); } }
 
         // ---- Payment ----
 
@@ -65,7 +112,7 @@ namespace LABATRACK.Pages.Shared
         {
             get
             {
-                if (IsVoided) return "pill-danger";
+                if (IsVoided) return Job.RefundPending ? "pill-warn" : "pill-danger";
                 if (Job.PaymentStatus == PaymentService.Paid) return "pill-ok";
                 return Job.PaymentStatus == PaymentService.PartiallyPaid ? "pill-warn" : "pill-danger";
             }
@@ -75,7 +122,7 @@ namespace LABATRACK.Pages.Shared
         {
             get
             {
-                if (IsVoided) return "Refunded";
+                if (IsVoided) return Job.RefundPending ? "Refund waiting" : Job.RefundStatus == null ? "Voided" : "Refunded";
                 return Job.PaymentStatus == PaymentService.Paid ? "Paid in full" : Job.PaymentStatus;
             }
         }
@@ -120,8 +167,21 @@ namespace LABATRACK.Pages.Shared
                         Done("rework");
                         break;
                     case "void":
-                        StatusService.Void(jobId, txtVoidReason.Text, userId);
+                        // "The customer is here" hands the refund over now; otherwise it waits for them (RefundService).
+                        StatusService.Void(jobId, txtVoidReason.Text, Request.Form["voidNow"] == "1", userId);
                         Done("voided");
+                        break;
+                    case "release-refund":
+                        RefundService.ReleaseWithCode(jobId, Request.Form["refundCode"], userId);
+                        Done("refunded");
+                        break;
+                    case "release-override":
+                        // The owner only: RefundService checks the account's role itself, not just this page.
+                        RefundService.ReleaseByOwner(jobId, Request.Form["overrideReason"], userId);
+                        Done("refunded");
+                        break;
+                    case "reissue-code":
+                        Done(NewCodeResult(RefundService.ReissueCode(jobId, userId)));
                         break;
                     case "pay":
                         PaymentService.Collect(jobId, PostedPesos("payAmount"), Request.Form["payMethod"],
@@ -145,10 +205,16 @@ namespace LABATRACK.Pages.Shared
                         Done("resent");
                         break;
                     case "resend-voided":
-                        if (JobOrderRepository.GetById(jobId).CurrentStatus != StatusService.Voided)
+                        JobOrder voided = JobOrderRepository.GetById(jobId);
+                        if (voided.CurrentStatus != StatusService.Voided)
                             throw new BusinessRuleException("Only a voided job has a cancellation email.");
-                        EmailService.SendVoided(jobId, userId, true);
-                        Done("resent");
+                        if (voided.RefundPending)
+                            Done(NewCodeResult(RefundService.ReissueCode(jobId, userId)));   // a waiting refund needs a fresh code in it
+                        else
+                        {
+                            EmailService.SendVoided(jobId, userId, true, null);
+                            Done("resent");
+                        }
                         break;
                 }
             }
@@ -156,6 +222,12 @@ namespace LABATRACK.Pages.Shared
             {
                 ShowNotice("warn", ex.Message);
             }
+        }
+
+        /// <summary>Which notice to show after a new refund code was tried: Sent, Failed or Skipped.</summary>
+        private static string NewCodeResult(string emailResult)
+        {
+            return emailResult == NotificationLogEntry.Sent ? "codesent" : emailResult == NotificationLogEntry.Skipped ? "codeskipped" : "codefailed";
         }
 
         /// <summary>The balance the page showed (hfShownBalance), or -1 if it is missing, which no balance matches.</summary>
@@ -231,7 +303,7 @@ namespace LABATRACK.Pages.Shared
             rptPayments.DataSource = payments;
             rptPayments.DataBind();
             NothingPaid = payments.Count == 0;
-            RefundNote = BuildRefundNote(payments);
+            RefundNote = BuildRefundNote(Job, payments);
 
             rptEmails.DataSource = NotificationRepository.GetByJob(jobId);
             rptEmails.DataBind();
@@ -289,12 +361,18 @@ namespace LABATRACK.Pages.Shared
             return steps;
         }
 
-        private static string BuildRefundNote(List<Payment> payments)
+        /// <summary>How the voided job's refund stands: waiting for the customer, handed back, or nothing paid.</summary>
+        private static string BuildRefundNote(JobOrder job, List<Payment> payments)
         {
+            if (job.RefundPending)
+                return Peso(job.RefundAmount) + " is waiting for the customer to collect it.";
             var parts = payments.Where(p => p.Kind == Payment.VoidRefund)
                                 .Select(p => Peso(-p.Amount) + (p.Method == Payment.Cash ? " in cash" : " by e-wallet"))
                                 .ToList();
-            return parts.Count == 0 ? "Nothing had been paid, so nothing was refunded." : "Refunded " + string.Join(" and ", parts) + ".";
+            if (parts.Count == 0) return "Nothing had been paid, so nothing was refunded.";
+            return "Refunded " + string.Join(" and ", parts)
+                 + (job.RefundReleasedAt.HasValue ? " on " + job.RefundReleasedAt.Value.ToString("MMM d, h:mm tt", Inv) : "")
+                 + (!string.IsNullOrEmpty(job.RefundReleasedBy) ? " by " + job.RefundReleasedBy : "") + ".";
         }
 
         private void ShowDoneNotice()
@@ -317,7 +395,20 @@ namespace LABATRACK.Pages.Shared
                         : "Payment recorded. The job is now paid in full.";
                     break;
                 case "rework": text = "Sent back to " + job.CurrentStatus + " to be redone."; break;
-                case "voided": text = "Voided. " + BuildRefundNote(PaymentRepository.GetByJob(jobId)) + " The cancellation email is listed under Notifications."; break;
+                case "voided":
+                    text = "Voided. " + BuildRefundNote(job, PaymentRepository.GetByJob(jobId)) + " The cancellation email is listed under Notifications."
+                         + (job.RefundPending && string.IsNullOrEmpty(job.CustomerEmail)
+                            ? " This customer has no email address, so no refund code could be sent: the owner has to release the refund when they come."
+                            : "");
+                    break;
+                case "refunded": text = BuildRefundNote(job, PaymentRepository.GetByJob(jobId)) + " It is recorded, and it can't be given again."; break;
+                case "codesent": text = "A new refund code was emailed to the customer. The old code no longer works."; break;
+                case "codeskipped":
+                    ShowNotice("warn", "This customer has no email address, so no new code could be sent. The old code still works; the owner can release the refund without one.");
+                    return;
+                case "codefailed":
+                    ShowNotice("warn", "The new code could not be emailed (see Notifications), so the old code still works. Try again, or ask the owner to release the refund.");
+                    return;
                 case "resent": text = "Email tried again. The result is listed under Notifications."; break;
                 case "edited":
                     text = "Correction saved. " + (job.Balance > 0

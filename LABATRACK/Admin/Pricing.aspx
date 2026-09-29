@@ -142,10 +142,9 @@
                                     </div>
                                     <div class="field">
                                         <label for="ddlRounding">Round weight up to the next</label>
-                                        <asp:DropDownList ID="ddlRounding" runat="server">
-                                            <asp:ListItem Value="0.5">0.5 kg</asp:ListItem>
-                                            <asp:ListItem Value="1">1 kg</asp:ListItem>
-                                        </asp:DropDownList>
+                                        <%-- 0.1 kg to 1 kg in steps of 0.1 (ShopSettings.RoundingChoices). The list is filled in the code-behind. --%>
+                                        <asp:DropDownList ID="ddlRounding" runat="server" />
+                                        <span class="hint">The weighed load is rounded up to a whole step. With a 0.1 kg step a 3.2 kg load bills as 3.2 kg; with 0.5 kg as 3.5 kg; with 1 kg as 4 kg.</span>
                                     </div>
                                     <%-- Stored in Settings like the two above. New Job and the owner's Edit Job both refuse a
                                          weight above it, on screen and again on the server (PricingService). --%>

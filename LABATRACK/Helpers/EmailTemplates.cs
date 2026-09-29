@@ -126,11 +126,16 @@ namespace LABATRACK.Helpers
         }
 
         /// <summary>
-        /// Sent when a job is voided: the reason, the refund, and what to do next.
-        /// <paramref name="refunds"/> are the job's void-refund payments (empty if nothing was paid).
+        /// Sent when a job is voided: the reason, the refund, and what to do next. How the refund stands
+        /// is on the job (RefundStatus): nothing paid, handed back already, or waiting for the customer.
+        /// <paramref name="cash"/> and <paramref name="ewallet"/> split the refund by the way it was paid.
+        /// <paramref name="refundCode"/> is the code to collect a waiting refund with (null when there is none to give).
         /// </summary>
-        public static string VoidedBody(ShopSettings shop, JobOrder job, System.Collections.Generic.IList<Payment> refunds)
+        public static string VoidedBody(ShopSettings shop, JobOrder job, decimal cash, decimal ewallet, string refundCode)
         {
+            bool waiting = job.RefundPending;
+            bool given = job.RefundStatus == Refund.Released;
+
             var sb = Open(shop);
             sb.Append("<p>Hi ").Append(Enc(job.CustomerName)).Append(",</p>")
               .Append("<p>Your laundry order at our shop was cancelled.</p>")
@@ -139,29 +144,49 @@ namespace LABATRACK.Helpers
             Row(sb, "Reason", job.StatusReason ?? "");
             Row(sb, "Cancelled", job.StatusSince.ToString("MMM d, yyyy h:mm tt", Inv));
             Row(sb, "Order", job.ServiceName + " · " + job.WeightKg.ToString("0.0#", Inv) + " kg · ₱" + job.TotalAmount.ToString("N2", Inv));
-            if (refunds.Count == 0)
+            if (!waiting && !given)
             {
                 Row(sb, "Refund", "Nothing was paid on this order, so there is nothing to refund.");
             }
             else
             {
                 var parts = new System.Collections.Generic.List<string>();
-                foreach (Payment refund in refunds)
-                    parts.Add("₱" + (-refund.Amount).ToString("N2", Inv) + (refund.Method == Payment.Cash ? " in cash" : " by e-wallet"));
-                Row(sb, "Refund", string.Join(" and ", parts) + ", the same way you paid");
+                if (cash > 0) parts.Add("₱" + cash.ToString("N2", Inv) + " in cash");
+                if (ewallet > 0) parts.Add("₱" + ewallet.ToString("N2", Inv) + " by e-wallet");
+                string how = string.Join(" and ", parts);
+                Row(sb, "Refund", waiting
+                    ? how + " is waiting for you at the shop, the same way you paid"
+                    : how + " was given back to you, the same way you paid");
             }
             sb.Append("</table>");
+
+            // A waiting refund is collected with this code: the claim number on the slip alone is not enough.
+            if (waiting && !string.IsNullOrEmpty(refundCode))
+            {
+                sb.Append("<div style=\"display:inline-block; margin:4px 0 14px; padding:10px 16px; border:1.5px solid #b7791f; background:#fdf4e3; border-radius:6px;\">")
+                  .Append("<div style=\"font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:#8a5a14;\">Refund code</div>")
+                  .Append("<div style=\"font-family:Consolas, monospace; font-size:22px; font-weight:700; color:#1e2a3a;\">").Append(Enc(RefundCodeText(refundCode))).Append("</div></div>");
+            }
 
             sb.Append("<p style=\"margin-bottom:4px;\"><strong>What to do next</strong></p>")
               .Append("<ul style=\"margin:0 0 16px; padding-left:20px; font-size:14px;\">")
               .Append("<li>This claim number can no longer be used, so please do not bring the slip to claim laundry for this order.</li>");
-            if (refunds.Count > 0)
-                sb.Append("<li>Your refund is given back the same way you paid. If you have not received it yet, show this email at the counter.</li>");
+            if (waiting)
+            {
+                sb.Append("<li>To get your refund, come to the shop and give the refund code above. It works one time only, and whoever has the code can collect the refund, so keep it to yourself.</li>");
+                if (string.IsNullOrEmpty(refundCode))
+                    sb.Append("<li>If you cannot find your refund code, ask the shop to send you a new one.</li>");
+            }
             sb.Append("<li>If your laundry is still with us and you have not placed a new order for it, please collect it at the counter.</li>")
               .Append("<li>If you did not ask for this, or have any question, please contact the shop.</li></ul>");
             return Close(sb, shop);
         }
 
+        /// <summary>The refund code as it is read out: K7M-2QX.</summary>
+        private static string RefundCodeText(string code)
+        {
+            return code.Length == 6 ? code.Substring(0, 3) + "-" + code.Substring(3) : code;
+        }
         // ------------------------------------------------------------ Password reset (to the owner)
 
         public static string OwnerResetSubject(ShopSettings shop)

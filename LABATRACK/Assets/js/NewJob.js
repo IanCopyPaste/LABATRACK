@@ -119,7 +119,7 @@
     }
 
     function kg(n) {
-        return (Math.round(n * 10) / 10).toFixed(1).replace(/\.0$/, '') + ' kg';
+        return (Math.round(n * 100) / 100).toString() + ' kg';   // up to two decimals: 5.15 kg shows as 5.15
     }
 
     // The laundry charge, the way PricingService will work it out: round the weight up to the
@@ -148,9 +148,15 @@
             return NaN;
         }
 
-        // Worked in thousandths so 3.0 kg / 0.5 does not come out as 6.0000001 steps.
-        var billable = Math.ceil(Math.round(weight / rounding * 1000) / 1000) * rounding;
-        var charge = billable * rate;
+        // Worked in hundredths of a kilo, as whole numbers, so a 0.1 kg step never leaves a float
+        // remainder (3 x 0.1 is 0.30000000000000004 as a fraction, but exactly 30 as hundredths).
+        var stepC = Math.round(rounding * 100);
+        var billableC = Math.ceil(Math.round(weight * 100) / stepC) * stepC;
+        var billable = billableC / 100;
+        // The charge in whole centavos, from whole numbers only: hundredths of a kilo x centavos per kilo,
+        // rounded half up, exactly as the server rounds (Math.Round(..., 2, AwayFromZero)).
+        var chargeC = Math.floor((billableC * Math.round(rate * 100) + 50) / 100);
+        var charge = chargeC / 100;
         var raised = charge < minimum;
 
         breakdown.weightHint.textContent = 'Rounded up to the next ' + kg(rounding) + ': bills as ' + kg(billable) + '.';

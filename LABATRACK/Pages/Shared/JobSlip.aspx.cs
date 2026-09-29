@@ -37,7 +37,7 @@ namespace LABATRACK.Pages.Shared
         {
             get
             {
-                if (IsVoided) return "VOIDED · REFUNDED";
+                if (IsVoided) return Job.RefundPending ? "VOIDED · REFUND WAITING" : Job.RefundStatus == null ? "VOIDED" : "VOIDED · REFUNDED";
                 if (Job.PaymentStatus == PaymentService.Paid) return "PAID IN FULL";
                 return Job.PaymentStatus == PaymentService.PartiallyPaid ? "PARTIALLY PAID" : "UNPAID";
             }

@@ -281,6 +281,60 @@ BEGIN
 END
 GO
 
+/* ------------------------------------------------------------------ Refunds
+   What the shop owes back to the customer of a voided job that had paid something, and whether it
+   has been handed over yet. A voided job with nothing paid has no row.
+     - One row per job (JobId is unique), so a job can have only one refund, and the row can be
+       Released only once: the release is a guarded UPDATE ... WHERE Status = 'Pending', so two staff,
+       or one customer showing the same claim number twice, can never take it twice.
+     - Pending: the customer is not at the counter yet. The refund is not money that has left the
+       drawer, so no negative Payments row exists yet; it is written when the refund is Released,
+       on that day, by the person who hands the money over. A refund code (only its PBKDF2 hash and
+       salt are kept, like a password) is emailed to the customer; whoever collects must give it.
+       FailedAttempts counts wrong codes; after five only the owner can release it.
+     - Released: how (at the void because the customer was there, with the code, or by the owner
+       without one and why), who, and when. The code is then erased. */
+IF OBJECT_ID(N'dbo.Refunds', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.Refunds
+    (
+        RefundId         INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_Refunds PRIMARY KEY,
+        JobId            INT           NOT NULL CONSTRAINT FK_Refunds_JobOrders REFERENCES dbo.JobOrders (JobId)
+                                                 CONSTRAINT UQ_Refunds_JobId UNIQUE,
+        Amount           DECIMAL(10,2) NOT NULL CONSTRAINT CK_Refunds_Amount CHECK (Amount > 0),
+        Status           NVARCHAR(10)  NOT NULL CONSTRAINT CK_Refunds_Status CHECK (Status IN (N'Pending', N'Released')),
+        CodeHash         VARBINARY(32) NULL,
+        CodeSalt         VARBINARY(16) NULL,
+        FailedAttempts   INT           NOT NULL CONSTRAINT DF_Refunds_FailedAttempts DEFAULT (0)
+                                                 CONSTRAINT CK_Refunds_FailedAttempts CHECK (FailedAttempts >= 0),
+        CreatedAt        DATETIME2     NOT NULL CONSTRAINT DF_Refunds_CreatedAt DEFAULT (SYSDATETIME()),
+        CreatedByUserId  INT           NOT NULL CONSTRAINT FK_Refunds_CreatedBy REFERENCES dbo.Users (UserId),
+        ReleasedAt       DATETIME2     NULL,
+        ReleasedByUserId INT           NULL CONSTRAINT FK_Refunds_ReleasedBy REFERENCES dbo.Users (UserId),
+        ReleasedHow      NVARCHAR(16)  NULL CONSTRAINT CK_Refunds_ReleasedHow CHECK (ReleasedHow IN (N'At void', N'Code', N'Owner override')),
+        OverrideReason   NVARCHAR(200) NULL,
+        CONSTRAINT CK_Refunds_Released CHECK (
+               (Status = N'Pending'  AND ReleasedAt IS NULL     AND ReleasedByUserId IS NULL     AND ReleasedHow IS NULL)
+            OR (Status = N'Released' AND ReleasedAt IS NOT NULL AND ReleasedByUserId IS NOT NULL AND ReleasedHow IS NOT NULL)),
+        CONSTRAINT CK_Refunds_Override CHECK (ReleasedHow IS NULL OR ReleasedHow <> N'Owner override' OR OverrideReason IS NOT NULL)
+    );
+
+    CREATE INDEX IX_Refunds_Status ON dbo.Refunds (Status);
+END
+GO
+
+-- A database built before refunds were tracked has voided jobs whose refund was handed over at the
+-- moment of the void (a negative Payments row). Each gets a Released row so the record is complete.
+-- On a new database, or once done, it adds nothing.
+INSERT INTO dbo.Refunds (JobId, Amount, Status, CreatedAt, CreatedByUserId, ReleasedAt, ReleasedByUserId, ReleasedHow)
+SELECT p.JobId, -SUM(p.Amount), N'Released', MIN(p.PaidAt), MIN(p.RecordedByUserId), MIN(p.PaidAt), MIN(p.RecordedByUserId), N'At void'
+FROM dbo.Payments AS p
+WHERE p.Kind = N'Void refund'
+  AND NOT EXISTS (SELECT 1 FROM dbo.Refunds AS r WHERE r.JobId = p.JobId)
+GROUP BY p.JobId
+HAVING -SUM(p.Amount) > 0;
+GO
+
 /* ------------------------------------------------------------------ NotificationLog
    Every email attempt to a customer, whatever happened: Sent, Failed (with the error), or
    Skipped (the customer has no email). A failed send never blocks or undoes the job, and
@@ -320,7 +374,8 @@ GO
 /* ------------------------------------------------------------------ vw_JobPayments
    The one place the amount paid on a job is worked out: the sum of its payment rows, net of
    refunds, in total and split by method. Every screen and report reads it from here, so they
-   can never disagree. A voided job nets to 0 (its payment plus its refund). */
+   can never disagree. A voided job nets to 0 once its refund has been handed over (its payment
+   plus its refund); until then the money is still with the shop, and it shows as paid. */
 CREATE OR ALTER VIEW dbo.vw_JobPayments
 AS
 SELECT
@@ -338,8 +393,9 @@ GO
 /* ------------------------------------------------------------------ vw_JobList
    A job as the screens show it: the job row plus the customer, the service, who took it,
    its latest status change (when, by whom, and the reason, such as why a load was sent back),
-   the amount paid from vw_JobPayments, how it was paid at drop-off, and its add-ons as one
-   line of text. The board, the dashboards, History and the job page all read this one view,
+   the amount paid from vw_JobPayments, how it was paid at drop-off, its refund (only for a job
+   voided with money paid, and whether it has been handed over yet), and its add-ons as one line
+   of text. The board, the dashboards, History and the job page all read this one view,
    so the same job always looks the same everywhere. */
 CREATE OR ALTER VIEW dbo.vw_JobList
 AS
@@ -377,6 +433,12 @@ SELECT
     lastChange.Reason     AS StatusReason,
     pay.AmountPaid,
     dropOff.Method        AS PaymentMethod,
+    rf.Amount             AS RefundAmount,          -- NULL unless the job was voided with money paid
+    rf.Status             AS RefundStatus,          -- Pending or Released
+    rf.ReleasedAt         AS RefundReleasedAt,
+    ru.Username           AS RefundReleasedBy,
+    rf.ReleasedHow        AS RefundReleasedHow,
+    rf.FailedAttempts     AS RefundFailedAttempts,
     ISNULL(lines.ServiceAddOnAmount, 0) AS ServiceAddOnAmount,
     ISNULL(lines.ProductAddOnAmount, 0) AS ProductAddOnAmount,
     lines.AddOnSummary
@@ -386,6 +448,8 @@ JOIN dbo.Services AS s        ON s.ServiceId = j.ServiceId
 JOIN dbo.Users AS cu          ON cu.UserId = j.CreatedByUserId
 LEFT JOIN dbo.Users AS eu     ON eu.UserId = j.LastEditedByUserId
 JOIN dbo.vw_JobPayments AS pay ON pay.JobId = j.JobId
+LEFT JOIN dbo.Refunds AS rf   ON rf.JobId = j.JobId
+LEFT JOIN dbo.Users AS ru     ON ru.UserId = rf.ReleasedByUserId
 OUTER APPLY (
     -- The latest status change. HistoryId only ever grows, so the highest one is the latest.
     SELECT TOP (1) h.ChangedAt, h.FromStatus, h.Reason, u.Username

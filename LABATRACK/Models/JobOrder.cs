@@ -70,6 +70,21 @@ namespace LABATRACK.Models
             get { return Services.PaymentService.StatusOf(TotalAmount, AmountPaid); }
         }
 
+        // ---- The refund of a job voided with money paid (empty for every other job) ----
+
+        /// <summary>Pending (waiting for the customer), Released (handed over), or null: nothing to refund.</summary>
+        public string RefundStatus { get; set; }
+        public decimal RefundAmount { get; set; }
+        public DateTime? RefundReleasedAt { get; set; }
+        public string RefundReleasedBy { get; set; }
+        public string RefundReleasedHow { get; set; }
+        public int RefundFailedAttempts { get; set; }
+
+        public bool RefundPending
+        {
+            get { return RefundStatus == Refund.Pending; }
+        }
+
         public decimal ServiceAddOnAmount { get; set; }
         public decimal ProductAddOnAmount { get; set; }
 

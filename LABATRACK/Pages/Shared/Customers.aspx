@@ -28,14 +28,15 @@
                     <asp:Literal ID="litNotice" runat="server" EnableViewState="false" />
 
                     <%-- The form sits on top in one row, and the list below it gets the full width so no
-                         column is squeezed. Editing a customer (owner only) reuses the same row. --%>
+                         column is squeezed. It only adds a customer: the owner edits one in a window of
+                         its own (the Edit button on a row, Customers.js). --%>
                     <asp:Panel ID="pnlForm" runat="server" CssClass="card" DefaultButton="btnSave">
                         <div class="card-h">
                             <div>
-                                <h2><%= Editing != null ? "Edit customer" : "Add customer" %></h2>
-                                <div class="sub"><%= Editing != null ? "Owner only. Fixes apply to every past and future job." : "Search the list below first. Name and contact number are required; email is optional and is used for the drop-off and ready-for-pick-up emails." %></div>
+                                <h2>Add customer</h2>
+                                <div class="sub">Search the list below first. Name and contact number are required; email is optional and is used for the drop-off, update, cancellation and ready-for-pick-up emails.</div>
                             </div>
-                            <%= Icons.Get(Editing != null ? "pencil" : "user-plus") %>
+                            <%= Icons.Get("user-plus") %>
                         </div>
                         <div class="card-b form-strip">
                             <div class="field">
@@ -54,8 +55,7 @@
                                 <asp:Label ID="lblEmailError" runat="server" CssClass="error-text" Visible="false" EnableViewState="false" />
                             </div>
                             <div class="form-strip-actions">
-                                <% if (Editing != null) { %><a class="btn btn-ghost" href="Customers.aspx">Cancel</a><% } %>
-                                <asp:Button ID="btnSave" runat="server" CssClass="btn btn-primary" OnClick="btnSave_Click" />
+                                <asp:Button ID="btnSave" runat="server" Text="Add customer" CssClass="btn btn-primary" OnClick="btnSave_Click" />
                             </div>
                         </div>
                     </asp:Panel>
@@ -87,7 +87,8 @@
                                 <tbody>
                                     <asp:Repeater ID="rptCustomers" runat="server">
                                         <ItemTemplate>
-                                            <tr class="<%# RowCss((int)Eval("CustomerId")) %>">
+                                            <%-- Each row carries what the Edit window needs (Customers.js reads it). --%>
+                                            <tr class="<%# RowCss((int)Eval("CustomerId")) %>" data-customer-id="<%# Eval("CustomerId") %>" data-name="<%#: Eval("Name") %>" data-contact="<%#: Eval("ContactNumber") %>" data-email="<%#: Eval("Email") %>" data-since="<%# ((DateTime)Eval("CreatedAt")).ToString("MMM d, yyyy") %>">
                                                 <td>
                                                     <div class="cell-main"><%#: Eval("Name") %></div>
                                                     <div class="cell-sub">Since <%# ((DateTime)Eval("CreatedAt")).ToString("MMM d, yyyy") %></div>
@@ -102,7 +103,7 @@
                                                 </td>
                                                 <td class="num"><%# LastVisit((DateTime?)Eval("LastDropOff")) %></td>
                                                 <td class="right">
-                                                    <%# IsOwner ? "<a class=\"btn btn-sm btn-ghost\" href=\"Customers.aspx?edit=" + Eval("CustomerId") + "\">" + Icons.Get("pencil", "ico-sm") + "Edit</a>" : "" %>
+                                                    <%# IsOwner ? "<button type=\"button\" class=\"btn btn-sm btn-ghost\" data-customer-edit=\"true\">" + Icons.Get("pencil", "ico-sm") + "Edit</button>" : "" %>
                                                 </td>
                                             </tr>
                                         </ItemTemplate>
@@ -119,6 +120,47 @@
                 </div>
             </main>
         </div>
+
+        <%-- The owner's window to edit one customer (staff only add). The Edit button on a row fills it from
+             that row's data- attributes. It posts to the server, which checks everything again (CustomerService);
+             after a refused save the server draws it open again (data-open) with what was typed and what is wrong. --%>
+        <% if (IsOwner) { %>
+        <dialog id="customerDialog" class="modal" aria-labelledby="customerDialogTitle" data-open="<%= DialogOpen ? "true" : "false" %>">
+            <input type="hidden" name="cdId" id="cdId" value="<%: DialogId %>" />
+            <div class="modal-h">
+                <div>
+                    <h2 id="customerDialogTitle">Edit <%: DialogName %></h2>
+                    <div class="sub" id="customerDialogSub">Fixes apply to every past and future job of this customer.</div>
+                </div>
+                <button type="button" class="icon-btn" data-modal-close="true" aria-label="Close"><%= Icons.Get("x") %></button>
+            </div>
+            <div class="modal-b form">
+                <div class="notice notice-danger" id="cdError"<%= DialogError == null ? " hidden" : "" %>>
+                    <%= Icons.Get("circle-alert", "ico-sm") %><span id="cdErrorText"><%: DialogError %></span>
+                </div>
+                <div class="field">
+                    <label for="cdName">Name</label>
+                    <input type="text" id="cdName" name="cdName" maxlength="100" autocomplete="off" value="<%: DialogName %>" />
+                    <span class="error-text" id="cdNameError"<%= NameError == null ? " hidden" : "" %>><%: NameError %></span>
+                </div>
+                <div class="field">
+                    <label for="cdContact">Contact number</label>
+                    <input type="text" id="cdContact" name="cdContact" maxlength="20" inputmode="tel" autocomplete="off" placeholder="0917 555 0123" value="<%: DialogContact %>" />
+                    <span class="error-text" id="cdContactError"<%= ContactError == null ? " hidden" : "" %>><%: ContactError %></span>
+                </div>
+                <div class="field">
+                    <label for="cdEmail">Email <span class="muted">(optional)</span></label>
+                    <input type="text" id="cdEmail" name="cdEmail" maxlength="150" inputmode="email" autocomplete="off" value="<%: DialogEmail %>" />
+                    <span class="error-text" id="cdEmailError"<%= EmailError == null ? " hidden" : "" %>><%: EmailError %></span>
+                    <span class="hint">The drop-off, update, cancellation and ready-for-pick-up emails go to this address. Leave it empty if they have none.</span>
+                </div>
+            </div>
+            <div class="modal-f">
+                <button type="button" class="btn btn-ghost" data-modal-close="true">Cancel</button>
+                <button type="submit" name="action" value="save-customer" class="btn btn-primary" id="cdSave"><%= Icons.Get("save", "ico-sm") %>Save changes</button>
+            </div>
+        </dialog>
+        <% } %>
     </form>
 
     <script src="<%= AssetUrl.Get("~/Assets/js/Loading.js") %>"></script>
@@ -126,5 +168,6 @@
     <script src="<%= AssetUrl.Get("~/Assets/js/NumericInput.js") %>"></script>
 
     <script src="<%= AssetUrl.Get("~/Assets/js/Sidebar.js") %>"></script>
+    <script src="<%= AssetUrl.Get("~/Assets/js/Customers.js") %>"></script>
 </body>
 </html>

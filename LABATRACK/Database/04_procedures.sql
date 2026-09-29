@@ -854,6 +854,104 @@ BEGIN
 END
 GO
 
+/* ================================================================== Refunds
+   One row per voided job that had paid something (see the table in 01_schema.sql). */
+
+-- Adds the refund of a job being voided, as a step of the void's transaction. It starts Pending;
+-- when the customer is at the counter, the same transaction releases it at once.
+CREATE OR ALTER PROCEDURE dbo.usp_Refunds_Insert
+    @JobId           INT,
+    @Amount          DECIMAL(10,2),
+    @CodeHash        VARBINARY(32),
+    @CodeSalt        VARBINARY(16),
+    @CreatedByUserId INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    INSERT INTO dbo.Refunds (JobId, Amount, Status, CodeHash, CodeSalt, CreatedByUserId)
+    VALUES (@JobId, @Amount, N'Pending', @CodeHash, @CodeSalt, @CreatedByUserId);
+    SELECT CAST(SCOPE_IDENTITY() AS INT) AS RefundId;
+END
+GO
+
+-- A job's refund with its row locked until the transaction ends, so two people handing it over at
+-- the same moment are made to take turns. Returns no row if the job has no refund.
+CREATE OR ALTER PROCEDURE dbo.usp_Refunds_GetForUpdate
+    @JobId INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT r.RefundId, r.JobId, r.Amount, r.Status, r.CodeHash, r.CodeSalt, r.FailedAttempts, r.CreatedAt,
+           r.ReleasedAt, u.Username AS ReleasedBy, r.ReleasedHow
+    FROM dbo.Refunds AS r WITH (UPDLOCK, ROWLOCK)
+    LEFT JOIN dbo.Users AS u ON u.UserId = r.ReleasedByUserId
+    WHERE r.JobId = @JobId;
+END
+GO
+
+-- The concurrency guard for handing a refund over: it is released only if it is still Pending.
+-- If another person released it first, 0 rows change and C# says it was already given. The code is
+-- erased once it has been used.
+CREATE OR ALTER PROCEDURE dbo.usp_Refunds_Release
+    @RefundId         INT,
+    @ReleasedByUserId INT,
+    @ReleasedHow      NVARCHAR(16),
+    @OverrideReason   NVARCHAR(200)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE dbo.Refunds
+    SET Status = N'Released',
+        ReleasedAt = SYSDATETIME(),
+        ReleasedByUserId = @ReleasedByUserId,
+        ReleasedHow = @ReleasedHow,
+        OverrideReason = @OverrideReason,
+        CodeHash = NULL,
+        CodeSalt = NULL
+    WHERE RefundId = @RefundId AND Status = N'Pending';
+    SELECT @@ROWCOUNT AS RowsAffected;
+END
+GO
+
+-- One more wrong code on a Pending refund. Returns how many wrong tries it has now.
+CREATE OR ALTER PROCEDURE dbo.usp_Refunds_AddFailedAttempt
+    @RefundId INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE dbo.Refunds
+    SET FailedAttempts = FailedAttempts + 1
+    WHERE RefundId = @RefundId AND Status = N'Pending';
+    SELECT ISNULL((SELECT FailedAttempts FROM dbo.Refunds WHERE RefundId = @RefundId), 0) AS FailedAttempts;
+END
+GO
+
+-- A new refund code for a Pending refund (the old one stops working, and the wrong tries start again).
+CREATE OR ALTER PROCEDURE dbo.usp_Refunds_SetCode
+    @RefundId INT,
+    @CodeHash VARBINARY(32),
+    @CodeSalt VARBINARY(16)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE dbo.Refunds
+    SET CodeHash = @CodeHash, CodeSalt = @CodeSalt, FailedAttempts = 0
+    WHERE RefundId = @RefundId AND Status = N'Pending';
+    SELECT @@ROWCOUNT AS RowsAffected;
+END
+GO
+
+-- Voided jobs whose refund has not been handed over yet, longest waiting first (Needs attention).
+CREATE OR ALTER PROCEDURE dbo.usp_JobOrders_GetPendingRefunds
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT * FROM dbo.vw_JobList
+    WHERE RefundStatus = N'Pending'
+    ORDER BY StatusSince, JobId;
+END
+GO
+
 /* ================================================================== NotificationLog */
 
 CREATE OR ALTER PROCEDURE dbo.usp_NotificationLog_Insert
@@ -918,7 +1016,8 @@ GO
 --   IsReturning        1 if the customer had an earlier job that was not voided
 --   CustomerFirstJobAt the customer's first job that was not voided ("customer since")
 --   VoidReason         why it was voided, for a voided job
---   AmountRefunded     what its void refunds gave back (0 if it was not voided, or nothing was paid)
+--   AmountRefunded     what has been handed back on it (0 if it was not voided, or nothing was paid)
+--   RefundPending      what is still owed back to the customer (a refund not yet handed over)
 CREATE OR ALTER PROCEDURE dbo.usp_Reports_GetJobsBetween
     @From DATETIME2,
     @To   DATETIME2
@@ -939,7 +1038,9 @@ BEGIN
            (SELECT TOP (1) h.Reason FROM dbo.JobStatusHistory AS h
             WHERE h.JobId = j.JobId AND h.ToStatus = N'Voided' ORDER BY h.HistoryId DESC) AS VoidReason,
            CAST(ISNULL((SELECT -SUM(p.Amount) FROM dbo.Payments AS p
-                        WHERE p.JobId = j.JobId AND p.Kind = N'Void refund'), 0) AS DECIMAL(10,2)) AS AmountRefunded
+                        WHERE p.JobId = j.JobId AND p.Kind = N'Void refund'), 0) AS DECIMAL(10,2)) AS AmountRefunded,
+           CAST(ISNULL((SELECT SUM(rf.Amount) FROM dbo.Refunds AS rf
+                        WHERE rf.JobId = j.JobId AND rf.Status = N'Pending'), 0) AS DECIMAL(10,2)) AS RefundPending
     FROM dbo.JobOrders AS j
     JOIN dbo.Services AS s  ON s.ServiceId = j.ServiceId
     JOIN dbo.Customers AS c ON c.CustomerId = j.CustomerId

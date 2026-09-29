@@ -96,6 +96,7 @@ namespace LABATRACK.DataAccess
                             job.CustomerFirstJobAt = r["CustomerFirstJobAt"] as DateTime?;
                             job.VoidReason = r["VoidReason"] as string;
                             job.AmountRefunded = (decimal)r["AmountRefunded"];
+                            job.RefundPending = (decimal)r["RefundPending"];
                             jobs.Add(job);
                         }
                     }

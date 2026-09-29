@@ -26,6 +26,10 @@
 .rework td { background: #fffaf2; }
 .row-between { display: flex; justify-content: space-between; width: 100%; }
 
+/* The refund code box: the code is read out and typed, so it is large, capital and spaced out. */
+.refund-code { font-family: ui-monospace, Consolas, monospace; font-size: 18px; font-weight: 600; letter-spacing: .18em; text-transform: uppercase; }
+.refund-code::placeholder { letter-spacing: .18em; font-weight: 500; }
+
 /* What is still owed, and the forms that take it (JobDetail.js shows the change). */
 .pay-totals { display: flex; flex-direction: column; gap: 4px; border-top: 1px solid var(--border); }
 .pay-totals .balance-due { color: var(--warning); }

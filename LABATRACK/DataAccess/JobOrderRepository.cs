@@ -101,6 +101,27 @@ namespace LABATRACK.DataAccess
             return list;
         }
 
+        /// <summary>Voided jobs whose refund has not been handed over yet, longest waiting first.</summary>
+        public static List<JobOrder> GetPendingRefunds()
+        {
+            List<JobOrder> list = new List<JobOrder>();
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
+            using (SqlCommand cmd = new SqlCommand("dbo.usp_JobOrders_GetPendingRefunds", conn))
+            {
+                cmd.CommandType = CommandType.StoredProcedure;
+
+                conn.Open();
+                using (SqlDataReader r = cmd.ExecuteReader())
+                {
+                    while (r.Read())
+                    {
+                        list.Add(Map(r));
+                    }
+                }
+            }
+            return list;
+        }
+
         /// <summary>Jobs Ready for pick-up since before <paramref name="readyBefore"/>, longest waiting first.</summary>
         public static List<JobOrder> GetReadyBefore(DateTime readyBefore)
         {
@@ -412,6 +433,12 @@ namespace LABATRACK.DataAccess
             job.StatusReason = r["StatusReason"] as string;
             job.AmountPaid = (decimal)r["AmountPaid"];
             job.PaymentMethod = r["PaymentMethod"] as string;
+            job.RefundStatus = r["RefundStatus"] as string;
+            job.RefundAmount = (r["RefundAmount"] as decimal?) ?? 0m;
+            job.RefundReleasedAt = r["RefundReleasedAt"] as DateTime?;
+            job.RefundReleasedBy = r["RefundReleasedBy"] as string;
+            job.RefundReleasedHow = r["RefundReleasedHow"] as string;
+            job.RefundFailedAttempts = (r["RefundFailedAttempts"] as int?) ?? 0;
             job.ServiceAddOnAmount = Convert.ToDecimal(r["ServiceAddOnAmount"]);
             job.ProductAddOnAmount = Convert.ToDecimal(r["ProductAddOnAmount"]);
             job.AddOnSummary = (r["AddOnSummary"] as string) ?? "";

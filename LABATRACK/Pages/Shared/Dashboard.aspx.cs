@@ -79,6 +79,8 @@ namespace LABATRACK.Pages.Shared
             rptUnclaimed.DataBind();
             rptVoided.DataSource = Data.VoidedToday;
             rptVoided.DataBind();
+            rptRefunds.DataSource = Data.RefundsWaitingEarlier;
+            rptRefunds.DataBind();
         }
 
         private void ShowNotice(string kind, string text)
@@ -150,8 +152,13 @@ namespace LABATRACK.Pages.Shared
 
         protected static string VoidNote(JobOrder job)
         {
-            return "Voided " + job.StatusSince.ToString("h:mm tt", Inv) + " by " + job.StatusBy
-                 + " · “" + job.StatusReason + "” · " + (job.PaymentMethod == null ? "nothing was paid" : "payment refunded");
+            return RefundNotes.ForVoid(job);
+        }
+
+        /// <summary>A refund from an earlier day that the customer has not collected yet.</summary>
+        protected string RefundNote(JobOrder job)
+        {
+            return RefundNotes.Waiting(job, Data.Now);
         }
 
         protected static string StageCss(string stage)

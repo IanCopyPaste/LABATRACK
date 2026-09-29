@@ -40,6 +40,11 @@ namespace LABATRACK.Pages.Shared
         protected global::System.Web.UI.WebControls.TextBox txtSearchContact;
 
         /// <summary>
+        /// rptSuggest control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Repeater rptSuggest;
+
+        /// <summary>
         /// lblContactError control.
         /// </summary>
         protected global::System.Web.UI.WebControls.Label lblContactError;

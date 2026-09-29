@@ -90,6 +90,8 @@
     <Content Include="Assets\js\AdminDashboard.js" />
     <Content Include="Assets\js\Charts.js" />
     <Content Include="Assets\js\Confirm.js" />
+    <Content Include="Assets\js\CustomerSuggest.js" />
+    <Content Include="Assets\js\Customers.js" />
     <Content Include="Assets\js\Dashboard.js" />
     <Content Include="Assets\js\EditJob.js" />
     <Content Include="Assets\js\JobDetail.js" />
@@ -322,6 +324,7 @@
     <Compile Include="Helpers\EmailTemplates.cs" />
     <Compile Include="Helpers\MoveConfirm.cs" />
     <Compile Include="Helpers\PaymentBadge.cs" />
+    <Compile Include="Helpers\RefundNotes.cs" />
     <Compile Include="Security\BasePage.cs">
       <SubType>ASPXCodeBehind</SubType>
     </Compile>
@@ -339,6 +342,7 @@
     <Compile Include="Models\JobOrder.cs" />
     <Compile Include="Models\JobPayments.cs" />
     <Compile Include="Models\EditSummary.cs" />
+    <Compile Include="Models\Refund.cs" />
     <Compile Include="Models\LaundryService.cs" />
     <Compile Include="Models\NotificationLogEntry.cs" />
     <Compile Include="Models\Payment.cs" />
@@ -352,6 +356,7 @@
     <Compile Include="DataAccess\JobOrderRepository.cs" />
     <Compile Include="DataAccess\NotificationRepository.cs" />
     <Compile Include="DataAccess\PaymentRepository.cs" />
+    <Compile Include="DataAccess\RefundRepository.cs" />
     <Compile Include="DataAccess\ReportRepository.cs" />
     <Compile Include="DataAccess\ServiceRepository.cs" />
     <Compile Include="DataAccess\SettingsRepository.cs" />
@@ -364,6 +369,7 @@
     <Compile Include="Services\EmailService.cs" />
     <Compile Include="Services\JobOrderService.cs" />
     <Compile Include="Services\PaymentService.cs" />
+    <Compile Include="Services\RefundService.cs" />
     <Compile Include="Services\PricingService.cs" />
     <Compile Include="Services\ReportService.cs" />
     <Compile Include="Services\StatusService.cs" />

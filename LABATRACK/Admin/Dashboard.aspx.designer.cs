@@ -40,6 +40,11 @@ namespace LABATRACK.Admin
         protected global::System.Web.UI.WebControls.Repeater rptVoided;
 
         /// <summary>
+        /// rptRefunds control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Repeater rptRefunds;
+
+        /// <summary>
         /// rptClaimed control.
         /// </summary>
         protected global::System.Web.UI.WebControls.Repeater rptClaimed;

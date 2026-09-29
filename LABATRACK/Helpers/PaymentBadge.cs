@@ -14,9 +14,13 @@ namespace LABATRACK.Helpers
     {
         public static string Html(JobOrder job)
         {
-            // A voided job gave back whatever was paid on it.
+            // A voided job owes the customer whatever was paid on it: waiting until they collect it,
+            // then refunded. With nothing paid there is nothing to refund.
             if (job.CurrentStatus == StatusService.Voided)
-                return Pill("st-voided", job.PaymentMethod == null ? "Voided" : "Refunded");
+            {
+                if (job.RefundPending) return Pill("pill-warn", "Refund waiting · " + PaymentService.Peso(job.RefundAmount));
+                return Pill("st-voided", job.RefundStatus == null ? "Voided" : "Refunded");
+            }
 
             switch (job.PaymentStatus)
             {

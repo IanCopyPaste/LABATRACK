@@ -53,5 +53,10 @@ namespace LABATRACK.Pages.Shared
         /// rptVoided control.
         /// </summary>
         protected global::System.Web.UI.WebControls.Repeater rptVoided;
+
+        /// <summary>
+        /// rptRefunds control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Repeater rptRefunds;
     }
 }

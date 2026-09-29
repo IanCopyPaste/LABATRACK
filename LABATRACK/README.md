@@ -65,6 +65,16 @@ switch it between Active and Inactive; an account with no jobs, payments or hist
 deleted there. After five wrong passwords an account is locked for five minutes (a new password
 from the owner unlocks it at once).
 
+## Refunds
+
+Voiding a job that had paid something creates a refund that can be handed over only once. If the
+customer is at the counter, the void form's "customer is here" box (ticked by default) hands it
+over at once. Otherwise it waits, the customer is emailed a **refund code**, and it is given when
+they show that code on the job page. Five wrong codes lock it; then only the owner can release it
+(with a reason). Refunds still waiting are listed under *Needs attention* on both dashboards.
+
+The demo data has one refund that is waiting: the voided job for *Mark Tan* today (₱60.00).
+Its demo refund code is `K7M-2QX`.
 ## Email setup (SMTP)
 
 The shop sends five emails. To the customer: at drop-off (with the claim number), when the owner

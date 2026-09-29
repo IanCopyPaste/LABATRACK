@@ -95,8 +95,15 @@
                                     <div class="field" style="flex:1; min-width:220px;">
                                         <label for="txtVoidReason">Void this job (only while Queued). <%: Job.AmountPaid > 0 ? "The " + Peso(Job.AmountPaid) + " paid is refunded." : "Nothing was paid, so nothing is refunded." %></label>
                                         <asp:TextBox ID="txtVoidReason" runat="server" placeholder="Reason (required)" MaxLength="200" />
+                                        <%-- With money paid, the refund is either handed over now (the customer is at the counter) or kept
+                                             waiting for them: they are emailed a refund code, and it is given once, when they show it. --%>
+                                        <% if (Job.AmountPaid > 0) { %>
+                                        <label class="check" style="margin-top:8px;"><input type="checkbox" id="chkRefundNow" name="voidNow" value="1"<%= VoidNowChecked ? " checked=\"checked\"" : "" %> />The customer is here: give the <%: Peso(Job.AmountPaid) %> refund back now</label>
+                                        <span class="hint">Untick it if they are not at the counter. The refund then waits for them, and they are emailed a refund code to collect it with.</span>
+                                        <% } %>
                                     </div>
-                                    <button type="submit" name="action" value="void" class="btn btn-danger" data-confirm-title="Void <%: Job.ClaimNumber %>?" data-confirm-text="<%: VoidText %>" data-confirm-ok="Void and refund" data-confirm-danger="true"><%= Icons.Get("ban", "ico-sm") %>Void job</button>
+                                    <button type="submit" name="action" value="void" class="btn btn-danger" id="btnVoid" data-confirm-title="Void <%: Job.ClaimNumber %>?" data-confirm-text="<%: VoidText %>"
+                                            data-text-now="<%: VoidTextNow %>" data-text-later="<%: VoidTextLater %>" data-confirm-ok="Void job" data-confirm-danger="true"><%= Icons.Get("ban", "ico-sm") %>Void job</button>
                                 </div>
                             </asp:Panel>
 
@@ -155,6 +162,14 @@
                                         <div class="field" data-cash-field="true">
                                             <label for="claimCashReceived">Cash received</label>
                                             <div class="input-prefix"><span>₱</span><input type="text" id="claimCashReceived" name="claimCashReceived" inputmode="decimal" autocomplete="off" data-pay-cash="true" value="<%: Posted("claimCashReceived", "") %>" /></div>
+                                            <%-- Quick amounts, as on New job. JobDetail.js fills the box; Exact is the balance. --%>
+                                            <div class="quick-cash">
+                                                <button type="button" class="btn btn-sm" data-cash-chip="exact">Exact</button>
+                                                <button type="button" class="btn btn-sm" data-cash-chip="100">₱100</button>
+                                                <button type="button" class="btn btn-sm" data-cash-chip="200">₱200</button>
+                                                <button type="button" class="btn btn-sm" data-cash-chip="500">₱500</button>
+                                                <button type="button" class="btn btn-sm" data-cash-chip="1000">₱1,000</button>
+                                            </div>
                                         </div>
                                     </div>
                                     <div class="change-box idle" data-change-box="true"><span class="small" data-change-label="true">Change</span><span class="change-amount num" data-change-amount="true">Enter cash received</span></div>
@@ -173,6 +188,59 @@
                                     </div>
                                 </div>
                             </asp:Panel>
+
+                            <%-- The refund of a voided job that had paid something (RefundService). It is handed over exactly
+                                 once. While it waits, the customer must give the refund code that was emailed to them: the
+                                 claim number on the slip is not enough. Five wrong codes lock it; then only the owner can release it. --%>
+                            <% if (HasRefund && Job.RefundPending) { %>
+                            <section class="card" id="refund" style="border-color:#e9d3a3;">
+                                <div class="card-h">
+                                    <div><h2>Refund waiting</h2><div class="sub"><%: Peso(Job.RefundAmount) %> is owed to the customer and has not been handed over</div></div>
+                                    <span class="pill pill-warn"><%: Peso(Job.RefundAmount) %></span>
+                                </div>
+                                <div class="card-b form" data-enter-scope="true">
+                                    <span>Hand it over only to the customer who gives the <strong>refund code</strong> that was emailed to them. It can be given <strong>once</strong>: after that this job's claim number and code are worthless.</span>
+                                    <% if (RefundLocked) { %>
+                                    <div class="notice notice-danger"><%= Icons.Get("circle-alert", "ico-sm") %><span>Locked after <%: MaxWrongCodes %> wrong codes. Only the owner can release this refund now.</span></div>
+                                    <% } else { %>
+                                    <div class="field">
+                                        <label for="refundCode">Refund code</label>
+                                        <input type="text" id="refundCode" name="refundCode" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="K7M-2QX" class="refund-code" />
+                                        <span class="hint"><%: WrongCodesLeft %> <%: WrongCodesLeft == 1 ? "try" : "tries" %> left. Spaces and dashes don't matter.</span>
+                                    </div>
+                                    <button type="submit" name="action" value="release-refund" class="btn btn-primary"
+                                            data-confirm-title="Give the <%: Peso(Job.RefundAmount) %> refund?" data-confirm-ok="Give the refund"
+                                            data-confirm-text="<%: Job.CustomerName %> · <%: Job.ClaimNumber %>&#10;&#10;Hand <%: Peso(Job.RefundAmount) %> to the customer, the same way it was paid.&#10;It can be given only once, and it is recorded with your name."><%= Icons.Get("hand-coins", "ico-sm") %>Give the refund</button>
+                                    <% } %>
+                                    <div class="row-between" style="align-items:center; gap:12px;">
+                                        <span class="hint">Lost the email? A new code can be sent<%: string.IsNullOrEmpty(Job.CustomerEmail) ? ", but this customer has no email address." : " to " + Job.CustomerEmail + ". The old code stops working once the new one is sent." %></span>
+                                        <button type="submit" name="action" value="reissue-code" class="btn btn-sm btn-ghost"<%= string.IsNullOrEmpty(Job.CustomerEmail) ? " disabled=\"disabled\"" : "" %>><%= Icons.Get("send", "ico-sm") %>Send a new code</button>
+                                    </div>
+                                </div>
+                                <% if (IsOwner) { %>
+                                <div class="card-f" style="flex-direction:column; align-items:stretch; gap:8px;" data-enter-scope="true">
+                                    <div class="strong small">Owner: release without the code</div>
+                                    <span class="hint">For a customer with no email, a lost code, or a locked refund. Check who they are first. The reason is recorded with your name.</span>
+                                    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                                        <input type="text" id="overrideReason" name="overrideReason" maxlength="200" autocomplete="off" placeholder="Reason (required), e.g. ID checked, no email" style="flex:1; min-width:220px;" />
+                                        <button type="submit" name="action" value="release-override" class="btn btn-danger"
+                                                data-confirm-title="Give the refund without the code?" data-confirm-ok="Give the refund" data-confirm-danger="true"
+                                                data-confirm-text="<%: Job.CustomerName %> · <%: Job.ClaimNumber %>&#10;&#10;Hand <%: Peso(Job.RefundAmount) %> to the customer without their refund code.&#10;It is recorded as an owner override with your name and reason."><%= Icons.Get("hand-coins", "ico-sm") %>Release</button>
+                                    </div>
+                                </div>
+                                <% } %>
+                            </section>
+                            <% } else if (HasRefund) { %>
+                            <section class="card" id="refund">
+                                <div class="card-h">
+                                    <div><h2>Refund</h2><div class="sub">Handed back <%: Job.RefundReleasedAt.HasValue ? Job.RefundReleasedAt.Value.ToString("MMM d, h:mm tt") : "" %><%: string.IsNullOrEmpty(Job.RefundReleasedBy) ? "" : " by " + Job.RefundReleasedBy %></div></div>
+                                    <span class="pill pill-ok"><%: Peso(Job.RefundAmount) %> given back</span>
+                                </div>
+                                <div class="card-b">
+                                    <span class="small muted"><%: RefundHow %> A refund is given only once, so this job can never be refunded again.</span>
+                                </div>
+                            </section>
+                            <% } %>
 
                             <!-- Status history, newest first. Rows are never edited or deleted. -->
                             <section class="card">
@@ -253,6 +321,9 @@
                                     <div class="field">
                                         <label for="payAmount">Amount</label>
                                         <div class="input-prefix"><span>₱</span><input type="text" id="payAmount" name="payAmount" inputmode="decimal" autocomplete="off" data-pay-amount="true" value="<%: Posted("payAmount", Money(Job.Balance)) %>" /></div>
+                                        <div class="quick-cash">
+                                            <button type="button" class="btn btn-sm" data-amount-chip="full">Full balance <%: Peso(Job.Balance) %></button>
+                                        </div>
                                     </div>
                                     <div class="field">
                                         <span class="label">Method</span>
@@ -264,6 +335,13 @@
                                     <div class="field" data-cash-field="true">
                                         <label for="payCash">Cash received</label>
                                         <div class="input-prefix"><span>₱</span><input type="text" id="payCash" name="payCash" inputmode="decimal" autocomplete="off" data-pay-cash="true" value="<%: Posted("payCash", "") %>" /></div>
+                                        <div class="quick-cash">
+                                            <button type="button" class="btn btn-sm" data-cash-chip="exact">Exact</button>
+                                            <button type="button" class="btn btn-sm" data-cash-chip="100">₱100</button>
+                                            <button type="button" class="btn btn-sm" data-cash-chip="200">₱200</button>
+                                            <button type="button" class="btn btn-sm" data-cash-chip="500">₱500</button>
+                                            <button type="button" class="btn btn-sm" data-cash-chip="1000">₱1,000</button>
+                                        </div>
                                     </div>
                                     <div class="change-box idle" data-change-box="true"><span class="small" data-change-label="true">Change</span><span class="change-amount num" data-change-amount="true">Enter cash received</span></div>
                                     <button type="submit" name="action" value="pay" class="btn btn-primary" data-pay-submit="true"
@@ -303,9 +381,10 @@
                                     <% if (ReadyReached) { %><button type="submit" name="action" value="resend-ready" class="btn btn-sm btn-ghost"><%= Icons.Get("send", "ico-sm") %>Resend ready email</button><% } %>
                                 </div>
                                 <% } else if (IsVoided) { %>
-                                <%-- The cancellation email says the same every time (reason and refund come from the job), so it can be sent again. --%>
+                                <%-- The cancellation email says the same every time (reason and refund come from the job), so it can be sent again.
+                                     For a refund that is still waiting, sending it again gives the customer a NEW refund code. --%>
                                 <div class="card-f">
-                                    <button type="submit" name="action" value="resend-voided" class="btn btn-sm btn-ghost"><%= Icons.Get("send", "ico-sm") %>Resend cancellation email</button>
+                                    <button type="submit" name="action" value="resend-voided" class="btn btn-sm btn-ghost"><%= Icons.Get("send", "ico-sm") %><%: Job.RefundPending ? "Resend cancellation email with a new refund code" : "Resend cancellation email" %></button>
                                 </div>
                                 <% } %>
                             </section>

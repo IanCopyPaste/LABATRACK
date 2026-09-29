@@ -11,11 +11,13 @@ using LABATRACK.Services;
 namespace LABATRACK.Pages.Shared
 {
     // Customers (staff and owner). Staff can add and search; only the owner can edit a customer
-    // (CLAUDE.md, Roles). The rules (required fields, one customer per contact number, a valid
-    // email) are in CustomerService.
+    // (CLAUDE.md, Roles), in a window of its own (Customers.js). The rules (required fields, one
+    // customer per contact number, a valid email) are in CustomerService.
     //
-    // The page state lives in the query string: ?q= is the search, ?edit=<id> opens a
-    // customer in the form (owner only), and ?saved=<id> marks the row just saved.
+    // The page state lives in the query string: ?q= is the search, and ?saved=<id> marks the row
+    // just saved. The Edit window posts cdId, cdName, cdContact and cdEmail with
+    // action=save-customer; a save that goes through redirects back here (post, then redirect),
+    // and a refused one draws the window open again with what was typed and what is wrong.
     public partial class Customers : BasePage
     {
         protected override string ActiveNav
@@ -32,29 +34,36 @@ namespace LABATRACK.Pages.Shared
         protected int ShownCustomers { get; private set; }
         protected string Query { get; private set; }
         protected int SavedId { get; private set; }
-        protected Customer Editing { get; private set; }
+
+        // The Edit window's state when the server draws it (open again after a refused save).
+        protected bool DialogOpen { get; private set; }
+        protected string DialogId { get; private set; }
+        protected string DialogName { get; private set; }
+        protected string DialogContact { get; private set; }
+        protected string DialogEmail { get; private set; }
+        protected string DialogError { get; private set; }
+        protected string NameError { get; private set; }
+        protected string ContactError { get; private set; }
+        protected string EmailError { get; private set; }
 
         protected void Page_Load(object sender, EventArgs e)
         {
             Query = (Request.QueryString["q"] ?? "").Trim();
             int id;
             SavedId = int.TryParse(Request.QueryString["saved"], out id) ? id : 0;
-
-            // Editing is the owner's. A staff account that types ?edit= just gets the add form.
-            if (IsOwner && int.TryParse(Request.QueryString["edit"], out id))
-                Editing = CustomerRepository.GetById(id);
-            btnSave.Text = Editing != null ? "Save changes" : "Add customer";
+            DialogId = "";
+            DialogName = "";
+            DialogContact = "";
+            DialogEmail = "";
 
             if (!IsPostBack)
             {
                 txtSearch.Text = Query;
-                if (Editing != null)
-                {
-                    txtName.Text = Editing.Name;
-                    txtContact.Text = Editing.ContactNumber;
-                    txtEmail.Text = Editing.Email;
-                }
                 ShowSavedNotice();
+            }
+            else if (Request.Form["action"] == "save-customer")
+            {
+                SaveEdit();
             }
 
             BindList();
@@ -67,10 +76,11 @@ namespace LABATRACK.Pages.Shared
             Context.ApplicationInstance.CompleteRequest();
         }
 
+        // ------------------------------------------------------------ Add (the form on top)
+
         protected void btnSave_Click(object sender, EventArgs e)
         {
-            CustomerService.Problems p = CustomerService.Check(txtName.Text, txtContact.Text, txtEmail.Text,
-                                                               Editing != null ? Editing.CustomerId : (int?)null);
+            CustomerService.Problems p = CustomerService.Check(txtName.Text, txtContact.Text, txtEmail.Text, null);
             if (p.Any)
             {
                 if (p.Name != null) Fail(lblNameError, p.Name);
@@ -82,15 +92,7 @@ namespace LABATRACK.Pages.Shared
             int savedId;
             try
             {
-                if (Editing != null)
-                {
-                    CustomerService.Update(Editing.CustomerId, txtName.Text, txtContact.Text, txtEmail.Text);
-                    savedId = Editing.CustomerId;
-                }
-                else
-                {
-                    savedId = CustomerService.Add(txtName.Text, txtContact.Text, txtEmail.Text);
-                }
+                savedId = CustomerService.Add(txtName.Text, txtContact.Text, txtEmail.Text);
             }
             catch (BusinessRuleException ex)
             {
@@ -98,8 +100,53 @@ namespace LABATRACK.Pages.Shared
                 return;
             }
 
-            Response.Redirect("Customers.aspx?saved=" + savedId + (Editing != null ? "&was=edit" : ""), false);
+            Response.Redirect("Customers.aspx?saved=" + savedId, false);
             Context.ApplicationInstance.CompleteRequest();
+        }
+
+        // ------------------------------------------------------------ Edit (the owner's window)
+
+        private void SaveEdit()
+        {
+            // Editing is the owner's. Staff have no window, and a hand-made post from a staff account is ignored.
+            if (!IsOwner) return;
+
+            int id;
+            if (!int.TryParse(Request.Form["cdId"], out id) || CustomerRepository.GetById(id) == null)
+                return;
+
+            string name = Request.Form["cdName"] ?? "";
+            string contact = Request.Form["cdContact"] ?? "";
+            string email = Request.Form["cdEmail"] ?? "";
+
+            CustomerService.Problems p = CustomerService.Check(name, contact, email, id);
+            if (!p.Any)
+            {
+                try
+                {
+                    CustomerService.Update(id, name, contact, email);
+                    Response.Redirect("Customers.aspx?saved=" + id + "&was=edit", false);
+                    Context.ApplicationInstance.CompleteRequest();
+                    return;
+                }
+                catch (BusinessRuleException ex)
+                {
+                    DialogError = ex.Message;
+                }
+            }
+            else
+            {
+                NameError = p.Name;
+                ContactError = p.Contact;
+                EmailError = p.Email;
+            }
+
+            // Draw the window open again, as it was sent.
+            DialogOpen = true;
+            DialogId = id.ToString();
+            DialogName = name;
+            DialogContact = contact;
+            DialogEmail = email;
         }
 
         private static void Fail(Label label, string message)
@@ -133,7 +180,6 @@ namespace LABATRACK.Pages.Shared
 
         protected string RowCss(int id)
         {
-            if (Editing != null && Editing.CustomerId == id) return "is-editing";
             return id == SavedId ? "is-saved" : "";
         }
 

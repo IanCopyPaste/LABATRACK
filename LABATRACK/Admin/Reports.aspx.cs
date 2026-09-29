@@ -722,21 +722,24 @@ namespace LABATRACK.Admin
 
         protected string VoidsCard()
         {
-            // Refunded = what the voids actually gave back: everything paid, which after a down
-            // payment can be less than the job's total.
+            // Refunded = what has actually been handed back on the voids: everything paid, which after a
+            // down payment can be less than the job's total. Waiting = refunds the customer has not collected
+            // yet: that money is still in the shop, and it stays in the sales figures until it is handed back.
             var voided = jobs.Where(j => j.IsVoided).ToList();
             decimal refunded = voided.Sum(j => j.AmountRefunded);
-            var reasons = voided.GroupBy(j => j.VoidReason ?? "").Select(g => new { Reason = g.Key, Count = g.Count(), Amount = g.Sum(j => j.AmountRefunded) })
+            decimal waiting = voided.Sum(j => j.RefundPending);
+            var reasons = voided.GroupBy(j => j.VoidReason ?? "").Select(g => new { Reason = g.Key, Count = g.Count(), Amount = g.Sum(j => j.AmountRefunded + j.RefundPending) })
                 .OrderByDescending(r => r.Count).ToList();
 
             var sb = new System.Text.StringBuilder("<div class=\"mini-stats\">");
             sb.Append(Mini("Voided orders", voided.Count.ToString("N0", Inv)))
               .Append(Mini("Refunded", Peso0((double)refunded)))
+              .Append(Mini("Waiting to be collected", Peso0((double)waiting)))
               .Append(Mini("Void rate", Pct(voided.Count, jobs.Count)))
               .Append("</div>");
             if (reasons.Count > 0)
             {
-                sb.Append("<div class=\"table-wrap\"><table class=\"table\"><thead><tr><th>Reason given</th><th class=\"right\">Orders</th><th class=\"right\">Refunded</th></tr></thead><tbody>");
+                sb.Append("<div class=\"table-wrap\"><table class=\"table\"><thead><tr><th>Reason given</th><th class=\"right\">Orders</th><th class=\"right\">Refund</th></tr></thead><tbody>");
                 foreach (var r in reasons)
                     sb.Append("<tr><td>").Append(HttpUtility.HtmlEncode(r.Reason)).Append("</td><td class=\"right num\">").Append(r.Count)
                       .Append("</td><td class=\"right num\">").Append(Peso0((double)r.Amount)).Append("</td></tr>");
@@ -746,7 +749,7 @@ namespace LABATRACK.Admin
             {
                 sb.Append("<p class=\"muted small\" style=\"padding:0 20px 18px;\">No orders were voided in this period.</p>");
             }
-            return Card("Voids and refunds", "Every void gives back all that was paid on it, so none of this is in the sales figures. Look at the reasons, not just the count.",
+            return Card("Voids and refunds", "A void gives back all that was paid on it, once the customer collects it (a refund waiting is still counted in sales). Look at the reasons, not just the count.",
                 sb.ToString(), "chart-card flush");
         }
 

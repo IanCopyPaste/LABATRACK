@@ -18,6 +18,14 @@
         public const string SlipHeaderKey = "SlipHeader";
         public const string ReworkStagesKey = "ReworkStages";
 
+        /// <summary>The steps the owner can round a weight up to: 0.1 kg to 1 kg in tenths (a dropdown on the Pricing page).</summary>
+        public static readonly decimal[] RoundingChoices = { 0.1m, 0.2m, 0.3m, 0.4m, 0.5m, 0.6m, 0.7m, 0.8m, 0.9m, 1m };
+
+        public static bool IsValidRounding(decimal step)
+        {
+            return System.Array.IndexOf(RoundingChoices, step) >= 0;
+        }
+
         public ShopSettings()
         {
             MinimumCharge = 120.00m;
@@ -34,7 +42,7 @@
         /// <summary>A laundry charge below this is raised to it (pesos).</summary>
         public decimal MinimumCharge { get; set; }
 
-        /// <summary>The weight is rounded up to the next multiple of this (1 or 0.5 kg).</summary>
+        /// <summary>The weight is rounded up to the next multiple of this: one of RoundingChoices, 0.1 kg to 1 kg.</summary>
         public decimal RoundingIncrementKg { get; set; }
 
         /// <summary>The heaviest load one job may be; a bigger load is split into two or more jobs.</summary>

@@ -48,7 +48,7 @@
                         <div class="card kpi">
                             <div class="kpi-top">Needs attention <span class="kpi-icon" style="background:var(--warning-soft); color:var(--warning);"><%= Icons.Get("circle-alert", "ico-sm") %></span></div>
                             <div class="kpi-value"><%= Data.NeedsAttention %></div>
-                            <div class="kpi-foot"><%= Data.Unclaimed.Count %> unclaimed, <%= Data.VoidedToday.Count %> voided today</div>
+                            <div class="kpi-foot"><%= Data.Unclaimed.Count %> unclaimed, <%= Data.VoidedToday.Count %> voided today<%= Data.RefundsWaiting.Count == 0 ? "" : ", " + Data.RefundsWaiting.Count + (Data.RefundsWaiting.Count == 1 ? " refund" : " refunds") + " waiting" %></div>
                         </div>
                     </section>
 
@@ -144,7 +144,7 @@
                             <div class="card-h">
                                 <div>
                                     <h2>Needs attention</h2>
-                                    <div class="sub">Unclaimed after <%= Data.UnclaimedDays %> days, and today's voids</div>
+                                    <div class="sub">Unclaimed after <%= Data.UnclaimedDays %> days, today's voids, and refunds waiting for the customer</div>
                                 </div>
                             </div>
                             <ul class="list">
@@ -170,6 +170,17 @@
                                         </li>
                                     </ItemTemplate>
                                 </asp:Repeater>
+                                    <asp:Repeater ID="rptRefunds" runat="server">
+                                        <ItemTemplate>
+                                            <li>
+                                                <span class="dot-icon" style="background:var(--warning-soft); color:var(--warning);"><%# Icons.Get("hand-coins", "ico-sm") %></span>
+                                                <div class="grow">
+                                                    <div class="cell-main"><%#: Eval("CustomerName") %> <a class="mono muted" href="JobDetail.aspx?id=<%# Eval("JobId") %>"><%#: Eval("ClaimNumber") %></a></div>
+                                                    <div class="cell-sub"><%#: RefundNote((LABATRACK.Models.JobOrder)Container.DataItem) %></div>
+                                                </div>
+                                            </li>
+                                        </ItemTemplate>
+                                    </asp:Repeater>
                                 <% if (Data.NeedsAttention == 0) { %><li class="muted small">Nothing needs attention.</li><% } %>
                             </ul>
                         </section>
