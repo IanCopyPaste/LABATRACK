@@ -24,31 +24,31 @@
                 </header>
 
                 <div class="content">
-                    <%-- DRAFT: sample jobs. Moving a card works for this page visit only; Phase 4 saves it
-                         through StatusService and reads the board from the shared repository query. --%>
+                    <%-- Moving a card goes through StatusService, which writes JobStatusHistory. The board is
+                         read with the same repository query as the owner's dashboard (ReportService.GetDashboard). --%>
                     <asp:Literal ID="litNotice" runat="server" EnableViewState="false" />
 
                     <%-- Staff see today's total only: no cash split, no other days. --%>
                     <section class="kpis">
                         <div class="card kpi">
                             <div class="kpi-top">Today's total <span class="kpi-icon"><%= Icons.Get("wallet", "ico-sm") %></span></div>
-                            <div class="kpi-value"><%= Peso(TodaysTotal) %></div>
+                            <div class="kpi-value"><%= Peso(Data.Today.NetTotal) %></div>
                             <div class="kpi-foot">Paid at drop-off, net of refunds</div>
                         </div>
                         <div class="card kpi">
                             <div class="kpi-top">On the board <span class="kpi-icon"><%= Icons.Get("washing-machine", "ico-sm") %></span></div>
-                            <div class="kpi-value"><%= ActiveCount %></div>
+                            <div class="kpi-value"><%= Data.Active.Count %></div>
                             <div class="kpi-foot">Queued to Ready for pick-up</div>
                         </div>
                         <div class="card kpi">
                             <div class="kpi-top">Ready for pick-up <span class="kpi-icon" style="background:var(--success-soft); color:var(--success);"><%= Icons.Get("package-check", "ico-sm") %></span></div>
-                            <div class="kpi-value"><%= ReadyCount %></div>
+                            <div class="kpi-value"><%= Data.CountAt("Ready for pick-up") %></div>
                             <div class="kpi-foot">Waiting for the customer</div>
                         </div>
                         <div class="card kpi">
                             <div class="kpi-top">Needs attention <span class="kpi-icon" style="background:var(--warning-soft); color:var(--warning);"><%= Icons.Get("circle-alert", "ico-sm") %></span></div>
-                            <div class="kpi-value">3</div>
-                            <div class="kpi-foot">2 unclaimed, 1 voided today</div>
+                            <div class="kpi-value"><%= Data.NeedsAttention %></div>
+                            <div class="kpi-foot"><%= Data.Unclaimed.Count %> unclaimed, <%= Data.VoidedToday.Count %> voided today</div>
                         </div>
                     </section>
 
@@ -72,29 +72,33 @@
                                     <div class="board-cards">
                                         <asp:Repeater ID="rptCards" runat="server" DataSource='<%# Eval("Jobs") %>' OnItemCommand="Cards_ItemCommand">
                                             <ItemTemplate>
-                                                <article class="job-card<%# string.IsNullOrEmpty((string)Eval("Rework")) ? "" : " is-rework" %>" data-search="<%#: Eval("SearchText") %>">
+                                                <article class="job-card<%# ReworkNote((LABATRACK.Models.JobOrder)Container.DataItem) == "" ? "" : " is-rework" %>" data-search="<%#: SearchText((LABATRACK.Models.JobOrder)Container.DataItem) %>">
                                                     <div class="job-card-top">
-                                                        <a class="mono" href="JobDetail.aspx"><%#: Eval("Claim") %></a>
-                                                        <span class="age" title="Time since drop-off"><%# Icons.Get("clock", "ico-sm") %><%# Age((DateTime)Eval("DroppedOff")) %></span>
+                                                        <a class="mono" href="JobDetail.aspx?id=<%# Eval("JobId") %>"><%#: Eval("ClaimNumber") %></a>
+                                                        <span class="age" title="Time since drop-off"><%# Icons.Get("clock", "ico-sm") %><%# Age((DateTime)Eval("CreatedAt")) %></span>
                                                     </div>
-                                                    <div class="job-card-name"><%#: Eval("Customer") %></div>
-                                                    <div class="job-card-sub"><%#: Eval("Service") %> &middot; <%# ((decimal)Eval("WeightKg")).ToString("0.0") %> kg</div>
-                                                    <%# RouteNote((string)Eval("Route")) == "" ? "" : "<div class=\"job-card-route\">" + RouteNote((string)Eval("Route")) + "</div>" %>
-                                                    <%# string.IsNullOrEmpty((string)Eval("AddOns")) ? "" : "<div class=\"job-card-addons\">" + Server.HtmlEncode((string)Eval("AddOns")) + "</div>" %>
-                                                    <%# string.IsNullOrEmpty((string)Eval("Rework")) ? "" : "<div class=\"job-card-rework\">" + Icons.Get("rotate-ccw", "ico-sm") + "<span>" + Server.HtmlEncode((string)Eval("Rework")) + "</span></div>" %>
+                                                    <div class="job-card-name"><%#: Eval("CustomerName") %></div>
+                                                    <div class="job-card-sub"><%#: Eval("ServiceName") %> &middot; <%# ((decimal)Eval("WeightKg")).ToString("0.0") %> kg</div>
+                                                    <%# RouteNote((LABATRACK.Models.JobOrder)Container.DataItem) == "" ? "" : "<div class=\"job-card-route\">" + RouteNote((LABATRACK.Models.JobOrder)Container.DataItem) + "</div>" %>
+                                                    <%# string.IsNullOrEmpty((string)Eval("AddOnSummary")) ? "" : "<div class=\"job-card-addons\">" + Server.HtmlEncode((string)Eval("AddOnSummary")) + "</div>" %>
+                                                    <%# ReworkNote((LABATRACK.Models.JobOrder)Container.DataItem) == "" ? "" : "<div class=\"job-card-rework\">" + Icons.Get("rotate-ccw", "ico-sm") + "<span>" + Server.HtmlEncode(ReworkNote((LABATRACK.Models.JobOrder)Container.DataItem)) + "</span></div>" %>
                                                     <%-- The column already names the stage, so the second line only says when the
                                                          load got here and who moved it. --%>
                                                     <dl class="job-card-meta">
-                                                        <dt>Drop-off</dt><dd><%# When((DateTime)Eval("DroppedOff")) %></dd>
-                                                        <dt>Moved</dt><dd><%# When((DateTime)Eval("StageSince")) %></dd>
-                                                        <dt>By</dt><dd><%#: Eval("StageBy") %></dd>
+                                                        <dt>Drop-off</dt><dd><%# When((DateTime)Eval("CreatedAt")) %></dd>
+                                                        <dt>Moved</dt><dd><%# When((DateTime)Eval("StatusSince")) %></dd>
+                                                        <dt>By</dt><dd><%#: Eval("StatusBy") %></dd>
                                                     </dl>
                                                     <div class="job-card-actions">
-                                                        <asp:Button runat="server" CssClass='<%# (string)Eval("Stage") == "Ready for pick-up" ? "btn btn-sm btn-primary" : "btn btn-sm" %>'
-                                                            Text='<%# ActionLabel((string)Eval("Stage"), (string)Eval("Route")) %>'
-                                                            CommandName="Move" CommandArgument='<%# Eval("Claim") + "|" + Eval("Stage") %>' />
+                                                        <%-- Confirm.js asks first, with the words from Helpers/MoveConfirm.cs. --%>
+                                                        <asp:Button runat="server" CssClass='<%# (string)Eval("CurrentStatus") == "Ready for pick-up" ? "btn btn-sm btn-primary" : "btn btn-sm" %>'
+                                                            Text='<%# ActionLabel((LABATRACK.Models.JobOrder)Container.DataItem) %>'
+                                                            CommandName="Move" CommandArgument='<%# Eval("JobId") + "|" + Eval("CurrentStatus") %>'
+                                                            data-confirm-title='<%# MoveConfirm.Title((LABATRACK.Models.JobOrder)Container.DataItem) %>'
+                                                            data-confirm-text='<%# MoveConfirm.Text((LABATRACK.Models.JobOrder)Container.DataItem) %>'
+                                                            data-confirm-ok='<%# ActionLabel((LABATRACK.Models.JobOrder)Container.DataItem) %>' />
                                                         <%-- A failed inspection needs a reason, so it is recorded on the job page. --%>
-                                                        <%# (string)Eval("Stage") == "Inspection" ? "<a class=\"btn btn-sm btn-ghost\" href=\"JobDetail.aspx?stage=Inspection\">Fail&hellip;</a>" : "" %>
+                                                        <%# (string)Eval("CurrentStatus") == "Inspection" ? "<a class=\"btn btn-sm btn-ghost\" href=\"JobDetail.aspx?id=" + Eval("JobId") + "\">Fail&hellip;</a>" : "" %>
                                                     </div>
                                                 </article>
                                             </ItemTemplate>
@@ -120,46 +124,48 @@
                                         <li>
                                             <span class="dot-icon" style="background:var(--success-soft); color:var(--success);"><%# Icons.Get("package-check", "ico-sm") %></span>
                                             <div class="grow">
-                                                <div class="cell-main"><%#: Eval("Customer") %></div>
-                                                <div class="cell-sub"><span class="mono"><%#: Eval("Claim") %></span> &middot; <%# When((DateTime)Eval("StageSince")) %> &middot; <%#: Eval("StageBy") %></div>
+                                                <div class="cell-main"><%#: Eval("CustomerName") %></div>
+                                                <div class="cell-sub"><a class="mono" href="JobDetail.aspx?id=<%# Eval("JobId") %>"><%#: Eval("ClaimNumber") %></a> &middot; <%# When((DateTime)Eval("StatusSince")) %> &middot; <%#: Eval("StatusBy") %></div>
                                             </div>
-                                            <span class="num strong"><%# Peso((decimal)Eval("Total")) %></span>
+                                            <span class="num strong"><%# Peso((decimal)Eval("TotalAmount")) %></span>
                                         </li>
                                     </ItemTemplate>
                                 </asp:Repeater>
+                                <% if (Data.ClaimedToday.Count == 0) { %><li class="muted small">Nothing claimed yet today.</li><% } %>
                             </ul>
                         </section>
 
-                        <%-- DRAFT: sample rows. Phase 4 reads the unclaimed threshold from Settings. --%>
                         <section class="card">
                             <div class="card-h">
                                 <div>
                                     <h2>Needs attention</h2>
-                                    <div class="sub">Unclaimed after 7 days, and today's voids</div>
+                                    <div class="sub">Unclaimed after <%= Data.UnclaimedDays %> days, and today's voids</div>
                                 </div>
                             </div>
                             <ul class="list">
-                                <li>
-                                    <span class="dot-icon" style="background:var(--warning-soft); color:var(--warning);"><%= Icons.Get("clock", "ico-sm") %></span>
-                                    <div class="grow">
-                                        <div class="cell-main">Rosa Lim <span class="mono muted">LT-260912-003</span></div>
-                                        <div class="cell-sub">Ready since Sep 13 &middot; 9 days unclaimed &middot; paid</div>
-                                    </div>
-                                </li>
-                                <li>
-                                    <span class="dot-icon" style="background:var(--warning-soft); color:var(--warning);"><%= Icons.Get("clock", "ico-sm") %></span>
-                                    <div class="grow">
-                                        <div class="cell-main">Dennis Uy <span class="mono muted">LT-260914-008</span></div>
-                                        <div class="cell-sub">Ready since Sep 15 &middot; 7 days unclaimed &middot; paid</div>
-                                    </div>
-                                </li>
-                                <li>
-                                    <span class="dot-icon" style="background:var(--danger-soft); color:var(--danger);"><%= Icons.Get("ban", "ico-sm") %></span>
-                                    <div class="grow">
-                                        <div class="cell-main">Mark Tan <span class="mono muted">LT-260922-006</span></div>
-                                        <div class="cell-sub">Voided 11:20 AM by jcruz &middot; &ldquo;Customer cancelled, wrong bag&rdquo; &middot; ₱120.00 refunded</div>
-                                    </div>
-                                </li>
+                                <asp:Repeater ID="rptUnclaimed" runat="server">
+                                    <ItemTemplate>
+                                        <li>
+                                            <span class="dot-icon" style="background:var(--warning-soft); color:var(--warning);"><%# Icons.Get("clock", "ico-sm") %></span>
+                                            <div class="grow">
+                                                <div class="cell-main"><%#: Eval("CustomerName") %> <a class="mono muted" href="JobDetail.aspx?id=<%# Eval("JobId") %>"><%#: Eval("ClaimNumber") %></a></div>
+                                                <div class="cell-sub"><%#: UnclaimedNote((LABATRACK.Models.JobOrder)Container.DataItem) %></div>
+                                            </div>
+                                        </li>
+                                    </ItemTemplate>
+                                </asp:Repeater>
+                                <asp:Repeater ID="rptVoided" runat="server">
+                                    <ItemTemplate>
+                                        <li>
+                                            <span class="dot-icon" style="background:var(--danger-soft); color:var(--danger);"><%# Icons.Get("ban", "ico-sm") %></span>
+                                            <div class="grow">
+                                                <div class="cell-main"><%#: Eval("CustomerName") %> <a class="mono muted" href="JobDetail.aspx?id=<%# Eval("JobId") %>"><%#: Eval("ClaimNumber") %></a></div>
+                                                <div class="cell-sub"><%#: VoidNote((LABATRACK.Models.JobOrder)Container.DataItem) %></div>
+                                            </div>
+                                        </li>
+                                    </ItemTemplate>
+                                </asp:Repeater>
+                                <% if (Data.NeedsAttention == 0) { %><li class="muted small">Nothing needs attention.</li><% } %>
                             </ul>
                         </section>
                     </div>
@@ -168,6 +174,8 @@
         </div>
     </form>
 
+    <script src="<%= AssetUrl.Get("~/Assets/js/Sidebar.js") %>"></script>
+    <script src="<%= AssetUrl.Get("~/Assets/js/Confirm.js") %>"></script>
     <script src="<%= AssetUrl.Get("~/Assets/js/Dashboard.js") %>"></script>
 </body>
 </html>

@@ -21,7 +21,8 @@
                 </header>
 
                 <div class="content">
-                    <%-- DRAFT: sample values. Phase 1 stores these in the Settings table. --%>
+                    <asp:Literal ID="litNotice" runat="server" EnableViewState="false" />
+
                     <div class="grid grid-2" style="align-items:start;">
                         <div class="stack">
                             <section class="card">
@@ -35,20 +36,22 @@
                                 <div class="card-b form">
                                     <div class="field">
                                         <label for="txtShopName">Shop name</label>
-                                        <asp:TextBox ID="txtShopName" runat="server" Text="LabaTrack Laundry Shop" MaxLength="100" />
+                                        <asp:TextBox ID="txtShopName" runat="server" MaxLength="100" />
+                                        <asp:Label ID="lblShopNameError" runat="server" CssClass="error-text" Visible="false" EnableViewState="false" />
                                     </div>
                                     <div class="field">
                                         <label for="txtSlipHeader">Slip header</label>
-                                        <asp:TextBox ID="txtSlipHeader" runat="server" TextMode="MultiLine" Text="Salamat po! Please present this slip when claiming your laundry." />
+                                        <asp:TextBox ID="txtSlipHeader" runat="server" TextMode="MultiLine" MaxLength="400" />
+                                        <asp:Label ID="lblSlipHeaderError" runat="server" CssClass="error-text" Visible="false" EnableViewState="false" />
                                     </div>
                                     <div class="field">
                                         <label for="txtClaimFormat">Claim number format</label>
                                         <asp:TextBox ID="txtClaimFormat" runat="server" Text="LT-yyMMdd-###" ReadOnly="true" CssClass="input mono" />
-                                        <span class="hint">Example: LT-260922-003. Fixed in code by ClaimNumberGenerator (open decision 2).</span>
+                                        <span class="hint">Example: <%: ClaimExample %>. Fixed in code by ClaimNumberGenerator (open decision 2).</span>
                                     </div>
                                 </div>
                                 <div class="card-f">
-                                    <button type="button" class="btn btn-primary"><%= Icons.Get("save", "ico-sm") %>Save</button>
+                                    <button type="submit" name="action" value="shop" class="btn btn-primary"><%= Icons.Get("save", "ico-sm") %>Save</button>
                                 </div>
                             </section>
 
@@ -66,19 +69,28 @@
                                     <asp:Literal ID="litPasswordNotice" runat="server" EnableViewState="false" />
                                     <div class="field">
                                         <label for="txtCurrentPassword">Current password</label>
-                                        <asp:TextBox ID="txtCurrentPassword" runat="server" TextMode="Password" MaxLength="100" autocomplete="current-password" />
+                                        <div class="input-reveal">
+                                            <asp:TextBox ID="txtCurrentPassword" runat="server" TextMode="Password" MaxLength="100" autocomplete="current-password" />
+                                            <button type="button" class="reveal-btn" data-reveal="txtCurrentPassword" aria-pressed="false" aria-label="Show password" title="Show password"><%= Icons.Get("eye", "ico-sm when-hidden") %><%= Icons.Get("eye-off", "ico-sm when-shown") %></button>
+                                        </div>
                                         <asp:Label ID="lblCurrentError" runat="server" CssClass="error-text" Visible="false" EnableViewState="false" />
                                     </div>
                                     <div class="form-row">
                                         <div class="field">
                                             <label for="txtNewPassword">New password</label>
-                                            <asp:TextBox ID="txtNewPassword" runat="server" TextMode="Password" MaxLength="100" autocomplete="new-password" />
+                                            <div class="input-reveal">
+                                                <asp:TextBox ID="txtNewPassword" runat="server" TextMode="Password" MaxLength="100" autocomplete="new-password" />
+                                                <button type="button" class="reveal-btn" data-reveal="txtNewPassword" aria-pressed="false" aria-label="Show password" title="Show password"><%= Icons.Get("eye", "ico-sm when-hidden") %><%= Icons.Get("eye-off", "ico-sm when-shown") %></button>
+                                            </div>
                                             <asp:Label ID="lblNewError" runat="server" CssClass="error-text" Visible="false" EnableViewState="false" />
                                             <span class="hint">At least 8 characters, and not the same as the current one.</span>
                                         </div>
                                         <div class="field">
                                             <label for="txtConfirmPassword">Confirm new password</label>
-                                            <asp:TextBox ID="txtConfirmPassword" runat="server" TextMode="Password" MaxLength="100" autocomplete="new-password" />
+                                            <div class="input-reveal">
+                                                <asp:TextBox ID="txtConfirmPassword" runat="server" TextMode="Password" MaxLength="100" autocomplete="new-password" />
+                                                <button type="button" class="reveal-btn" data-reveal="txtConfirmPassword" aria-pressed="false" aria-label="Show password" title="Show password"><%= Icons.Get("eye", "ico-sm when-hidden") %><%= Icons.Get("eye-off", "ico-sm when-shown") %></button>
+                                            </div>
                                             <asp:Label ID="lblConfirmError" runat="server" CssClass="error-text" Visible="false" EnableViewState="false" />
                                         </div>
                                     </div>
@@ -102,25 +114,28 @@
                                     <div class="form-row">
                                         <div class="field">
                                             <label for="txtTurnaroundHours">Default turnaround (hours)</label>
-                                            <asp:TextBox ID="txtTurnaroundHours" runat="server" TextMode="Number" Text="24" />
+                                            <asp:TextBox ID="txtTurnaroundHours" runat="server" TextMode="Number" />
+                                            <asp:Label ID="lblTurnaroundError" runat="server" CssClass="error-text" Visible="false" EnableViewState="false" />
                                         </div>
                                         <div class="field">
                                             <label for="txtUnclaimedDays">Flag unclaimed after (days)</label>
-                                            <asp:TextBox ID="txtUnclaimedDays" runat="server" TextMode="Number" Text="7" />
+                                            <asp:TextBox ID="txtUnclaimedDays" runat="server" TextMode="Number" />
+                                            <asp:Label ID="lblUnclaimedError" runat="server" CssClass="error-text" Visible="false" EnableViewState="false" />
                                         </div>
                                     </div>
                                     <div class="field">
                                         <span class="label">A failed inspection may return the load to</span>
                                         <div class="grid grid-3" style="gap:10px;">
-                                            <label class="check"><input type="checkbox" checked="checked" />Washing</label>
-                                            <label class="check"><input type="checkbox" checked="checked" />Drying</label>
-                                            <label class="check"><input type="checkbox" checked="checked" />Folding</label>
+                                            <label class="check"><input type="checkbox" name="rework" value="W"<%= ReworkChecked('W') %> />Washing</label>
+                                            <label class="check"><input type="checkbox" name="rework" value="D"<%= ReworkChecked('D') %> />Drying</label>
+                                            <label class="check"><input type="checkbox" name="rework" value="F"<%= ReworkChecked('F') %> />Folding</label>
                                         </div>
-                                        <span class="hint">Open decision 5. Default: any of the three.</span>
+                                        <asp:Label ID="lblReworkError" runat="server" CssClass="error-text" Visible="false" EnableViewState="false" />
+                                        <span class="hint">Open decision 5. Default: any of the three. Only the stages on the job's own route are ever offered.</span>
                                     </div>
                                 </div>
                                 <div class="card-f">
-                                    <button type="button" class="btn btn-primary"><%= Icons.Get("save", "ico-sm") %>Save</button>
+                                    <button type="submit" name="action" value="timing" class="btn btn-primary"><%= Icons.Get("save", "ico-sm") %>Save</button>
                                 </div>
                             </section>
 
@@ -130,19 +145,18 @@
                                         <h2>Email notifications</h2>
                                         <div class="sub">Drop-off and ready-for-pick-up emails</div>
                                     </div>
-                                    <span class="pill pill-warn">Not configured</span>
+                                    <% if (EmailReady) { %><span class="pill pill-ok">Configured</span><% } else { %><span class="pill pill-warn">Not configured</span><% } %>
                                 </div>
                                 <div class="card-b">
                                     <div class="notice notice-info">
                                         <%= Icons.Get("mail", "ico-sm") %>
-                                        <span>SMTP settings live in an external config file that is kept out of source control, so they are not editable here.</span>
+                                        <span>SMTP settings live in an external config file (Secrets.config) that is kept out of source control, so they are not editable here.<%= EmailReady ? "" : " Until it is set up, every email is logged as Failed and can be resent from the job page later." %></span>
                                     </div>
                                 </div>
                             </section>
 
                             <%-- Where "Forgot password?" on the owner login sends the reset link. Only the owner
-                                 account has one; staff who forget ask the owner. DRAFT: sample value, Phase 5
-                                 stores it on the owner's Users row. --%>
+                                 account has one; staff who forget ask the owner. --%>
                             <section class="card">
                                 <div class="card-h">
                                     <div>
@@ -154,12 +168,13 @@
                                 <div class="card-b form">
                                     <div class="field">
                                         <label for="txtRecoveryEmail">Recovery email</label>
-                                        <asp:TextBox ID="txtRecoveryEmail" runat="server" TextMode="Email" Text="labatrack.owner@example.com" MaxLength="150" autocomplete="email" />
+                                        <asp:TextBox ID="txtRecoveryEmail" runat="server" TextMode="Email" MaxLength="150" autocomplete="email" />
+                                        <asp:Label ID="lblRecoveryError" runat="server" CssClass="error-text" Visible="false" EnableViewState="false" />
                                         <span class="hint">Use an address only you can open. The link works once, within 30 minutes, and needs the email (SMTP) settings to be set up.</span>
                                     </div>
                                 </div>
                                 <div class="card-f">
-                                    <button type="button" class="btn btn-primary"><%= Icons.Get("save", "ico-sm") %>Save</button>
+                                    <button type="submit" name="action" value="recovery" class="btn btn-primary"><%= Icons.Get("save", "ico-sm") %>Save</button>
                                 </div>
                             </section>
                         </div>
@@ -169,6 +184,8 @@
         </div>
     </form>
 
+    <script src="<%= AssetUrl.Get("~/Assets/js/Sidebar.js") %>"></script>
+    <script src="<%= AssetUrl.Get("~/Assets/js/ShowPassword.js") %>"></script>
     <script src="<%= AssetUrl.Get("~/Assets/js/Settings.js") %>"></script>
 </body>
 </html>

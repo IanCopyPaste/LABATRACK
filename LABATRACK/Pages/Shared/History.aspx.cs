@@ -1,15 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.Linq;
 using System.Web;
-using LABATRACK.Helpers;
+using LABATRACK.DataAccess;
+using LABATRACK.Models;
 using LABATRACK.Security;
+using LABATRACK.Services;
 
 namespace LABATRACK.Pages.Shared
 {
-    // DRAFT: past and current jobs from Helpers/SampleData. Phase 4 replaces SampleData with
-    // a repository search (parameterized, filtered in SQL) that returns the same rows.
+    // Past and current jobs, searched in SQL (usp_JobOrders_Search) one page at a time.
     //
     // The filters live in the query string, not in ViewState: Search redirects to
     // History.aspx?q=...&status=..., so a search can be bookmarked, the Back button works,
@@ -17,6 +17,7 @@ namespace LABATRACK.Pages.Shared
     public partial class History : BasePage
     {
         private const int PageSize = 10;
+        private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
         protected override string ActiveNav
         {
@@ -27,10 +28,6 @@ namespace LABATRACK.Pages.Shared
         {
             get { return "History.css"; }
         }
-
-        // DRAFT: Phase 2 takes the role from the signed-in account. Staff may search past jobs,
-        // but voided jobs, who did what, and sales totals are the owner's (CLAUDE.md, Roles).
-        protected bool IsOwner { get { return SampleData.IsOwner(Session); } }
 
         protected int ResultCount { get; private set; }
         protected decimal ResultSales { get; private set; }
@@ -45,31 +42,44 @@ namespace LABATRACK.Pages.Shared
             DateTime? from = ParseDate(Request.QueryString["from"]);
             DateTime? to = ParseDate(Request.QueryString["to"]);
 
-            // Staff never see voided jobs, even by typing status=Voided into the address bar.
+            // Staff may search past jobs, but voided jobs, who did what, and sales totals are the
+            // owner's (CLAUDE.md, Roles). Staff never see voided jobs, even by typing status=Voided.
             if (!IsOwner && status == "Voided") status = "";
+            if (status != "Active" && status != "Claimed" && status != "Voided") status = "";
 
             if (!IsPostBack)
             {
                 txtSearch.Text = q;
-                ddlStatus.SelectedValue = ddlStatus.Items.FindByValue(status) != null ? status : "";
-                txtFrom.Text = from.HasValue ? from.Value.ToString("yyyy-MM-dd") : "";
-                txtTo.Text = to.HasValue ? to.Value.ToString("yyyy-MM-dd") : "";
                 if (!IsOwner) ddlStatus.Items.Remove(ddlStatus.Items.FindByValue("Voided"));
+                ddlStatus.SelectedValue = ddlStatus.Items.FindByValue(status) != null ? status : "";
+                txtFrom.Text = from.HasValue ? from.Value.ToString("yyyy-MM-dd", Inv) : "";
+                txtTo.Text = to.HasValue ? to.Value.ToString("yyyy-MM-dd", Inv) : "";
             }
 
             HasFilter = q != "" || status != "" || from.HasValue || to.HasValue;
 
-            var rows = Search(q, status, from, to);
-            ResultCount = rows.Count;
-            ResultSales = rows.Where(r => r.Status != "Voided").Sum(r => r.Total);
+            // One box finds a claim number, a name, or a contact number typed with or without spaces.
+            string text = q == "" ? null : q;
+            string digits = CustomerService.Digits(q);
+            if (digits.Length < 4) digits = null;
+            string statusFilter = status == "" ? null : status;
+            // The dates filter on drop-off day, and "to" includes the whole of that day.
+            DateTime? toExclusive = to.HasValue ? to.Value.AddDays(1) : (DateTime?)null;
 
-            PageCount = Math.Max(1, (int)Math.Ceiling(rows.Count / (double)PageSize));
+            int count;
+            decimal sales;
+            JobOrderRepository.SearchSummary(text, digits, statusFilter, from, toExclusive, IsOwner, out count, out sales);
+            ResultCount = count;
+            ResultSales = sales;
+
+            PageCount = Math.Max(1, (int)Math.Ceiling(count / (double)PageSize));
             int page;
             PageNumber = int.TryParse(Request.QueryString["page"], out page) ? Math.Min(Math.Max(page, 1), PageCount) : 1;
 
-            rptJobs.DataSource = rows.Skip((PageNumber - 1) * PageSize).Take(PageSize);
+            rptJobs.DataSource = JobOrderRepository.Search(text, digits, statusFilter, from, toExclusive, IsOwner,
+                                                          (PageNumber - 1) * PageSize, PageSize);
             rptJobs.DataBind();
-            pnlEmpty.Visible = rows.Count == 0;
+            pnlEmpty.Visible = count == 0;
         }
 
         protected void btnSearch_Click(object sender, EventArgs e)
@@ -78,38 +88,10 @@ namespace LABATRACK.Pages.Shared
             Context.ApplicationInstance.CompleteRequest();
         }
 
-        private List<HistoryRow> Search(string q, string status, DateTime? from, DateTime? to)
-        {
-            var customers = SampleData.Customers(Session).ToDictionary(c => c.Id);
-            string term = q.ToLowerInvariant();
-            string digits = SampleData.Digits(q);
-
-            var rows = SampleData.Jobs()
-                .Where(j => IsOwner || j.Status != "Voided")
-                .Select(j => new HistoryRow(j, customers[j.CustomerId]));
-
-            // One box finds a claim number, a name, or a contact number typed with or without spaces.
-            if (term != "")
-                rows = rows.Where(r => r.Claim.ToLowerInvariant().Contains(term)
-                                    || r.Customer.ToLowerInvariant().Contains(term)
-                                    || (digits.Length >= 4 && SampleData.Digits(r.Contact).Contains(digits)));
-
-            if (status == "Active")
-                rows = rows.Where(r => r.Status != "Claimed" && r.Status != "Voided");
-            else if (status == "Claimed" || status == "Voided")
-                rows = rows.Where(r => r.Status == status);
-
-            // The dates filter on drop-off day, and "to" includes the whole of that day.
-            if (from.HasValue) rows = rows.Where(r => r.DroppedOff >= from.Value);
-            if (to.HasValue) rows = rows.Where(r => r.DroppedOff < to.Value.AddDays(1));
-
-            return rows.OrderByDescending(r => r.DroppedOff).ToList();
-        }
-
         private static DateTime? ParseDate(string value)
         {
             DateTime d;
-            return DateTime.TryParseExact(value, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out d)
+            return DateTime.TryParseExact(value, "yyyy-MM-dd", Inv, DateTimeStyles.None, out d)
                 ? d : (DateTime?)null;
         }
 
@@ -132,17 +114,23 @@ namespace LABATRACK.Pages.Shared
             return "History.aspx" + (parts.Count > 0 ? "?" + string.Join("&", parts) : "");
         }
 
-        // DRAFT: JobDetail has no job id yet, only preview stages, so View opens the preview for the
-        // same stage. Phase 4 links to JobDetail.aspx?id=<JobId> instead.
-        protected static string DetailLink(string status)
+        /// <summary>The second line under the status: when a job was closed, or that it is still in the shop.</summary>
+        protected static string StatusNote(JobOrder job)
         {
-            switch (status)
-            {
-                case "Queued": case "Washing": case "Inspection": case "Claimed": case "Voided":
-                    return "JobDetail.aspx?stage=" + status;
-                default:
-                    return "JobDetail.aspx";
-            }
+            if (job.CurrentStatus == StatusService.Claimed) return "Claimed " + When(job.StatusSince);
+            if (job.CurrentStatus == StatusService.Voided) return "Voided " + When(job.StatusSince);
+            return "In the shop";
+        }
+
+        /// <summary>Owner only: who handed the load over or voided it, and why it was voided.</summary>
+        protected static string ClosedByNote(JobOrder job)
+        {
+            if (StatusService.IsInShop(job.CurrentStatus)) return "";
+            bool voided = job.CurrentStatus == StatusService.Voided;
+            string html = "<div class=\"muted\">" + (voided ? "Voided" : "Handed over") + " by " + HttpUtility.HtmlEncode(job.StatusBy) + "</div>";
+            if (voided && !string.IsNullOrEmpty(job.StatusReason))
+                html += "<div class=\"void-reason\">&ldquo;" + HttpUtility.HtmlEncode(job.StatusReason) + "&rdquo;</div>";
+            return html;
         }
 
         protected static string StageCss(string stage)
@@ -162,48 +150,12 @@ namespace LABATRACK.Pages.Shared
 
         protected static string When(DateTime at)
         {
-            return (at.Date == SampleData.Now.Date ? "Today" : at.ToString("MMM d")) + ", " + at.ToString("h:mm tt");
+            return (at.Date == DateTime.Today ? "Today" : at.ToString("MMM d", Inv)) + ", " + at.ToString("h:mm tt", Inv);
         }
 
         protected static string Peso(decimal amount)
         {
-            return "₱" + amount.ToString("N2");
-        }
-
-        public class HistoryRow
-        {
-            public string Claim { get; private set; }
-            public string Customer { get; private set; }
-            public string Contact { get; private set; }
-            public string Service { get; private set; }
-            public decimal WeightKg { get; private set; }
-            public decimal Total { get; private set; }
-            public string Method { get; private set; }
-            public DateTime DroppedOff { get; private set; }
-            public string CreatedBy { get; private set; }
-            public string Status { get; private set; }
-            public DateTime? ClosedAt { get; private set; }
-            public string ClosedBy { get; private set; }
-            public string VoidReason { get; private set; }
-
-            public HistoryRow(SampleJob job, SampleCustomer customer)
-            {
-                Claim = job.Claim; Service = job.Service; WeightKg = job.WeightKg; Total = job.Total;
-                Method = job.Method; DroppedOff = job.DroppedOff; CreatedBy = job.CreatedBy; Status = job.Status;
-                ClosedAt = job.ClosedAt; ClosedBy = job.ClosedBy; VoidReason = job.VoidReason;
-                Customer = customer.Name; Contact = customer.Contact;
-            }
-
-            /// <summary>The second line under the status: when a job was closed, or that it is still in the shop.</summary>
-            public string StatusNote
-            {
-                get
-                {
-                    if (Status == "Claimed") return "Claimed " + When(ClosedAt.Value);
-                    if (Status == "Voided") return "Voided " + When(ClosedAt.Value);
-                    return "In the shop";
-                }
-            }
+            return "₱" + amount.ToString("N2", Inv);
         }
     }
 }

@@ -40,6 +40,16 @@ namespace LABATRACK.Admin
         protected global::System.Web.UI.WebControls.Label lblError;
 
         /// <summary>
+        /// pnlStaffSignedIn control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Panel pnlStaffSignedIn;
+
+        /// <summary>
+        /// litSignedInAs control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Literal litSignedInAs;
+
+        /// <summary>
         /// txtUsername control.
         /// </summary>
         protected global::System.Web.UI.WebControls.TextBox txtUsername;

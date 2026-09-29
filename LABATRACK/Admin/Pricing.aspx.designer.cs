@@ -25,14 +25,34 @@ namespace LABATRACK.Admin
         protected global::System.Web.UI.WebControls.Literal litNav;
 
         /// <summary>
+        /// litNotice control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Literal litNotice;
+
+        /// <summary>
         /// rptServices control.
         /// </summary>
         protected global::System.Web.UI.WebControls.Repeater rptServices;
 
         /// <summary>
+        /// rptServiceAddOns control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Repeater rptServiceAddOns;
+
+        /// <summary>
+        /// rptProducts control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Repeater rptProducts;
+
+        /// <summary>
         /// txtMinimumCharge control.
         /// </summary>
         protected global::System.Web.UI.WebControls.TextBox txtMinimumCharge;
+
+        /// <summary>
+        /// lblMinimumError control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Label lblMinimumError;
 
         /// <summary>
         /// ddlRounding control.
@@ -43,5 +63,10 @@ namespace LABATRACK.Admin
         /// txtMaxWeight control.
         /// </summary>
         protected global::System.Web.UI.WebControls.TextBox txtMaxWeight;
+
+        /// <summary>
+        /// lblMaxWeightError control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Label lblMaxWeightError;
     }
 }

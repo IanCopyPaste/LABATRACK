@@ -23,5 +23,25 @@ namespace LABATRACK.Admin
         /// litNav control.
         /// </summary>
         protected global::System.Web.UI.WebControls.Literal litNav;
+
+        /// <summary>
+        /// rptActive control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Repeater rptActive;
+
+        /// <summary>
+        /// rptUnclaimed control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Repeater rptUnclaimed;
+
+        /// <summary>
+        /// rptVoided control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Repeater rptVoided;
+
+        /// <summary>
+        /// rptClaimed control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Repeater rptClaimed;
     }
 }

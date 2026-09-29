@@ -47,13 +47,21 @@
                             <%= Icons.Get("circle-alert", "ico-sm") %>
                             <asp:Label ID="lblError" runat="server" Text="Invalid username or password" />
                         </asp:Panel>
+                        <%-- A staff account that opened an owner page is sent here; it says so plainly. --%>
+                        <asp:Panel ID="pnlStaffSignedIn" runat="server" Visible="false" CssClass="notice notice-warn">
+                            <%= Icons.Get("lock", "ico-sm") %>
+                            <span>That page is for the owner. You are signed in as <strong><asp:Literal ID="litSignedInAs" runat="server" /></strong> (staff). Sign in with the owner account to open it.</span>
+                        </asp:Panel>
                         <div class="field">
                             <label for="txtUsername">Username</label>
                             <asp:TextBox ID="txtUsername" runat="server" MaxLength="50" autocomplete="username" />
                         </div>
                         <div class="field">
                             <label for="txtPassword">Password</label>
-                            <asp:TextBox ID="txtPassword" runat="server" TextMode="Password" MaxLength="100" autocomplete="current-password" />
+                            <div class="input-reveal">
+                                <asp:TextBox ID="txtPassword" runat="server" TextMode="Password" MaxLength="100" autocomplete="current-password" />
+                                <button type="button" class="reveal-btn" data-reveal="txtPassword" aria-pressed="false" aria-label="Show password" title="Show password"><%= Icons.Get("eye", "ico-sm when-hidden") %><%= Icons.Get("eye-off", "ico-sm when-shown") %></button>
+                            </div>
                             <a class="auth-aside" href="Login.aspx?forgot=1">Forgot password?</a>
                         </div>
                         <asp:Button ID="btnSignIn" runat="server" Text="Sign in" CssClass="btn btn-primary btn-block" OnClick="btnSignIn_Click" />
@@ -74,8 +82,7 @@
                     <div class="form auth-form">
                         <asp:Panel ID="pnlSent" runat="server" Visible="false" CssClass="notice notice-info">
                             <%= Icons.Get("mail", "ico-sm") %>
-                            <span>If that is the owner account, a reset link is on its way to its recovery email. The link works once, within 30 minutes.
-                                <span class="muted" style="display:block; margin-top:6px;">Draft: no email is sent yet. <a href="Login.aspx?token=draft">Open the link it would contain</a>.</span></span>
+                            <span>If that is the owner account, a reset link is on its way to its recovery email. The link works once, within 30 minutes.</span>
                         </asp:Panel>
                         <asp:Panel ID="pnlForgotForm" runat="server" CssClass="form">
                             <p class="small muted">Enter your owner username. A link to choose a new password is sent to the recovery email set in Settings.</p>
@@ -104,13 +111,19 @@
                     <div class="form auth-form">
                         <div class="field">
                             <label for="txtResetNew">New password</label>
-                            <asp:TextBox ID="txtResetNew" runat="server" TextMode="Password" MaxLength="100" autocomplete="new-password" />
+                            <div class="input-reveal">
+                                <asp:TextBox ID="txtResetNew" runat="server" TextMode="Password" MaxLength="100" autocomplete="new-password" />
+                                <button type="button" class="reveal-btn" data-reveal="txtResetNew" aria-pressed="false" aria-label="Show password" title="Show password"><%= Icons.Get("eye", "ico-sm when-hidden") %><%= Icons.Get("eye-off", "ico-sm when-shown") %></button>
+                            </div>
                             <asp:Label ID="lblResetNewError" runat="server" CssClass="error-text" Visible="false" EnableViewState="false" />
                             <span class="hint">At least 8 characters.</span>
                         </div>
                         <div class="field">
                             <label for="txtResetConfirm">Confirm new password</label>
-                            <asp:TextBox ID="txtResetConfirm" runat="server" TextMode="Password" MaxLength="100" autocomplete="new-password" />
+                            <div class="input-reveal">
+                                <asp:TextBox ID="txtResetConfirm" runat="server" TextMode="Password" MaxLength="100" autocomplete="new-password" />
+                                <button type="button" class="reveal-btn" data-reveal="txtResetConfirm" aria-pressed="false" aria-label="Show password" title="Show password"><%= Icons.Get("eye", "ico-sm when-hidden") %><%= Icons.Get("eye-off", "ico-sm when-shown") %></button>
+                            </div>
                             <asp:Label ID="lblResetConfirmError" runat="server" CssClass="error-text" Visible="false" EnableViewState="false" />
                         </div>
                         <asp:Button ID="btnSetPassword" runat="server" Text="Set new password" CssClass="btn btn-primary btn-block" OnClick="btnSetPassword_Click" />
@@ -142,5 +155,7 @@
             <p class="auth-note">Quezon City University &middot; IPT102</p>
         </div>
     </form>
+
+    <script src="<%= AssetUrl.Get("~/Assets/js/ShowPassword.js") %>"></script>
 </body>
 </html>

@@ -1,15 +1,20 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
+using System.Web;
+using LABATRACK.DataAccess;
 using LABATRACK.Helpers;
+using LABATRACK.Models;
 using LABATRACK.Security;
+using LABATRACK.Services;
 
 namespace LABATRACK.Pages.Shared
 {
-    // DRAFT: design only, built from sample data so every stage can be previewed
-    // with ?stage=Queued, Washing, Inspection, Ready, Claimed or Voided.
-    // Phase 4 replaces the sample lists with JobStatusHistory and Payments rows,
-    // and the buttons call StatusService.
+    // One job (?id=<JobId>): its customer and load, the stage stepper and the history it is read
+    // from, the payments, the emails, and the one action for the stage it is in now. Every action
+    // goes through StatusService (or EmailService for a resend), then comes back here with
+    // ?done=... (post, then redirect), so a refresh never repeats it.
     public partial class JobDetail : BasePage
     {
         protected override string PageStyleSheet
@@ -17,161 +22,288 @@ namespace LABATRACK.Pages.Shared
             get { return "JobDetail.css"; }
         }
 
-        // DRAFT: the sample job is a Wash-Dry-Fold load, so its route has all three work stages.
-        // Phase 4 reads the stage flags copied onto the job from its service at creation.
-        private const string SampleRoute = "WDF";
+        private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
-        // The job's route: Queued, the work stages its service includes (always in the order
-        // Washing, Drying, Folding), then Inspection, Ready for pick-up and Claimed. The stepper,
-        // the next step, and the rework choices all come from this, so a Wash-Dry job never
-        // shows Folding anywhere.
-        private static List<string> RouteSteps(string route)
-        {
-            var steps = new List<string> { "Queued" };
-            steps.AddRange(WorkStages(route));
-            steps.AddRange(new[] { "Inspection", "Ready for pick-up", "Claimed" });
-            return steps;
-        }
-
-        private static List<string> WorkStages(string route)
-        {
-            var work = new List<string>();
-            if (route.Contains("W")) work.Add("Washing");
-            if (route.Contains("D")) work.Add("Drying");
-            if (route.Contains("F")) work.Add("Folding");
-            return work;
-        }
-
-        private List<string> Stages;
-
-        // Sample JobStatusHistory rows for LT-260921-004, including one failed inspection.
-        private static readonly List<HistoryRow> SampleHistory = new List<HistoryRow>
-        {
-            new HistoryRow("",                  "Queued",            "Sep 21, 9:12 AM",  "jcruz",   ""),
-            new HistoryRow("Queued",            "Washing",           "Sep 21, 9:40 AM",  "jcruz",   ""),
-            new HistoryRow("Washing",           "Drying",            "Sep 21, 10:35 AM", "jcruz",   ""),
-            new HistoryRow("Drying",            "Folding",           "Sep 21, 11:50 AM", "arivera", ""),
-            new HistoryRow("Folding",           "Inspection",        "Sep 21, 12:30 PM", "arivera", ""),
-            new HistoryRow("Inspection",        "Folding",           "Sep 21, 12:45 PM", "arivera", "Shirts creased, refold neatly"),
-            new HistoryRow("Folding",           "Inspection",        "Sep 21, 1:20 PM",  "arivera", ""),
-            new HistoryRow("Inspection",        "Ready for pick-up", "Sep 21, 1:35 PM",  "arivera", ""),
-            new HistoryRow("Ready for pick-up", "Claimed",           "Sep 22, 4:10 PM",  "jcruz",   ""),
-        };
-
-        // DRAFT: the role comes from the draft sign-in until Phase 2 adds AuthService.
-        protected bool IsOwner { get { return SampleData.IsOwner(Session); } }
-        protected string CurrentStage { get; private set; }
-        protected string NextStage { get; private set; }
+        protected JobOrder Job { get; private set; }
         protected bool IsVoided { get; private set; }
-        protected decimal Total = 290.00m;
-        protected decimal CashReceived = 500.00m;
-        protected decimal Change { get { return CashReceived - Total; } }   // change = cash received - total
-        protected bool ReadyEmailSent { get { return CurrentStage == "Ready for pick-up" || CurrentStage == "Claimed"; } }
+        protected bool InShop { get; private set; }
+        protected string NextStage { get; private set; }
+        protected bool MinimumApplied { get; private set; }
+        protected bool ReadyReached { get; private set; }
+        protected decimal? CashReceived { get; private set; }
+        protected decimal Change { get; private set; }
+        protected string RefundNote { get; private set; }
+        protected string BackUrl { get; private set; }
+        protected string BackText { get; private set; }
+
+        // The questions Confirm.js asks before a button moves the job (Helpers/MoveConfirm.cs) or voids it.
+        protected string MoveTitle { get { return NextStage == null ? "" : MoveConfirm.Title(Job); } }
+        protected string MoveText { get { return NextStage == null ? "" : MoveConfirm.Text(Job); } }
+        protected string VoidText
+        {
+            get
+            {
+                return Job.CustomerName + " · " + Job.ServiceName + "\n\nThe job is cancelled and the "
+                     + Peso(Job.AmountPaid) + " paid is refunded (" + (Job.PaymentMethod == Payment.Cash ? "in cash" : "by e-wallet")
+                     + "). A voided job can't be undone; it stays in history with the reason.";
+            }
+        }
+
+        private int jobId;
 
         protected void Page_Load(object sender, EventArgs e)
         {
-            CurrentStage = PickPreviewStage(Request.QueryString["stage"]);
-            IsVoided = CurrentStage == "Voided";
-            Stages = RouteSteps(SampleRoute);
-
-            var history = BuildHistory();
-            var payments = BuildPayments();
-
-            int current = Stages.IndexOf(CurrentStage);
-            NextStage = current >= 0 && current < Stages.Count - 1 ? Stages[current + 1] : "";
-
-            // A failed inspection can only go back to a work stage this job actually has.
-            if (!IsPostBack)
+            if (!int.TryParse(Request.QueryString["id"], out jobId) || JobOrderRepository.GetById(jobId) == null)
             {
-                ddlReworkStage.Items.Clear();
-                foreach (string stage in WorkStages(SampleRoute))
-                    ddlReworkStage.Items.Add(stage);
-                ddlReworkStage.SelectedIndex = ddlReworkStage.Items.Count - 1;
+                Response.Redirect("History.aspx", true);
+                return;
             }
 
-            rptStepper.DataSource = BuildSteps(history, current);
+            if (IsPostBack)
+                HandleAction();
+            else
+                ShowDoneNotice();
+
+            // Read afresh after any action, so the page shows what is saved now.
+            Bind();
+        }
+
+        // ------------------------------------------------------------ Actions
+
+        // The buttons are plain submit buttons named action. The status the page showed travels in
+        // hfShownStatus, and StatusService refuses the move if the job is no longer in it.
+        private void HandleAction()
+        {
+            string shown = hfShownStatus.Value;
+            int userId = CurrentUser.UserId;
+            try
+            {
+                switch (Request.Form["action"])
+                {
+                    case "advance":
+                        StatusService.Advance(jobId, shown, userId);
+                        Done("moved");
+                        break;
+                    case "rework":
+                        StatusService.SendBack(jobId, ddlReworkStage.SelectedValue, txtReworkReason.Text, userId);
+                        Done("rework");
+                        break;
+                    case "void":
+                        StatusService.Void(jobId, txtVoidReason.Text, userId);
+                        Done("voided");
+                        break;
+                    case "resend-dropoff":
+                        CheckStillInShop();
+                        EmailService.SendDropOff(jobId, userId, true);
+                        Done("resent");
+                        break;
+                    case "resend-ready":
+                        CheckStillInShop();
+                        EmailService.SendReady(jobId, userId, true);
+                        Done("resent");
+                        break;
+                }
+            }
+            catch (BusinessRuleException ex)
+            {
+                ShowNotice("warn", ex.Message);
+            }
+        }
+
+        // Emails are resent only while the load is still in the shop; after that there is nothing to tell.
+        private void CheckStillInShop()
+        {
+            if (!StatusService.IsInShop(JobOrderRepository.GetById(jobId).CurrentStatus))
+                throw new BusinessRuleException("This job is closed, so its emails are not sent again.");
+        }
+
+        private void Done(string what)
+        {
+            Response.Redirect("JobDetail.aspx?id=" + jobId + "&done=" + what, false);
+            Context.ApplicationInstance.CompleteRequest();
+        }
+
+        // ------------------------------------------------------------ Showing the job
+
+        private void Bind()
+        {
+            Job = JobOrderRepository.GetById(jobId);
+            IsVoided = Job.CurrentStatus == StatusService.Voided;
+            InShop = StatusService.IsInShop(Job.CurrentStatus);
+            NextStage = StatusService.NextStage(Job);
+            MinimumApplied = PricingService.Quote(Job.WeightKg, Job.RatePerKgAtCreation, Job.MinimumChargeAtCreation,
+                                                  Job.RoundingIncrementKgAtCreation, null).MinimumApplied;
+            hfShownStatus.Value = Job.CurrentStatus;
+            Title = "Job " + Job.ClaimNumber + " · LabaTrack";
+            BackUrl = ResolveUrl(IsOwner ? "~/Admin/Dashboard.aspx" : "~/Pages/Shared/Dashboard.aspx");
+            BackText = IsOwner ? "Back to dashboard" : "Back to job board";
+
+            List<StatusChange> history = StatusHistoryRepository.GetByJob(jobId);
+            ReadyReached = history.Any(h => h.ToStatus == StatusService.Ready);
+            rptStepper.DataSource = BuildSteps(history);
             rptStepper.DataBind();
             rptHistory.DataSource = history.AsEnumerable().Reverse();   // newest first
             rptHistory.DataBind();
+
+            rptLines.DataSource = JobOrderRepository.GetAddOns(jobId);
+            rptLines.DataBind();
+
+            List<Payment> payments = PaymentRepository.GetByJob(jobId);
             rptPayments.DataSource = payments;
             rptPayments.DataBind();
+            Payment dropOff = payments.FirstOrDefault(p => p.Kind == Payment.DropOff);
+            if (dropOff != null && dropOff.CashReceived.HasValue)
+            {
+                CashReceived = dropOff.CashReceived;
+                Change = dropOff.CashReceived.Value - dropOff.Amount;   // change = cash received - total
+            }
+            RefundNote = BuildRefundNote(payments);
+
+            rptEmails.DataSource = NotificationRepository.GetByJob(jobId);
+            rptEmails.DataBind();
 
             // Only the current stage gets an action.
-            pnlQueued.Visible = CurrentStage == "Queued";
-            pnlAdvance.Visible = WorkStages(SampleRoute).Contains(CurrentStage);
-            pnlInspection.Visible = CurrentStage == "Inspection";
-            pnlReady.Visible = CurrentStage == "Ready for pick-up";
-            pnlClosed.Visible = CurrentStage == "Claimed" || IsVoided;
-        }
+            string status = Job.CurrentStatus;
+            pnlQueued.Visible = status == StatusService.Queued;
+            pnlAdvance.Visible = StatusService.WorkStages(Job).Contains(status);
+            pnlInspection.Visible = status == StatusService.Inspection;
+            pnlReady.Visible = status == StatusService.Ready;
+            pnlClosed.Visible = !InShop;
 
-        private static string PickPreviewStage(string requested)
-        {
-            switch (requested)
+            // A failed inspection can only go back to a work stage this job actually has.
+            if (pnlInspection.Visible && ddlReworkStage.Items.Count == 0)
             {
-                case "Queued": return "Queued";
-                case "Washing": return "Washing";
-                case "Inspection": return "Inspection";
-                case "Claimed": return "Claimed";
-                case "Voided": return "Voided";
-                default: return "Ready for pick-up";
+                foreach (string stage in StatusService.ReworkChoices(Job, SettingsRepository.Get()))
+                    ddlReworkStage.Items.Add(stage);
+                ddlReworkStage.SelectedIndex = ddlReworkStage.Items.Count - 1;
             }
         }
 
-        private List<HistoryRow> BuildHistory()
+        /// <summary>
+        /// The stepper: only the stages on this job's route. A completed stage shows when it was
+        /// last entered and by whom (a stage done twice after a rework shows the later time), the
+        /// current one is highlighted, future ones are grey. Voided is shown as its own red banner,
+        /// not as a step.
+        /// </summary>
+        private List<StepItem> BuildSteps(List<StatusChange> history)
         {
-            if (IsVoided)
-                return new List<HistoryRow>
-                {
-                    SampleHistory[0],
-                    new HistoryRow("Queued", "Voided", "Sep 21, 9:20 AM", "jcruz", "Customer changed mind, took the load home"),
-                };
+            List<string> route = StatusService.Route(Job);
+            int current = route.IndexOf(Job.CurrentStatus);
+            bool claimed = Job.CurrentStatus == StatusService.Claimed;
 
-            // Everything up to the latest time the job entered the preview stage.
-            int last = SampleHistory.FindLastIndex(h => h.To == CurrentStage);
-            return SampleHistory.Take(last + 1).ToList();
-        }
-
-        private List<PaymentRow> BuildPayments()
-        {
-            var list = new List<PaymentRow> { new PaymentRow("Sep 21, 9:12 AM", "Cash", 290.00m, "jcruz", false) };
-            if (IsVoided)
-                list.Add(new PaymentRow("Sep 21, 9:20 AM", "Cash", -290.00m, "jcruz", true));
-            return list;
-        }
-
-        private List<StepItem> BuildSteps(List<HistoryRow> history, int current)
-        {
             var steps = new List<StepItem>();
-            for (int i = 0; i < Stages.Count; i++)
+            for (int i = 0; i < route.Count; i++)
             {
-                var step = new StepItem { Name = Stages[i], Number = i + 1 };
-                var entered = history.LastOrDefault(h => h.To == Stages[i]);
-
+                var step = new StepItem { Name = route[i], Number = i + 1 };
                 if (IsVoided)
                     step.State = i == 0 ? "done" : "future";
-                else if (i < current || CurrentStage == "Claimed")
+                else if (i < current || claimed)
                     step.State = "done";
                 else if (i == current)
                     step.State = "current";
                 else
                     step.State = "future";
 
+                StatusChange entered = history.LastOrDefault(h => h.ToStatus == route[i]);
                 if (entered != null && step.State != "future")
                 {
-                    step.When = entered.At;
-                    step.By = entered.By;
+                    step.When = When(entered.ChangedAt);
+                    step.By = entered.ChangedBy;
                 }
                 steps.Add(step);
             }
             return steps;
         }
 
-        protected static string Peso(decimal amount)
+        private static string BuildRefundNote(List<Payment> payments)
         {
-            return (amount < 0 ? "−₱" : "₱") + Math.Abs(amount).ToString("N2");
+            var parts = payments.Where(p => p.Kind == Payment.VoidRefund)
+                                .Select(p => Peso(-p.Amount) + (p.Method == Payment.Cash ? " in cash" : " by e-wallet"))
+                                .ToList();
+            return parts.Count == 0 ? "Nothing had been paid, so nothing was refunded." : "Refunded " + string.Join(" and ", parts) + ".";
         }
 
-        protected string StageCss(string stage)
+        private void ShowDoneNotice()
+        {
+            JobOrder job = JobOrderRepository.GetById(jobId);
+            string text;
+            switch (Request.QueryString["done"])
+            {
+                case "moved":
+                    if (job.CurrentStatus == StatusService.Ready)
+                        text = "Passed inspection: ready for pick-up. The ready email is listed under Notifications.";
+                    else if (job.CurrentStatus == StatusService.Claimed)
+                        text = "Marked as claimed. The load was handed over.";
+                    else
+                        text = "Moved to " + job.CurrentStatus + ".";
+                    break;
+                case "rework": text = "Sent back to " + job.CurrentStatus + " to be redone."; break;
+                case "voided": text = "Voided. " + BuildRefundNote(PaymentRepository.GetByJob(jobId)); break;
+                case "resent": text = "Email tried again. The result is listed under Notifications."; break;
+                case "edited": text = "Correction saved. Any change in the total was settled and is listed under Payment."; break;
+                default: return;
+            }
+            ShowNotice("info", text);
+        }
+
+        private void ShowNotice(string kind, string text)
+        {
+            string icon = kind == "warn" ? "circle-alert" : "circle-check";
+            litNotice.Text = "<div class=\"notice notice-" + kind + "\">" + Icons.Get(icon, "ico-sm")
+                           + "<span>" + HttpUtility.HtmlEncode(text) + "</span></div>";
+        }
+
+        // ---- Used by the markup ----
+
+        protected static string Peso(decimal amount)
+        {
+            return (amount < 0 ? "−₱" : "₱") + Math.Abs(amount).ToString("N2", Inv);
+        }
+
+        protected static string Kg(decimal kg)
+        {
+            return kg.ToString("0.0#", Inv);
+        }
+
+        protected static string When(DateTime at)
+        {
+            return at.ToString("MMM d, h:mm tt", Inv);
+        }
+
+        protected static decimal LineAmount(JobAddOn line)
+        {
+            return PricingService.LineAmount(line.Quantity, line.PriceAtCreation);
+        }
+
+        protected static string PaymentLabel(Payment p)
+        {
+            if (p.Kind == Payment.DropOff) return "Paid at drop-off · " + p.Method;
+            if (p.Kind == Payment.VoidRefund) return "Refund on void · " + p.Method;
+            return (p.Amount > 0 ? "Collected on correction · " : "Refunded on correction · ") + p.Method;
+        }
+
+        protected static string EmailDetail(NotificationLogEntry n)
+        {
+            string who = n.IsResend ? " · resent by " + n.AttemptedBy : "";
+            if (n.Status == NotificationLogEntry.Sent) return "to " + n.Recipient + who;
+            return (n.Detail ?? n.Status) + who;
+        }
+
+        protected static string EmailPill(string status)
+        {
+            if (status == NotificationLogEntry.Sent) return "pill-ok";
+            if (status == NotificationLogEntry.Failed) return "pill-danger";
+            return "st-claimed";
+        }
+
+        protected static string EmailDotStyle(string status)
+        {
+            return status == NotificationLogEntry.Failed
+                ? "background:var(--danger-soft); color:var(--danger);"
+                : "background:var(--primary-soft); color:var(--primary);";
+        }
+
+        protected static string StageCss(string stage)
         {
             switch (stage)
             {
@@ -183,32 +315,6 @@ namespace LABATRACK.Pages.Shared
                 case "Ready for pick-up": return "st-ready";
                 case "Voided": return "st-voided";
                 default: return "st-claimed";
-            }
-        }
-
-        public class HistoryRow
-        {
-            public string From { get; set; }
-            public string To { get; set; }
-            public string At { get; set; }
-            public string By { get; set; }
-            public string Reason { get; set; }
-            public HistoryRow(string from, string to, string at, string by, string reason)
-            {
-                From = from; To = to; At = at; By = by; Reason = reason;
-            }
-        }
-
-        public class PaymentRow
-        {
-            public string At { get; set; }
-            public string Method { get; set; }
-            public decimal Amount { get; set; }
-            public string By { get; set; }
-            public bool IsRefund { get; set; }
-            public PaymentRow(string at, string method, decimal amount, string by, bool isRefund)
-            {
-                At = at; Method = method; Amount = amount; By = by; IsRefund = isRefund;
             }
         }
 

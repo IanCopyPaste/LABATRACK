@@ -25,9 +25,34 @@ namespace LABATRACK.Pages.Shared
         protected global::System.Web.UI.WebControls.Literal litNav;
 
         /// <summary>
+        /// litNotice control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Literal litNotice;
+
+        /// <summary>
+        /// hfCustomerId control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.HiddenField hfCustomerId;
+
+        /// <summary>
         /// txtSearchContact control.
         /// </summary>
         protected global::System.Web.UI.WebControls.TextBox txtSearchContact;
+
+        /// <summary>
+        /// lblContactError control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Label lblContactError;
+
+        /// <summary>
+        /// pnlFound control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Panel pnlFound;
+
+        /// <summary>
+        /// pnlNewCustomer control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Panel pnlNewCustomer;
 
         /// <summary>
         /// txtCustomerName control.
@@ -35,9 +60,19 @@ namespace LABATRACK.Pages.Shared
         protected global::System.Web.UI.WebControls.TextBox txtCustomerName;
 
         /// <summary>
+        /// lblNameError control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Label lblNameError;
+
+        /// <summary>
         /// txtEmail control.
         /// </summary>
         protected global::System.Web.UI.WebControls.TextBox txtEmail;
+
+        /// <summary>
+        /// lblEmailError control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Label lblEmailError;
 
         /// <summary>
         /// ddlService control.
@@ -48,6 +83,16 @@ namespace LABATRACK.Pages.Shared
         /// txtWeight control.
         /// </summary>
         protected global::System.Web.UI.WebControls.TextBox txtWeight;
+
+        /// <summary>
+        /// rptServiceAddOns control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Repeater rptServiceAddOns;
+
+        /// <summary>
+        /// rptProducts control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Repeater rptProducts;
 
         /// <summary>
         /// txtRemarks control.
@@ -78,11 +123,6 @@ namespace LABATRACK.Pages.Shared
         /// lblPaymentError control.
         /// </summary>
         protected global::System.Web.UI.WebControls.Label lblPaymentError;
-
-        /// <summary>
-        /// hfShownTotal control.
-        /// </summary>
-        protected global::System.Web.UI.WebControls.HiddenField hfShownTotal;
 
         /// <summary>
         /// btnCreate control.

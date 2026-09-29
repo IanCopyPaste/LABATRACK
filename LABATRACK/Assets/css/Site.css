@@ -130,6 +130,37 @@ p { margin: 0; }
   background: var(--warning-soft); border-radius: var(--radius-sm); padding: 6px 10px;
 }
 
+/* Collapsing the menu to its icons (Assets/js/Sidebar.js). The choice is kept in a cookie, and
+   NavBar.cs draws the next page already collapsed. Wide screens only: on a narrow screen the menu
+   is a bar across the top instead (see the media queries below). */
+.brand-mark { flex-shrink: 0; }
+.brand-text { flex: 1; min-width: 0; }
+.sidebar { transition: width .18s ease; }
+.sidebar-toggle {
+  width: 30px; height: 30px; flex-shrink: 0; padding: 0; border: 0; border-radius: var(--radius-sm);
+  display: grid; place-items: center; background: none; color: var(--muted); cursor: pointer;
+}
+.sidebar-toggle:hover { background: var(--surface-2); color: var(--text); }
+.sidebar-toggle:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.sidebar-toggle .when-collapsed { display: none; }
+@media (min-width: 861px) {
+  .sidebar.is-collapsed { width: 76px; }
+  .sidebar.is-collapsed .brand { flex-direction: column; gap: 10px; padding: 20px 0 10px; }
+  .sidebar.is-collapsed .brand-text,
+  .sidebar.is-collapsed .nav-label,
+  .sidebar.is-collapsed .nav-tag,
+  .sidebar.is-collapsed .user-chip .who { display: none; }
+  .sidebar.is-collapsed .sidebar-toggle .when-open { display: none; }
+  .sidebar.is-collapsed .sidebar-toggle .when-collapsed { display: block; }
+  /* Section names give way to a thin line between the groups of icons. */
+  .sidebar.is-collapsed .nav-section { height: 1px; padding: 0; margin: 10px 8px; background: var(--border); font-size: 0; }
+  .sidebar.is-collapsed .nav-section:first-child { display: none; }
+  .sidebar.is-collapsed .nav a { justify-content: center; padding: 9px 0; }
+  .sidebar.is-collapsed .sidebar-foot { padding: 12px 0; }
+  .sidebar.is-collapsed .user-chip { flex-direction: column; gap: 8px; }
+}
+@media (prefers-reduced-motion: reduce) { .sidebar { transition: none; } }
+
 .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .page-head {
   display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap;
@@ -220,6 +251,9 @@ table.table { width: 100%; border-collapse: collapse; }
 .btn-primary:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
 .btn-danger { color: var(--danger); }
 .btn-danger:hover { background: var(--danger-soft); border-color: #f1c3c0; }
+/* The go-ahead button of a confirmation for something that cannot be undone (Confirm.js). */
+.btn-danger-solid { background: var(--danger); border-color: var(--danger); color: #fff; }
+.btn-danger-solid:hover { background: #a93631; border-color: #a93631; }
 .btn-ghost { border-color: transparent; background: transparent; color: var(--text-2); }
 .btn-ghost:hover { background: var(--surface-2); }
 .btn-sm { height: 30px; padding: 0 10px; font-size: 13px; }
@@ -406,7 +440,7 @@ textarea { height: auto; min-height: 84px; padding: 10px 12px; resize: vertical;
   .app { flex-direction: column; }
   .sidebar { width: 100%; height: auto; position: static; border-right: 0; border-bottom: 1px solid var(--border); }
   .nav { display: flex; gap: 4px; overflow-x: auto; padding: 0 12px 10px; }
-  .nav-section, .nav span.nav-soon, .sidebar-foot { display: none; }
+  .nav-section, .nav span.nav-soon, .sidebar-foot, .sidebar-toggle { display: none; }
   .nav a { white-space: nowrap; }
   .page-head { padding: 20px 16px 14px; }
   .content { padding: 0 16px 32px; }
@@ -455,6 +489,26 @@ textarea { height: auto; min-height: 84px; padding: 10px 12px; resize: vertical;
 }
 .draft-tag { margin-right: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--warning); }
 @media (prefers-reduced-motion: reduce) { .modal[open] { animation: none; } }
+
+/* The "are you sure?" window that Confirm.js opens before a button that changes something. */
+.modal.confirm { width: min(440px, calc(100vw - 32px)); }
+.confirm-text { white-space: pre-line; color: var(--text-2); line-height: 1.55; }
+
+/* A password box with a show/hide button inside it (ShowPassword.js). Both icons are drawn;
+   aria-pressed says which one shows. Edge's own eye is hidden so there is only one. */
+.input-reveal { position: relative; }
+.input-reveal input { padding-right: 42px; }
+.input-reveal input::-ms-reveal { display: none; }
+.reveal-btn {
+  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+  width: 32px; height: 30px; padding: 0; border: 0; border-radius: 6px;
+  display: grid; place-items: center; background: none; color: var(--muted); cursor: pointer;
+}
+.reveal-btn:hover { background: var(--surface-2); color: var(--text); }
+.reveal-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 0; }
+.reveal-btn .when-shown { display: none; }
+.reveal-btn[aria-pressed="true"] .when-shown { display: block; }
+.reveal-btn[aria-pressed="true"] .when-hidden { display: none; }
 
 /* A row that was just changed is washed in the accent for a moment. */
 .table tr.is-changed td { animation: row-flash 1.6s ease-out; }

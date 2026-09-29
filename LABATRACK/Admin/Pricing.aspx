@@ -21,7 +21,8 @@
                 </header>
 
                 <div class="content">
-                    <%-- DRAFT: sample rates. The real values are an open decision (CLAUDE.md, Open decisions 1). --%>
+                    <asp:Literal ID="litNotice" runat="server" EnableViewState="false" />
+
                     <div class="grid grid-main-side">
                         <div class="stack">
                             <section class="card">
@@ -40,16 +41,16 @@
                                         <tbody>
                                             <asp:Repeater ID="rptServices" runat="server">
                                                 <ItemTemplate>
-                                                    <tr data-stages="<%# Eval("StageCode") %>">
-                                                        <td class="cell-main<%# (bool)Eval("Active") ? "" : " muted" %>" data-col="name"><%#: Eval("Name") %></td>
-                                                        <td class="right num<%# (bool)Eval("Active") ? "" : " muted" %>" data-col="price">₱<%# ((decimal)Eval("Rate")).ToString("N2") %></td>
+                                                    <tr data-id="<%# Eval("ServiceId") %>" data-stages="<%# Eval("StageCode") %>" class="<%# RowCss("service", (int)Eval("ServiceId")) %>">
+                                                        <td class="cell-main<%# (bool)Eval("IsActive") ? "" : " muted" %>" data-col="name"><%#: Eval("Name") %></td>
+                                                        <td class="right num<%# (bool)Eval("IsActive") ? "" : " muted" %>" data-col="price">₱<%# ((decimal)Eval("RatePerKg")).ToString("N2") %></td>
                                                         <td data-col="stages"><div class="stage-chips"><%# StageChips((string)Eval("StageCode")) %></div></td>
                                                         <td data-col="status">
-                                                            <span class="pill <%# (bool)Eval("Active") ? "pill-ok" : "st-claimed" %>"><%# (bool)Eval("Active") ? "Active" : "Inactive" %></span>
-                                                            <%# (bool)Eval("Locked") ? "<div class=\"in-use\">" + Icons.Get("lock", "ico-sm") + "In use &middot; " + Eval("LoadsInShop") + ((int)Eval("LoadsInShop") == 1 ? " load" : " loads") + " in the shop</div>" : "" %>
+                                                            <span class="pill <%# (bool)Eval("IsActive") ? "pill-ok" : "st-claimed" %>"><%# (bool)Eval("IsActive") ? "Active" : "Inactive" %></span>
+                                                            <%# (bool)Eval("IsInUse") ? "<div class=\"in-use\">" + Icons.Get("lock", "ico-sm") + "In use &middot; " + Eval("LoadsInShop") + ((int)Eval("LoadsInShop") == 1 ? " load" : " loads") + " in the shop</div>" : "" %>
                                                         </td>
                                                         <td class="right">
-                                                            <button type="button" class="btn btn-sm btn-ghost" data-price-edit="true"<%# (bool)Eval("Locked") ? " disabled=\"disabled\" title=\"Can't be changed while a load using this service is in the shop\"" : "" %>><%# Icons.Get("pencil", "ico-sm") %>Edit</button>
+                                                            <button type="button" class="btn btn-sm btn-ghost" data-price-edit="true"<%# (bool)Eval("IsInUse") ? " disabled=\"disabled\" title=\"Can't be changed while a load using this service is in the shop\"" : "" %>><%# Icons.Get("pencil", "ico-sm") %>Edit</button>
                                                         </td>
                                                     </tr>
                                                 </ItemTemplate>
@@ -76,18 +77,16 @@
                                             <tr><th>Service add-on</th><th class="right">Price</th><th>Status</th><th></th></tr>
                                         </thead>
                                         <tbody>
-                                            <tr>
-                                                <td class="cell-main" data-col="name">Extra rinse</td>
-                                                <td class="right num" data-col="price">₱20.00</td>
-                                                <td data-col="status"><span class="pill pill-ok">Active</span></td>
-                                                <td class="right"><button type="button" class="btn btn-sm btn-ghost" data-price-edit="true"><%= Icons.Get("pencil", "ico-sm") %>Edit</button></td>
-                                            </tr>
-                                            <tr>
-                                                <td class="cell-main" data-col="name">Stain treatment</td>
-                                                <td class="right num" data-col="price">₱30.00</td>
-                                                <td data-col="status"><span class="pill pill-ok">Active</span></td>
-                                                <td class="right"><button type="button" class="btn btn-sm btn-ghost" data-price-edit="true"><%= Icons.Get("pencil", "ico-sm") %>Edit</button></td>
-                                            </tr>
+                                            <asp:Repeater ID="rptServiceAddOns" runat="server">
+                                                <ItemTemplate>
+                                                    <tr data-id="<%# Eval("AddOnId") %>" class="<%# RowCss("service-addon", (int)Eval("AddOnId")) %>">
+                                                        <td class="cell-main<%# (bool)Eval("IsActive") ? "" : " muted" %>" data-col="name"><%#: Eval("Name") %></td>
+                                                        <td class="right num<%# (bool)Eval("IsActive") ? "" : " muted" %>" data-col="price">₱<%# ((decimal)Eval("Price")).ToString("N2") %></td>
+                                                        <td data-col="status"><span class="pill <%# (bool)Eval("IsActive") ? "pill-ok" : "st-claimed" %>"><%# (bool)Eval("IsActive") ? "Active" : "Inactive" %></span></td>
+                                                        <td class="right"><button type="button" class="btn btn-sm btn-ghost" data-price-edit="true"><%# Icons.Get("pencil", "ico-sm") %>Edit</button></td>
+                                                    </tr>
+                                                </ItemTemplate>
+                                            </asp:Repeater>
                                         </tbody>
                                     </table>
                                 </div>
@@ -107,18 +106,16 @@
                                             <tr><th>Product add-on</th><th class="right">Price each</th><th>Status</th><th></th></tr>
                                         </thead>
                                         <tbody>
-                                            <tr>
-                                                <td class="cell-main" data-col="name">Fabric conditioner</td>
-                                                <td class="right num" data-col="price">₱15.00</td>
-                                                <td data-col="status"><span class="pill pill-ok">Active</span></td>
-                                                <td class="right"><button type="button" class="btn btn-sm btn-ghost" data-price-edit="true"><%= Icons.Get("pencil", "ico-sm") %>Edit</button></td>
-                                            </tr>
-                                            <tr>
-                                                <td class="cell-main" data-col="name">Detergent sachet</td>
-                                                <td class="right num" data-col="price">₱12.00</td>
-                                                <td data-col="status"><span class="pill pill-ok">Active</span></td>
-                                                <td class="right"><button type="button" class="btn btn-sm btn-ghost" data-price-edit="true"><%= Icons.Get("pencil", "ico-sm") %>Edit</button></td>
-                                            </tr>
+                                            <asp:Repeater ID="rptProducts" runat="server">
+                                                <ItemTemplate>
+                                                    <tr data-id="<%# Eval("AddOnId") %>" class="<%# RowCss("product", (int)Eval("AddOnId")) %>">
+                                                        <td class="cell-main<%# (bool)Eval("IsActive") ? "" : " muted" %>" data-col="name"><%#: Eval("Name") %></td>
+                                                        <td class="right num<%# (bool)Eval("IsActive") ? "" : " muted" %>" data-col="price">₱<%# ((decimal)Eval("Price")).ToString("N2") %></td>
+                                                        <td data-col="status"><span class="pill <%# (bool)Eval("IsActive") ? "pill-ok" : "st-claimed" %>"><%# (bool)Eval("IsActive") ? "Active" : "Inactive" %></span></td>
+                                                        <td class="right"><button type="button" class="btn btn-sm btn-ghost" data-price-edit="true"><%# Icons.Get("pencil", "ico-sm") %>Edit</button></td>
+                                                    </tr>
+                                                </ItemTemplate>
+                                            </asp:Repeater>
                                         </tbody>
                                     </table>
                                 </div>
@@ -139,47 +136,41 @@
                                 <div class="card-b form">
                                     <div class="field">
                                         <label for="txtMinimumCharge">Minimum laundry charge</label>
-                                        <div class="input-prefix"><span>₱</span><asp:TextBox ID="txtMinimumCharge" runat="server" Text="120.00" /></div>
+                                        <div class="input-prefix"><span>₱</span><asp:TextBox ID="txtMinimumCharge" runat="server" inputmode="decimal" MaxLength="9" /></div>
+                                        <asp:Label ID="lblMinimumError" runat="server" CssClass="error-text" Visible="false" EnableViewState="false" />
                                         <span class="hint">A laundry charge below this is raised to it. Add-ons are added after.</span>
                                     </div>
                                     <div class="field">
                                         <label for="ddlRounding">Round weight up to the next</label>
                                         <asp:DropDownList ID="ddlRounding" runat="server">
                                             <asp:ListItem Value="0.5">0.5 kg</asp:ListItem>
-                                            <asp:ListItem Value="1" Selected="True">1 kg</asp:ListItem>
+                                            <asp:ListItem Value="1">1 kg</asp:ListItem>
                                         </asp:DropDownList>
                                     </div>
                                     <%-- Stored in Settings like the two above. New Job and the owner's Edit Job both refuse a
                                          weight above it, on screen and again on the server (PricingService). --%>
                                     <div class="field">
                                         <label for="txtMaxWeight">Maximum weight per job (kg)</label>
-                                        <asp:TextBox ID="txtMaxWeight" runat="server" Text="100" inputmode="decimal" MaxLength="6" />
+                                        <asp:TextBox ID="txtMaxWeight" runat="server" inputmode="decimal" MaxLength="6" />
+                                        <asp:Label ID="lblMaxWeightError" runat="server" CssClass="error-text" Visible="false" EnableViewState="false" />
                                         <span class="hint">A job heavier than this can't be saved. A bigger load is split into two or more jobs.</span>
                                     </div>
                                 </div>
                                 <div class="card-f">
-                                    <button type="button" class="btn btn-primary"><%= Icons.Get("save", "ico-sm") %>Save rules</button>
+                                    <button type="submit" name="action" value="rules" class="btn btn-primary"><%= Icons.Get("save", "ico-sm") %>Save rules</button>
                                 </div>
                             </section>
 
+                            <%-- A worked example with today's prices, priced by PricingService itself. --%>
                             <section class="card">
                                 <div class="card-h">
                                     <div>
                                         <h2>How a total is computed</h2>
-                                        <div class="sub">Example: Wash-Dry-Fold, 5.1 kg, one service and one product</div>
+                                        <div class="sub"><%: ExampleTitle %></div>
                                     </div>
                                 </div>
                                 <div class="card-b">
-                                    <dl class="dl">
-                                        <dt>Weight</dt><dd>5.1 kg</dd>
-                                        <dt>Billable (rounded up)</dt><dd>6 kg</dd>
-                                        <dt>6 kg &times; ₱40.00</dt><dd>₱240.00</dd>
-                                        <dt>Minimum charge check</dt><dd class="muted">₱240.00 &ge; ₱120.00</dd>
-                                        <dt>Extra rinse</dt><dd>₱20.00</dd>
-                                        <dt>Fabric conditioner &times; 2</dt><dd>₱30.00</dd>
-                                    </dl>
-                                    <div class="divider" style="margin:14px 0;"></div>
-                                    <div class="total-line"><span>Total</span><span class="num">₱290.00</span></div>
+                                    <%= ExampleBreakdown %>
                                 </div>
                             </section>
                         </div>
@@ -189,9 +180,12 @@
         </div>
 
         <%-- One edit window for all three lists (services, service add-ons, products). Pricing.js fills it
-             from the row that was clicked and sets the labels for that kind of price. There is no delete:
-             a price that is no longer offered is set to Inactive, so old jobs still point at it. --%>
+             from the row that was clicked and sets the labels for that kind of price; Save posts it to the
+             server, which checks it again and saves it. There is no delete: a price that is no longer
+             offered is set to Inactive, so old jobs still point at it. --%>
         <dialog id="priceDialog" class="modal" aria-labelledby="priceDialogTitle">
+            <input type="hidden" name="pdKind" id="pdKind" />
+            <input type="hidden" name="pdId" id="pdId" />
             <div class="modal-h">
                 <div>
                     <h2 id="priceDialogTitle">Edit price</h2>
@@ -202,12 +196,12 @@
             <div class="modal-b form">
                 <div class="field">
                     <label for="pdName">Name</label>
-                    <input type="text" id="pdName" maxlength="60" autocomplete="off" />
+                    <input type="text" id="pdName" name="pdName" maxlength="60" autocomplete="off" />
                     <span class="error-text" id="pdNameError" hidden></span>
                 </div>
                 <div class="field">
                     <label for="pdPrice" id="pdPriceLabel">Price</label>
-                    <div class="input-prefix"><span>₱</span><input type="text" id="pdPrice" inputmode="decimal" autocomplete="off" /></div>
+                    <div class="input-prefix"><span>₱</span><input type="text" id="pdPrice" name="pdPrice" inputmode="decimal" autocomplete="off" /></div>
                     <span class="hint" id="pdPriceHint"></span>
                     <span class="error-text" id="pdPriceError" hidden></span>
                 </div>
@@ -216,16 +210,16 @@
                 <div class="field" id="pdStagesField" hidden>
                     <span class="label">Stages</span>
                     <div class="stage-picks">
-                        <label class="check"><input type="checkbox" id="pdWash" data-stage="Washing" />Washing</label>
-                        <label class="check"><input type="checkbox" id="pdDry" data-stage="Drying" />Drying</label>
-                        <label class="check"><input type="checkbox" id="pdFold" data-stage="Folding" />Folding</label>
+                        <label class="check"><input type="checkbox" id="pdWash" name="pdWash" value="1" data-stage="Washing" />Washing</label>
+                        <label class="check"><input type="checkbox" id="pdDry" name="pdDry" value="1" data-stage="Drying" />Drying</label>
+                        <label class="check"><input type="checkbox" id="pdFold" name="pdFold" value="1" data-stage="Folding" />Folding</label>
                     </div>
                     <span class="hint route-preview" id="pdRoute"></span>
                     <span class="error-text" id="pdStagesError" hidden>Tick at least one stage.</span>
                 </div>
                 <div class="field">
                     <span class="label">Status</span>
-                    <label class="check"><input type="checkbox" id="pdActive" /><span><strong>Active</strong> <span class="muted small">&middot; offered on new job orders</span></span></label>
+                    <label class="check"><input type="checkbox" id="pdActive" name="pdActive" value="1" /><span><strong>Active</strong> <span class="muted small">&middot; offered on new job orders</span></span></label>
                     <span class="hint">Untick to stop offering it. It stays on every job that already used it.</span>
                 </div>
                 <div class="notice notice-info">
@@ -234,13 +228,13 @@
                 </div>
             </div>
             <div class="modal-f">
-                <span class="draft-tag"><%= Icons.Get("circle-alert", "ico-sm") %>Draft: updates this page only, nothing is saved yet</span>
                 <button type="button" class="btn btn-ghost" data-modal-close="true">Cancel</button>
-                <button type="button" class="btn btn-primary" id="pdSave"><%= Icons.Get("save", "ico-sm") %><span id="pdSaveText">Save changes</span></button>
+                <button type="submit" name="action" value="price" class="btn btn-primary" id="pdSave"><%= Icons.Get("save", "ico-sm") %><span id="pdSaveText">Save changes</span></button>
             </div>
         </dialog>
     </form>
 
+    <script src="<%= AssetUrl.Get("~/Assets/js/Sidebar.js") %>"></script>
     <script src="<%= AssetUrl.Get("~/Assets/js/Pricing.js") %>"></script>
 </body>
 </html>

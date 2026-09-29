@@ -1,17 +1,19 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Web;
 using System.Web.UI.WebControls;
 using LABATRACK.Helpers;
+using LABATRACK.Models;
 using LABATRACK.Security;
+using LABATRACK.Services;
 
 namespace LABATRACK.Pages.Shared
 {
-    // DRAFT: the job board, built from sample data so it can be clicked through.
-    // The jobs live in ViewState, so moving a card lasts until the page is opened afresh.
-    // Phase 4 replaces SampleJobs with the shared repository query (the same one the owner
-    // dashboard uses) and Move() with StatusService, which writes JobStatusHistory.
+    // The job board (staff and owner): one column per stage, a card per load, and the one step
+    // each card can take on its own. Everything comes from ReportService.GetDashboard, the same
+    // method the owner's dashboard uses, so the two always agree.
     public partial class Dashboard : BasePage
     {
         protected override string ActiveNav
@@ -24,121 +26,59 @@ namespace LABATRACK.Pages.Shared
             get { return "Dashboard.css"; }
         }
 
-        // The stages a load passes through while it is on the board. Claimed and Voided
-        // are final, so those jobs leave the board.
-        private static readonly string[] BoardStages =
-            { "Queued", "Washing", "Drying", "Folding", "Inspection", "Ready for pick-up" };
+        private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
-        // The sample data is a snapshot of one morning, so ages and new timestamps are
-        // measured from this moment rather than the real clock.
-        private static readonly DateTime SampleNow = new DateTime(2026, 9, 22, 12, 0, 0);
-        // DRAFT: Phase 2 reads the signed-in account from AuthService.
-        private string SignedInUser { get { return SampleData.Username(Session); } }
-
-        // DRAFT: today's payments net of refunds (6 payments, 1 refund). Claiming a load adds
-        // nothing, because every job is paid in full at drop-off.
-        protected const decimal TodaysTotal = 850.00m;
-
-        private List<BoardJob> Jobs
-        {
-            get { return (List<BoardJob>)ViewState["Jobs"]; }
-            set { ViewState["Jobs"] = value; }
-        }
-
-        private List<BoardJob> ClaimedToday
-        {
-            get { return (List<BoardJob>)ViewState["Claimed"]; }
-            set { ViewState["Claimed"] = value; }
-        }
-
-        protected int ActiveCount { get { return Jobs.Count; } }
-        protected int ReadyCount { get { return Jobs.Count(j => j.Stage == "Ready for pick-up"); } }
+        protected ReportService.DashboardData Data { get; private set; }
 
         protected void Page_Load(object sender, EventArgs e)
         {
+            Data = ReportService.GetDashboard(DateTime.Now);
             if (!IsPostBack)
-            {
-                Jobs = SampleJobs();
-                ClaimedToday = SampleClaimed();
                 Bind();
-            }
         }
 
         protected void Cards_ItemCommand(object source, RepeaterCommandEventArgs e)
         {
-            // The argument carries the stage the card showed. Phase 4 passes it to StatusService
-            // as the expected status (UPDATE ... WHERE CurrentStatus = @expected), which is what
-            // stops two staff moving the same load twice. The draft keeps the same check, but
-            // each window holds its own ViewState copy, so it cannot catch a second window yet.
+            // The argument carries the stage the card showed. StatusService moves the job only if it
+            // is still in that stage (UPDATE ... WHERE CurrentStatus = @expected), which is what stops
+            // two staff moving the same load twice: the second one is told to refresh.
             string[] parts = ((string)e.CommandArgument).Split('|');
-            string claim = parts[0], shownStage = parts[1];
+            int jobId;
+            if (e.CommandName != "Move" || parts.Length != 2 || !int.TryParse(parts[0], out jobId)) return;
 
-            BoardJob job = Jobs.FirstOrDefault(j => j.Claim == claim);
-            if (job == null || job.Stage != shownStage)
+            JobOrder job = Data.Active.FirstOrDefault(j => j.JobId == jobId);
+            try
             {
-                ShowNotice("warn", "This job was already updated. Refresh.");
-                Bind();
-                return;
+                string to = StatusService.Advance(jobId, parts[1], CurrentUser.UserId);
+                string claim = job != null ? job.ClaimNumber : "The job";
+                ShowNotice("info", to == StatusService.Claimed ? claim + " was handed over (claimed)." : claim + " moved to " + to + ".");
+            }
+            catch (BusinessRuleException ex)
+            {
+                ShowNotice("warn", ex.Message);
             }
 
-            string to = NextStage(job.Stage, job.Route);
-            Move(job, to);
-            ShowNotice("info", job.Claim + " moved to " + to + ".");
+            Data = ReportService.GetDashboard(DateTime.Now);
             Bind();
-        }
-
-        // Mirrors what StatusService will do: one forward step, stamped with the time and
-        // the staff member. Claimed takes the job off the board.
-        private void Move(BoardJob job, string to)
-        {
-            job.Stage = to;
-            job.StageSince = SampleNow;
-            job.StageBy = SignedInUser;
-            job.Rework = "";
-
-            if (to == "Claimed")
-            {
-                Jobs.Remove(job);
-                ClaimedToday.Add(job);
-            }
-        }
-
-        // Only the steps a card can take on its own. A failed inspection and a void both
-        // need a reason, so those happen on JobDetail.
-        // The next stage follows the job's own route: Queued, the work stages its service
-        // includes (in the order Washing, Drying, Folding), then Inspection, Ready, Claimed.
-        // So a Wash-Dry load goes from Drying straight to Inspection. Phase 4 moves this rule
-        // into StatusService.
-        private static string NextStage(string stage, string route)
-        {
-            var steps = RouteSteps(route);
-            int at = steps.IndexOf(stage);
-            return at >= 0 && at < steps.Count - 1 ? steps[at + 1] : "Claimed";
-        }
-
-        private static List<string> RouteSteps(string route)
-        {
-            var steps = new List<string> { "Queued" };
-            if (route.Contains("W")) steps.Add("Washing");
-            if (route.Contains("D")) steps.Add("Drying");
-            if (route.Contains("F")) steps.Add("Folding");
-            steps.AddRange(new[] { "Inspection", "Ready for pick-up", "Claimed" });
-            return steps;
         }
 
         private void Bind()
         {
-            // Oldest drop-off first in every column. There is no priority ordering: every
-            // load runs on the same turnaround (see CLAUDE.md, Pricing rules).
-            rptColumns.DataSource = BoardStages.Select(stage => new BoardColumn
+            // Oldest drop-off first in every column (the query's order). There is no priority
+            // ordering: every load runs on the same turnaround (see CLAUDE.md, Pricing rules).
+            rptColumns.DataSource = StatusService.BoardStages.Select(stage => new BoardColumn
             {
                 Stage = stage,
-                Jobs = Jobs.Where(j => j.Stage == stage).OrderBy(j => j.DroppedOff).ToList(),
+                Jobs = Data.Active.Where(j => j.CurrentStatus == stage).ToList(),
             });
             rptColumns.DataBind();
 
-            rptClaimed.DataSource = ClaimedToday.OrderByDescending(j => j.StageSince);
+            rptClaimed.DataSource = Data.ClaimedToday;
             rptClaimed.DataBind();
+            rptUnclaimed.DataSource = Data.Unclaimed;
+            rptUnclaimed.DataBind();
+            rptVoided.DataSource = Data.VoidedToday;
+            rptVoided.DataBind();
         }
 
         private void ShowNotice(string kind, string text)
@@ -150,29 +90,58 @@ namespace LABATRACK.Pages.Shared
 
         // ---- Used by the markup ----
 
-        // The button names the step the card will take, which depends on the job's route.
-        protected static string ActionLabel(string stage, string route)
+        /// <summary>The button names the step the card will take, which depends on the job's route.</summary>
+        protected static string ActionLabel(JobOrder job)
         {
-            string next = NextStage(stage, route);
+            string next = StatusService.NextStage(job);
             switch (next)
             {
-                case "Washing": return "Start washing";
-                case "Drying": return stage == "Queued" ? "Start drying" : "Move to drying";
-                case "Folding": return stage == "Queued" ? "Start folding" : "Move to folding";
-                case "Inspection": return "Send to inspection";
-                case "Ready for pick-up": return "Pass";
+                case StatusService.Washing: return "Start washing";
+                case StatusService.Drying: return job.CurrentStatus == StatusService.Queued ? "Start drying" : "Move to drying";
+                case StatusService.Folding: return job.CurrentStatus == StatusService.Queued ? "Start folding" : "Move to folding";
+                case StatusService.Inspection: return "Send to inspection";
+                case StatusService.Ready: return "Pass";
                 default: return "Mark claimed";
             }
         }
 
         /// <summary>On a card whose service skips stages, says which, so nobody looks for it in Folding.</summary>
-        protected static string RouteNote(string route)
+        protected static string RouteNote(JobOrder job)
         {
             var skipped = new List<string>();
-            if (!route.Contains("W")) skipped.Add("washing");
-            if (!route.Contains("D")) skipped.Add("drying");
-            if (!route.Contains("F")) skipped.Add("folding");
+            if (!job.IncludesWashing) skipped.Add("washing");
+            if (!job.IncludesDrying) skipped.Add("drying");
+            if (!job.IncludesFolding) skipped.Add("folding");
             return skipped.Count == 0 ? "" : "No " + string.Join(" or ", skipped);
+        }
+
+        /// <summary>Why a load came back from inspection, while it is being redone; empty otherwise.</summary>
+        protected static string ReworkNote(JobOrder job)
+        {
+            bool sentBack = job.StatusFrom == StatusService.Inspection && StatusService.WorkStages(job).Contains(job.CurrentStatus);
+            return sentBack && !string.IsNullOrEmpty(job.StatusReason) ? "Back from inspection: " + job.StatusReason : "";
+        }
+
+        /// <summary>
+        /// What the filter box matches against: claim number, name, and contact number. The number
+        /// is in twice, with and without spaces, so "0917555" and "0917 555" both find it.
+        /// </summary>
+        protected static string SearchText(JobOrder job)
+        {
+            string contact = job.ContactNumber ?? "";
+            return (job.ClaimNumber + " " + job.CustomerName + " " + contact + " " + contact.Replace(" ", "")).ToLowerInvariant();
+        }
+
+        protected string UnclaimedNote(JobOrder job)
+        {
+            int days = ReportService.DaysWaiting(job.StatusSince, Data.Now);
+            return "Ready since " + job.StatusSince.ToString("MMM d", Inv) + " · " + days + (days == 1 ? " day" : " days") + " unclaimed · paid";
+        }
+
+        protected static string VoidNote(JobOrder job)
+        {
+            return "Voided " + job.StatusSince.ToString("h:mm tt", Inv) + " by " + job.StatusBy
+                 + " · “" + job.StatusReason + "” · " + Peso(job.TotalAmount) + " refunded";
         }
 
         protected static string StageCss(string stage)
@@ -192,17 +161,17 @@ namespace LABATRACK.Pages.Shared
 
         // Every card carries a day as well as a time, so a load left over from yesterday
         // cannot pass for one that came in this morning.
-        protected static string When(DateTime at)
+        protected string When(DateTime at)
         {
-            return (at.Date == SampleNow.Date ? "Today" : at.ToString("MMM d")) + ", " + at.ToString("h:mm tt");
+            return (at.Date == Data.Now.Date ? "Today" : at.ToString("MMM d", Inv)) + ", " + at.ToString("h:mm tt", Inv);
         }
 
         // How long since drop-off, kept short enough to sit beside the claim number.
         // Minutes stop mattering once a load has been in for ten hours.
-        protected static string Age(DateTime droppedOff)
+        protected string Age(DateTime droppedOff)
         {
-            TimeSpan age = SampleNow - droppedOff;
-            if (age.TotalHours < 1) return (int)age.TotalMinutes + "m";
+            TimeSpan age = Data.Now - droppedOff;
+            if (age.TotalHours < 1) return Math.Max(0, (int)age.TotalMinutes) + "m";
             if (age.TotalHours < 10) return (int)age.TotalHours + "h " + age.Minutes + "m";
             if (age.TotalDays < 1) return (int)age.TotalHours + "h";
             return (int)age.TotalDays + "d " + age.Hours + "h";
@@ -210,102 +179,13 @@ namespace LABATRACK.Pages.Shared
 
         protected static string Peso(decimal amount)
         {
-            return "₱" + amount.ToString("N2");
-        }
-
-        // ---- Sample data ----
-
-        private static List<BoardJob> SampleJobs()
-        {
-            return new List<BoardJob>
-            {
-                // Two loads ready for over a week: still on the board, because a job leaves
-                // only when it is claimed or voided. They are also under Needs attention.
-                Job("LT-260912-003", "Rosa Lim", "0917 555 0110", "Wash-Dry-Fold", 4.0m, 160.00m, "",
-                    At(12, 16, 20), "Ready for pick-up", At(13, 10, 40), "arivera", ""),
-                Job("LT-260914-008", "Dennis Uy", "0918 555 0111", "Wash-Dry", 5.5m, 210.00m, "",
-                    At(14, 10, 0), "Ready for pick-up", At(15, 9, 30), "jcruz", ""),
-                Job("LT-260921-004", "Maria Santos", "0917 555 0123", "Wash-Dry-Fold", 5.1m, 290.00m, "Extra rinse, Fabric conditioner × 2",
-                    At(21, 9, 12), "Ready for pick-up", At(21, 13, 35), "arivera", ""),
-                Job("LT-260921-007", "Jose Dela Cruz", "0918 555 0177", "Wash-Dry-Fold", 3.2m, 160.00m, "",
-                    At(21, 15, 40), "Inspection", At(22, 11, 25), "arivera", ""),
-                Job("LT-260922-001", "Ana Reyes", "0917 555 0101", "Comforter / Bulky", 2.0m, 120.00m, "",
-                    At(22, 8, 5), "Folding", At(22, 11, 40), "arivera", "Back from inspection: creases on the cover"),
-                Job("LT-260922-002", "Carlo Mendoza", "0927 555 0102", "Wash-Dry-Fold", 2.3m, 135.00m, "Fabric conditioner × 1",
-                    At(22, 8, 31), "Drying", At(22, 10, 50), "jcruz", ""),
-                Job("LT-260922-003", "Liza Peñaflor", "0917 555 0142", "Wash-Dry", 4.6m, 195.00m, "Extra rinse",
-                    At(22, 9, 2), "Washing", At(22, 10, 20), "jcruz", ""),
-                Job("LT-260922-004", "Ramon Bautista", "0939 555 0104", "Wash-Dry-Fold", 7.0m, 280.00m, "",
-                    At(22, 10, 15), "Queued", At(22, 10, 15), "jcruz", ""),
-                Job("LT-260922-005", "Grace Villanueva", "0917 555 0105", "Wash-Dry-Fold", 1.5m, 120.00m, "",
-                    At(22, 10, 48), "Queued", At(22, 10, 48), "jcruz", ""),
-            };
-        }
-
-        private static List<BoardJob> SampleClaimed()
-        {
-            return new List<BoardJob>
-            {
-                Job("LT-260920-011", "Paolo Garcia", "0917 555 0108", "Wash-Dry-Fold", 6.0m, 240.00m, "",
-                    At(20, 14, 10), "Claimed", At(22, 10, 5), "jcruz", ""),
-                Job("LT-260921-002", "Nena Aquino", "0998 555 0109", "Wash-Dry-Fold", 3.0m, 150.00m, "Stain treatment",
-                    At(21, 8, 40), "Claimed", At(22, 11, 42), "jcruz", ""),
-            };
-        }
-
-        private static DateTime At(int day, int hour, int minute)
-        {
-            return new DateTime(2026, 9, day, hour, minute, 0);
-        }
-
-        private static BoardJob Job(string claim, string customer, string contact, string service, decimal kg, decimal total,
-                                    string addOns, DateTime droppedOff, string stage, DateTime since, string by, string rework)
-        {
-            return new BoardJob
-            {
-                Claim = claim, Customer = customer, Contact = contact, Service = service, WeightKg = kg, Total = total,
-                AddOns = addOns, DroppedOff = droppedOff, Stage = stage, StageSince = since, StageBy = by, Rework = rework,
-                Route = SampleRoute(service),
-            };
-        }
-
-        // DRAFT: the route each sample service has on the Pricing page. Phase 4 reads the stage
-        // flags that were copied onto the job when it was created.
-        private static string SampleRoute(string service)
-        {
-            return service == "Wash-Dry" ? "WD" : "WDF";
-        }
-
-        [Serializable]
-        public class BoardJob
-        {
-            public string Claim { get; set; }
-            public string Customer { get; set; }
-            public string Contact { get; set; }
-            public string Service { get; set; }
-            public decimal WeightKg { get; set; }
-            public decimal Total { get; set; }
-            public string AddOns { get; set; }
-            public DateTime DroppedOff { get; set; }
-            public string Stage { get; set; }
-            public DateTime StageSince { get; set; }
-            public string StageBy { get; set; }
-            public string Rework { get; set; }   // why the load came back, while it is being redone
-            public string Route { get; set; }    // the work stages this job goes through: "WDF", "WD", ...
-
-            // What the filter box matches against: claim number, name, and contact number.
-            public string SearchText
-            {
-                // The contact number is in twice, with and without spaces, so "0917555" and
-                // "0917 555" both find it.
-                get { return (Claim + " " + Customer + " " + Contact + " " + Contact.Replace(" ", "")).ToLowerInvariant(); }
-            }
+            return "₱" + amount.ToString("N2", Inv);
         }
 
         public class BoardColumn
         {
             public string Stage { get; set; }
-            public List<BoardJob> Jobs { get; set; }
+            public List<JobOrder> Jobs { get; set; }
         }
     }
 }

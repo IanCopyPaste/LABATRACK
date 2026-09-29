@@ -68,6 +68,7 @@
   </ItemGroup>
   <ItemGroup>
     <Content Include="CLAUDE.md" />
+    <Content Include="README.md" />
     <Content Include="docs\BUILD_PROCESS.md" />
     <Content Include="Web.config" />
   </ItemGroup>
@@ -85,13 +86,20 @@
     <Content Include="Assets\css\pages\NewJob.css" />
     <Content Include="Assets\css\pages\Pricing.css" />
     <Content Include="Assets\css\pages\Reports.css" />
+    <Content Include="Assets\css\pages\Staff.css" />
+    <Content Include="Assets\js\AdminDashboard.js" />
     <Content Include="Assets\js\Charts.js" />
+    <Content Include="Assets\js\Confirm.js" />
     <Content Include="Assets\js\Dashboard.js" />
     <Content Include="Assets\js\EditJob.js" />
+    <Content Include="Assets\js\JobDetail.js" />
     <Content Include="Assets\js\NewJob.js" />
     <Content Include="Assets\js\Pricing.js" />
     <Content Include="Assets\js\Print.js" />
     <Content Include="Assets\js\Settings.js" />
+    <Content Include="Assets\js\ShowPassword.js" />
+    <Content Include="Assets\js\Sidebar.js" />
+    <Content Include="Assets\js\Staff.js" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="Pages\Shared\Customers.aspx" />
@@ -179,6 +187,7 @@
     <Content Include="Assets\icons\clipboard-list.svg" />
     <Content Include="Assets\icons\clock.svg" />
     <Content Include="Assets\icons\eye.svg" />
+    <Content Include="Assets\icons\eye-off.svg" />
     <Content Include="Assets\icons\file-pen.svg" />
     <Content Include="Assets\icons\history.svg" />
     <Content Include="Assets\icons\info.svg" />
@@ -188,6 +197,8 @@
     <Content Include="Assets\icons\log-out.svg" />
     <Content Include="Assets\icons\mail.svg" />
     <Content Include="Assets\icons\package-check.svg" />
+    <Content Include="Assets\icons\panel-left-close.svg" />
+    <Content Include="Assets\icons\panel-left-open.svg" />
     <Content Include="Assets\icons\pencil.svg" />
     <Content Include="Assets\icons\minus.svg" />
     <Content Include="Assets\icons\x.svg" />
@@ -204,7 +215,9 @@
     <Content Include="Assets\icons\tags.svg" />
     <Content Include="Assets\icons\timer.svg" />
     <Content Include="Assets\icons\trending-down.svg" />
+    <Content Include="Assets\icons\trash-2.svg" />
     <Content Include="Assets\icons\trending-up.svg" />
+    <Content Include="Assets\icons\user-cog.svg" />
     <Content Include="Assets\icons\user-plus.svg" />
     <Content Include="Assets\icons\user-round.svg" />
     <Content Include="Assets\icons\user-x.svg" />
@@ -301,18 +314,58 @@
     <Compile Include="Helpers\NavBar.cs" />
     <Compile Include="Helpers\SiteStyle.cs" />
     <Compile Include="Helpers\AssetUrl.cs" />
-    <Compile Include="Helpers\SampleData.cs" />
-    <Compile Include="Helpers\SampleSales.cs" />
     <Compile Include="Helpers\SvgChart.cs" />
+    <Compile Include="Helpers\EmailTemplates.cs" />
+    <Compile Include="Helpers\MoveConfirm.cs" />
     <Compile Include="Security\BasePage.cs">
       <SubType>ASPXCodeBehind</SubType>
     </Compile>
+    <Compile Include="Security\AdminBasePage.cs">
+      <SubType>ASPXCodeBehind</SubType>
+    </Compile>
+    <Compile Include="Security\PasswordHasher.cs" />
+    <Compile Include="Security\LabaTrackRoleProvider.cs" />
   </ItemGroup>
   <ItemGroup>
-    <Folder Include="DataAccess\" />
-    <Folder Include="Database\" />
-    <Folder Include="Models\" />
-    <Folder Include="Services\" />
+    <Compile Include="Models\AddOn.cs" />
+    <Compile Include="Models\Customer.cs" />
+    <Compile Include="Models\DaySales.cs" />
+    <Compile Include="Models\JobAddOn.cs" />
+    <Compile Include="Models\JobOrder.cs" />
+    <Compile Include="Models\JobPayments.cs" />
+    <Compile Include="Models\LaundryService.cs" />
+    <Compile Include="Models\NotificationLogEntry.cs" />
+    <Compile Include="Models\Payment.cs" />
+    <Compile Include="Models\ReportRows.cs" />
+    <Compile Include="Models\ShopSettings.cs" />
+    <Compile Include="Models\StatusChange.cs" />
+    <Compile Include="Models\UserAccount.cs" />
+    <Compile Include="DataAccess\Db.cs" />
+    <Compile Include="DataAccess\AddOnRepository.cs" />
+    <Compile Include="DataAccess\CustomerRepository.cs" />
+    <Compile Include="DataAccess\JobOrderRepository.cs" />
+    <Compile Include="DataAccess\NotificationRepository.cs" />
+    <Compile Include="DataAccess\PaymentRepository.cs" />
+    <Compile Include="DataAccess\ReportRepository.cs" />
+    <Compile Include="DataAccess\ServiceRepository.cs" />
+    <Compile Include="DataAccess\SettingsRepository.cs" />
+    <Compile Include="DataAccess\StatusHistoryRepository.cs" />
+    <Compile Include="DataAccess\UserRepository.cs" />
+    <Compile Include="Services\AuthService.cs" />
+    <Compile Include="Services\BusinessRuleException.cs" />
+    <Compile Include="Services\ClaimNumberGenerator.cs" />
+    <Compile Include="Services\CustomerService.cs" />
+    <Compile Include="Services\EmailService.cs" />
+    <Compile Include="Services\JobOrderService.cs" />
+    <Compile Include="Services\PricingService.cs" />
+    <Compile Include="Services\ReportService.cs" />
+    <Compile Include="Services\StatusService.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Database\01_schema.sql" />
+    <None Include="Database\02_seed_settings.sql" />
+    <None Include="Database\03_seed_demo_jobs.sql" />
+    <None Include="Database\04_procedures.sql" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="docs\LabaTrack_Revised_Proposal2.docx" />
@@ -344,6 +397,8 @@
     <VisualStudio>
       <FlavorProperties GUID="{349c5851-65df-11da-9384-00065b846f21}">
         <WebProjectProperties>
+          <StartPageUrl>Login.aspx</StartPageUrl>
+          <StartAction>SpecificPage</StartAction>
           <UseIIS>True</UseIIS>
           <AutoAssignPort>True</AutoAssignPort>
           <DevelopmentServerPort>57924</DevelopmentServerPort>

@@ -24,7 +24,7 @@
                 </header>
 
                 <div class="content">
-                    <%-- DRAFT: made-up history from Helpers/SampleSales.cs. Phase 5 builds the same figures in ReportService. --%>
+                    <%-- Every figure comes from the database through ReportService (money by payment date, jobs by drop-off date). --%>
 
                     <%-- One row of filters above everything. Every number and chart below covers this period only. --%>
                     <div class="report-filters">
@@ -93,15 +93,24 @@
                         <div class="card-h">
                             <div>
                                 <h2>Unclaimed loads, as of today</h2>
-                                <div class="sub">Ready for pick-up longer than 7 days. Paid already, so call the customer rather than chase money.</div>
+                                <div class="sub">Ready for pick-up for <%= UnclaimedDays %> days or more. Paid already, so call the customer rather than chase money.</div>
                             </div>
                         </div>
                         <div class="table-wrap">
                             <table class="table">
                                 <thead><tr><th>Claim no.</th><th>Customer</th><th>Ready since</th><th class="right">Days waiting</th></tr></thead>
                                 <tbody>
-                                    <tr><td class="mono">LT-260912-003</td><td>Rosa Lim<div class="cell-sub">0917 555 0110</div></td><td class="num">Sep 13, 10:40 AM</td><td class="right num">9</td></tr>
-                                    <tr><td class="mono">LT-260914-008</td><td>Dennis Uy<div class="cell-sub">0918 555 0111</div></td><td class="num">Sep 15, 9:30 AM</td><td class="right num">7</td></tr>
+                                    <asp:Repeater ID="rptUnclaimed" runat="server">
+                                        <ItemTemplate>
+                                            <tr>
+                                                <td class="mono"><a href="../Pages/Shared/JobDetail.aspx?id=<%# Eval("JobId") %>"><%#: Eval("ClaimNumber") %></a></td>
+                                                <td><%#: Eval("CustomerName") %><div class="cell-sub"><%#: Eval("ContactNumber") %></div></td>
+                                                <td class="num"><%# ((DateTime)Eval("StatusSince")).ToString("MMM d, h:mm tt") %></td>
+                                                <td class="right num"><%# DaysWaiting((DateTime)Eval("StatusSince")) %></td>
+                                            </tr>
+                                        </ItemTemplate>
+                                    </asp:Repeater>
+                                    <% if (rptUnclaimed.Items.Count == 0) { %><tr><td colspan="4" class="muted">No load is waiting that long.</td></tr><% } %>
                                 </tbody>
                             </table>
                         </div>
@@ -111,6 +120,7 @@
         </div>
     </form>
 
+    <script src="<%= AssetUrl.Get("~/Assets/js/Sidebar.js") %>"></script>
     <script src="<%= AssetUrl.Get("~/Assets/js/Charts.js") %>"></script>
 </body>
 </html>

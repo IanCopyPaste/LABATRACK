@@ -21,7 +21,7 @@
             </div>
         </div>
 
-        <%-- DRAFT: figures from Helpers/SampleSales.cs. Phase 5 reads Payments for the chosen day. --%>
+        <%-- Figures from ReportService.GetDailyReport: the Payments rows of the chosen day. --%>
         <article class="paper">
             <header class="letterhead">
                 <div class="shop">

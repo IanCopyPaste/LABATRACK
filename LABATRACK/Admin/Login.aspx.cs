@@ -1,18 +1,20 @@
 ﻿using System;
+using System.Web;
 using System.Web.UI.WebControls;
-using LABATRACK.Helpers;
+using LABATRACK.Models;
 using LABATRACK.Security;
+using LABATRACK.Services;
 
 namespace LABATRACK.Admin
 {
+    // The owner's sign-in, and the owner's "Forgot password?" flow. This is the only page in
+    // Admin/ that anyone may open (Web.config allows it), so it inherits BasePage, not AdminBasePage.
     public partial class Login : BasePage
     {
-        // DRAFT: the one reset link that "works", so the design can be clicked through. Any other
-        // token shows the expired state. Phase 5 checks the token against the owner's Users row.
-        private const string DraftToken = "draft";
-
-        // Same rule as the Settings page and a new staff account.
-        private const int MinPasswordLength = 8;
+        protected override bool AllowAnonymous
+        {
+            get { return true; }
+        }
 
         protected void Page_Load(object sender, EventArgs e)
         {
@@ -20,32 +22,45 @@ namespace LABATRACK.Admin
             // choose a new password (?token=...), or a link that no longer works.
             string token = Request.QueryString["token"];
             bool forgot = Request.QueryString["forgot"] == "1";
+            bool tokenWorks = token != null && AuthService.FindByResetToken(token) != null;
 
             pnlSignIn.Visible = token == null && !forgot;
             pnlForgot.Visible = token == null && forgot;
-            pnlReset.Visible = token == DraftToken;
-            pnlExpired.Visible = token != null && token != DraftToken;
+            pnlReset.Visible = tokenWorks;
+            pnlExpired.Visible = token != null && !tokenWorks;
             pnlResetDone.Visible = !IsPostBack && Request.QueryString["reset"] == "done";
 
             // Enter presses the button of the state on screen.
             if (pnlForgot.Visible) form1.DefaultButton = btnSendReset.ID;
             if (pnlReset.Visible) form1.DefaultButton = btnSetPassword.ID;
+
+            if (!IsPostBack && pnlSignIn.Visible && CurrentUser != null)
+            {
+                // The owner is already signed in: go on. A staff account was sent here by an owner
+                // page it may not open, so it is told to sign in with the owner account instead.
+                if (CurrentUser.IsOwner)
+                    Response.Redirect(SafeReturnUrl() ?? "~/Admin/Dashboard.aspx", true);
+                litSignedInAs.Text = HttpUtility.HtmlEncode(CurrentUser.Username);
+                pnlStaffSignedIn.Visible = true;
+            }
         }
 
         protected void btnSignIn_Click(object sender, EventArgs e)
         {
-            // DRAFT: no password check yet, so the design flow can be clicked through.
-            // Phase 2 replaces this with AuthService, and on failure shows pnlError
-            // with the single message "Invalid username or password".
-            string username = txtUsername.Text.Trim().ToLowerInvariant();
-            SampleData.SignIn(Session, username == "" ? "owner" : username, true);
-            Response.Redirect("~/Admin/Dashboard.aspx");
+            // The same message for every failure, including a staff account on this page.
+            UserAccount user = AuthService.SignIn(txtUsername.Text, txtPassword.Text, UserAccount.OwnerRole);
+            if (user == null)
+            {
+                lblError.Text = AuthService.InvalidSignIn;
+                pnlError.Visible = true;
+                return;
+            }
+
+            Response.Redirect(SafeReturnUrl() ?? "~/Admin/Dashboard.aspx", false);
+            Context.ApplicationInstance.CompleteRequest();
         }
 
-        // DRAFT: nothing is sent yet. Phase 5: AuthService looks the username up, and only when it is
-        // an active Owner account with a recovery email does it make a reset link: 32 random bytes,
-        // of which only a SHA-256 hash is stored on the Users row with an expiry 30 minutes ahead
-        // (a newer request replaces an older link). EmailService sends the link through SMTP.
+        // Step 1: only an active Owner account with a recovery email gets a link (AuthService).
         // For a staff account, an unknown username or no email, nothing is sent, and the page says
         // the same thing either way, so it never shows which accounts exist.
         protected void btnSendReset_Click(object sender, EventArgs e)
@@ -55,26 +70,38 @@ namespace LABATRACK.Admin
                 ShowError(lblResetUsernameError, "Enter your username.");
                 return;
             }
+
+            string loginUrl = Request.Url.GetLeftPart(UriPartial.Authority) + VirtualPathUtility.ToAbsolute("~/Admin/Login.aspx");
+            AuthService.RequestOwnerReset(txtResetUsername.Text, loginUrl);
             pnlForgotForm.Visible = false;
             pnlSent.Visible = true;
         }
 
-        // DRAFT: nothing is saved yet. Phase 5 checks the token again on this click (the hash matches,
-        // not expired), saves the new password as a new hash with a new salt, clears the token so the
-        // link works only once, and clears the failed-login count and any lock on the account.
+        // Step 2: the page the emailed link opens. AuthService checks the link again on this click,
+        // saves the new password with a new salt, and clears the link so it works only once.
         protected void btnSetPassword_Click(object sender, EventArgs e)
         {
             // Passwords are taken exactly as typed, so they are never trimmed.
             string next = txtResetNew.Text;
             bool ok = true;
-            if (next.Length < MinPasswordLength)
-                ok = ShowError(lblResetNewError, "Use at least " + MinPasswordLength + " characters.");
+            string problem = AuthService.PasswordProblem(next);
+            if (problem != null)
+                ok = ShowError(lblResetNewError, problem);
             if (txtResetConfirm.Text != next)
                 ok = ShowError(lblResetConfirmError, "The two new passwords don't match.");
             if (!ok)
                 return;
 
-            Response.Redirect("~/Admin/Login.aspx?reset=done");
+            if (!AuthService.CompleteOwnerReset(Request.QueryString["token"], next))
+            {
+                // The link ran out or was used while the page was open.
+                pnlReset.Visible = false;
+                pnlExpired.Visible = true;
+                return;
+            }
+
+            Response.Redirect("~/Admin/Login.aspx?reset=done", false);
+            Context.ApplicationInstance.CompleteRequest();
         }
 
         // Always returns false, so a failed check reads as ok = ShowError(...).

@@ -3,13 +3,17 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Web;
+using LABATRACK.DataAccess;
 using LABATRACK.Helpers;
+using LABATRACK.Models;
 using LABATRACK.Security;
+using LABATRACK.Services;
 
 namespace LABATRACK.Admin
 {
-    // DRAFT: every figure comes from Helpers/SampleSales (made-up history). Phase 5 moves the
-    // sums into ReportService on the database; the charts (Helpers/SvgChart) stay as they are.
+    // The owner's reports. The rows come from the database through ReportService (stored
+    // procedures usp_Reports_...); this page adds them up into the figures and draws the charts
+    // with Helpers/SvgChart.
     //
     // One period is chosen at the top (a year, a month, or a day) and every chart and number
     // below it covers that period only, so they always agree. Comparisons are like for like:
@@ -17,11 +21,11 @@ namespace LABATRACK.Admin
     // days last month, and a day against the same weekday a week before. A part-period is
     // never compared with a whole one.
     //
-    // Two date rules from CLAUDE.md: money is counted on the payment date, which here is the
-    // drop-off (everything is paid in full at drop-off); service popularity is counted on the
-    // job's created date, which is the same moment. A voided job is paid and refunded the same
-    // day, so it adds nothing to sales but is still counted under voids.
-    public partial class Reports : BasePage
+    // Two date rules from CLAUDE.md: money is counted on the payment date (Payments.PaidAt), which
+    // is what the drawer check needs; service popularity, add-ons, load sizes, staff and customers
+    // are counted on the job's created date. A voided job is paid and refunded, so it nets to zero
+    // in sales but is still counted under voids.
+    public partial class Reports : AdminBasePage
     {
         protected override string ActiveNav
         {
@@ -46,27 +50,41 @@ namespace LABATRACK.Admin
         protected string PrevLabel { get; private set; }
         protected string PrevLink { get; private set; }
         protected string NextLink { get; private set; }
+        protected int UnclaimedDays { get; private set; }
 
-        private List<SalesJob> jobs, prevJobs;
+        private DateTime now, opened;
+        private List<ReportJob> jobs, prevJobs;   // dropped off in the period, and in the one before
+        private List<ReportPayment> payments;     // money moved from the earliest date a chart needs up to End
+        private int turnaroundTarget;
 
         protected void Page_Load(object sender, EventArgs e)
         {
+            now = DateTime.Now;
+            opened = ReportService.FirstDay(now);
+            turnaroundTarget = SettingsRepository.Get().DefaultTurnaroundHours;
+
             ChoosePeriod();
-            jobs = InRange(Start, End);
-            prevJobs = InRange(PrevStart, PrevEnd);
+            jobs = ReportService.Jobs(Start, End);
+            prevJobs = PrevEnd > PrevStart ? ReportService.Jobs(PrevStart, PrevEnd) : new List<ReportJob>();
+            payments = ReportService.Payments(PaymentsFrom(), End);
+
+            int days;
+            rptUnclaimed.DataSource = ReportService.Unclaimed(now, out days);
+            rptUnclaimed.DataBind();
+            UnclaimedDays = days;
 
             if (!IsPostBack)
             {
                 ddlYear.Items.Clear();
-                for (int y = SampleSales.Now.Year; y >= SampleSales.Opened.Year; y--)
+                for (int y = now.Year; y >= opened.Year; y--)
                     ddlYear.Items.Add(y.ToString(Inv));
                 ddlYear.SelectedValue = Start.Year.ToString(Inv);
                 txtMonth.Text = Start.ToString("yyyy-MM", Inv);
                 txtDay.Text = Start.ToString("yyyy-MM-dd", Inv);
-                txtDay.Attributes["min"] = SampleSales.Opened.ToString("yyyy-MM-dd", Inv);
-                txtDay.Attributes["max"] = SampleSales.Now.ToString("yyyy-MM-dd", Inv);
-                txtMonth.Attributes["min"] = SampleSales.Opened.ToString("yyyy-MM", Inv);
-                txtMonth.Attributes["max"] = SampleSales.Now.ToString("yyyy-MM", Inv);
+                txtDay.Attributes["min"] = opened.ToString("yyyy-MM-dd", Inv);
+                txtDay.Attributes["max"] = now.ToString("yyyy-MM-dd", Inv);
+                txtMonth.Attributes["min"] = opened.ToString("yyyy-MM", Inv);
+                txtMonth.Attributes["max"] = now.ToString("yyyy-MM", Inv);
             }
         }
 
@@ -88,7 +106,6 @@ namespace LABATRACK.Admin
 
         private void ChoosePeriod()
         {
-            DateTime now = SampleSales.Now, open = SampleSales.Opened;
             View = Request.QueryString["view"];
             if (View != "year" && View != "day") View = "month";
 
@@ -96,15 +113,15 @@ namespace LABATRACK.Admin
             {
                 int y;
                 if (!int.TryParse(Request.QueryString["y"], out y)) y = now.Year;
-                y = Math.Min(now.Year, Math.Max(open.Year, y));
-                Start = Max(new DateTime(y, 1, 1), open);
+                y = Math.Min(now.Year, Math.Max(opened.Year, y));
+                Start = Max(new DateTime(y, 1, 1), opened);
                 End = Min(new DateTime(y + 1, 1, 1), now);
                 PrevStart = Start.AddYears(-1);
                 PrevEnd = End.AddYears(-1);
                 PeriodTitle = y.ToString(Inv);
                 PeriodNote = Span(Start, End);
                 PrevLabel = Span(PrevStart, PrevEnd) + ", " + (y - 1);
-                PrevLink = y > open.Year ? "Reports.aspx?view=year&y=" + (y - 1) : null;
+                PrevLink = y > opened.Year ? "Reports.aspx?view=year&y=" + (y - 1) : null;
                 NextLink = y < now.Year ? "Reports.aspx?view=year&y=" + (y + 1) : null;
             }
             else if (View == "month")
@@ -112,15 +129,15 @@ namespace LABATRACK.Admin
                 DateTime m;
                 if (!DateTime.TryParseExact(Request.QueryString["m"], "yyyy-MM", Inv, DateTimeStyles.None, out m))
                     m = new DateTime(now.Year, now.Month, 1);
-                m = Min(Max(m, new DateTime(open.Year, open.Month, 1)), new DateTime(now.Year, now.Month, 1));
-                Start = Max(m, open);
+                m = Min(Max(m, new DateTime(opened.Year, opened.Month, 1)), new DateTime(now.Year, now.Month, 1));
+                Start = Max(m, opened);
                 End = Min(m.AddMonths(1), now);
                 PrevStart = Start.AddMonths(-1);
                 PrevEnd = End.AddMonths(-1);
                 PeriodTitle = m.ToString("MMMM yyyy", Inv);
                 PeriodNote = Span(Start, End);
                 PrevLabel = Span(PrevStart, PrevEnd);
-                PrevLink = m > new DateTime(open.Year, open.Month, 1) ? "Reports.aspx?view=month&m=" + m.AddMonths(-1).ToString("yyyy-MM", Inv) : null;
+                PrevLink = m > new DateTime(opened.Year, opened.Month, 1) ? "Reports.aspx?view=month&m=" + m.AddMonths(-1).ToString("yyyy-MM", Inv) : null;
                 NextLink = m < new DateTime(now.Year, now.Month, 1) ? "Reports.aspx?view=month&m=" + m.AddMonths(1).ToString("yyyy-MM", Inv) : null;
             }
             else
@@ -128,7 +145,7 @@ namespace LABATRACK.Admin
                 DateTime d;
                 if (!DateTime.TryParseExact(Request.QueryString["d"], "yyyy-MM-dd", Inv, DateTimeStyles.None, out d))
                     d = now.Date;
-                d = Min(Max(d, open), now.Date);
+                d = Min(Max(d, opened), now.Date);
                 Start = d;
                 End = Min(d.AddDays(1), now);
                 PrevStart = d.AddDays(-7);
@@ -136,21 +153,29 @@ namespace LABATRACK.Admin
                 PeriodTitle = d.ToString("dddd, MMMM d, yyyy", Inv);
                 PeriodNote = d == now.Date ? "Today, up to " + now.ToString("h:mm tt", Inv) : "The whole day";
                 PrevLabel = "the " + d.ToString("dddd", Inv) + " before, " + PrevStart.ToString("MMM d", Inv);
-                PrevLink = d > open ? "Reports.aspx?view=day&d=" + d.AddDays(-1).ToString("yyyy-MM-dd", Inv) : null;
+                PrevLink = d > opened ? "Reports.aspx?view=day&d=" + d.AddDays(-1).ToString("yyyy-MM-dd", Inv) : null;
                 NextLink = d < now.Date ? "Reports.aspx?view=day&d=" + d.AddDays(1).ToString("yyyy-MM-dd", Inv) : null;
             }
 
             // Nothing happened before the shop opened, so never claim to compare with it.
-            if (PrevEnd <= open)
+            if (PrevEnd <= opened)
             {
-                PrevLabel = "nothing earlier: the shop opened " + open.ToString("MMM d, yyyy", Inv);
+                PrevLabel = "nothing earlier: the first job was on " + opened.ToString("MMM d, yyyy", Inv);
             }
-            else if (PrevStart < open)
+            else if (PrevStart < opened)
             {
-                PrevStart = open;
+                PrevStart = opened;
                 PrevLabel = Span(PrevStart, PrevEnd) + ", " + PrevStart.Year
-                          + " (the shop opened that day, so the earlier period is shorter)";
+                          + " (the first job was that day, so the earlier period is shorter)";
             }
+        }
+
+        /// <summary>The earliest payment date any chart on this view needs.</summary>
+        private DateTime PaymentsFrom()
+        {
+            if (View == "year") return new DateTime(Start.Year - 1, 1, 1);     // this year and last, month by month
+            if (View == "month") return new DateTime(Start.Year, Start.Month, 1).AddMonths(-1);   // this month and last
+            return Start.AddDays(-28);                                          // the same weekday, four weeks back
         }
 
         private static string Span(DateTime start, DateTime end)
@@ -160,14 +185,15 @@ namespace LABATRACK.Admin
             return start.ToString("MMM d", Inv) + " – " + last.ToString("MMM d", Inv);
         }
 
-        private static List<SalesJob> InRange(DateTime from, DateTime to)
+        private static IEnumerable<ReportJob> Live(IEnumerable<ReportJob> list)
         {
-            return SampleSales.Jobs.Where(j => j.DroppedOff >= from && j.DroppedOff < to).ToList();
+            return list.Where(j => !j.IsVoided);
         }
 
-        private static IEnumerable<SalesJob> Live(IEnumerable<SalesJob> list)
+        /// <summary>Net sales within [from, to), counted on the payment date, optionally for one method.</summary>
+        private decimal SalesIn(DateTime from, DateTime to, string method = null)
         {
-            return list.Where(j => !j.Voided);
+            return payments.Where(p => p.PaidAt >= from && p.PaidAt < to && (method == null || p.Method == method)).Sum(p => p.Amount);
         }
 
         private static DateTime Min(DateTime a, DateTime b) { return a < b ? a : b; }
@@ -176,8 +202,8 @@ namespace LABATRACK.Admin
         protected string ViewLink(string view)
         {
             if (view == "year") return "Reports.aspx?view=year&y=" + Start.Year;
-            if (view == "day") return "Reports.aspx?view=day&d=" + (View == "day" ? Start : Min(End.AddTicks(-1), SampleSales.Now).Date).ToString("yyyy-MM-dd", Inv);
-            return "Reports.aspx?view=month&m=" + (View == "year" ? Min(End.AddTicks(-1), SampleSales.Now) : Start).ToString("yyyy-MM", Inv);
+            if (view == "day") return "Reports.aspx?view=day&d=" + (View == "day" ? Start : Min(End.AddTicks(-1), now).Date).ToString("yyyy-MM-dd", Inv);
+            return "Reports.aspx?view=month&m=" + (View == "year" ? Min(End.AddTicks(-1), now) : Start).ToString("yyyy-MM", Inv);
         }
 
         // ================================================================ KPI tiles
@@ -187,7 +213,7 @@ namespace LABATRACK.Admin
             var cur = Live(jobs).ToList();
             var prev = Live(prevJobs).ToList();
 
-            decimal sales = cur.Sum(j => j.Total), prevSales = prev.Sum(j => j.Total);
+            decimal sales = SalesIn(Start, End), prevSales = PrevEnd > PrevStart ? SalesIn(PrevStart, PrevEnd) : 0;
             int orders = cur.Count, prevOrders = prev.Count;
             decimal avg = orders > 0 ? sales / orders : 0, prevAvg = prevOrders > 0 ? prevSales / prevOrders : 0;
             decimal kg = cur.Sum(j => j.WeightKg), prevKg = prev.Sum(j => j.WeightKg);
@@ -205,9 +231,10 @@ namespace LABATRACK.Admin
                         prevOrders == 0 ? Note("No earlier period") : DeltaPoints(ret, prevRet), false);
         }
 
-        private static double AvgTurnaround(IEnumerable<SalesJob> list)
+        /// <summary>Average hours from drop-off (first Queued) to the first time it was Ready for pick-up.</summary>
+        private static double AvgTurnaround(IEnumerable<ReportJob> list)
         {
-            var hours = list.Where(j => j.ReadyAt.HasValue).Select(j => (j.ReadyAt.Value - j.DroppedOff).TotalHours).ToList();
+            var hours = list.Where(j => j.FirstReadyAt.HasValue).Select(j => (j.FirstReadyAt.Value - j.CreatedAt).TotalHours).ToList();
             return hours.Count == 0 ? double.NaN : hours.Average();
         }
 
@@ -269,8 +296,8 @@ namespace LABATRACK.Admin
                 for (int m = 1; m <= 12; m++)
                 {
                     var from = new DateTime(Start.Year, m, 1);
-                    bool hasData = from.AddMonths(1) > SampleSales.Opened && from <= SampleSales.Now;
-                    bool partial = from.Year == SampleSales.Now.Year && m == SampleSales.Now.Month;
+                    bool hasData = from.AddMonths(1) > opened && from <= now;
+                    bool partial = from.Year == now.Year && m == now.Month;
                     list.Add(new Bucket
                     {
                         Label = from.ToString("MMM", Inv), From = from, To = from.AddMonths(1),
@@ -286,7 +313,7 @@ namespace LABATRACK.Admin
                 for (int d = 0; d < days; d++)
                 {
                     var from = first.AddDays(d);
-                    bool hasData = from >= SampleSales.Opened && from <= SampleSales.Now;
+                    bool hasData = from >= opened && from <= now;
                     list.Add(new Bucket
                     {
                         Label = (d + 1).ToString(Inv), From = from, To = from.AddDays(1),
@@ -312,10 +339,10 @@ namespace LABATRACK.Admin
 
         private int LabelEvery { get { return View == "month" ? 2 : 1; } }
 
-        private static double[] SumBy(List<Bucket> buckets, IEnumerable<SalesJob> list, Func<SalesJob, bool> where)
+        /// <summary>Net sales per bucket for one method, counted on the payment date.</summary>
+        private double[] SalesBy(List<Bucket> buckets, string method)
         {
-            var sel = list.Where(where).ToList();
-            return buckets.Select(b => (double)sel.Where(j => j.DroppedOff >= b.From && j.DroppedOff < b.To).Sum(j => j.Total)).ToArray();
+            return buckets.Select(b => (double)SalesIn(b.From, b.To, method)).ToArray();
         }
 
         // ================================================================ Sales chart
@@ -323,9 +350,8 @@ namespace LABATRACK.Admin
         protected string SalesChart()
         {
             var b = Buckets();
-            var live = Live(jobs).ToList();
-            var cash = new ChartSeries("Cash", SvgChart.Blue, SumBy(b, live, j => j.Method == "Cash"));
-            var ewallet = new ChartSeries("E-wallet", SvgChart.Orange, SumBy(b, live, j => j.Method == "E-wallet"));
+            var cash = new ChartSeries("Cash", SvgChart.Blue, SalesBy(b, Payment.Cash));
+            var ewallet = new ChartSeries("E-wallet", SvgChart.Orange, SalesBy(b, Payment.Ewallet));
             var series = new List<ChartSeries> { cash, ewallet };
 
             string title = View == "year" ? "Sales by month" : View == "month" ? "Sales by day" : "Sales by hour";
@@ -362,8 +388,8 @@ namespace LABATRACK.Admin
             Func<int, int, double> month = (yy, m) =>
             {
                 var from = new DateTime(yy, m, 1);
-                if (from.AddMonths(1) <= SampleSales.Opened || from > SampleSales.Now) return double.NaN;
-                return (double)Live(SampleSales.Jobs).Where(j => j.DroppedOff >= from && j.DroppedOff < from.AddMonths(1)).Sum(j => j.Total);
+                if (from.AddMonths(1) <= opened || from > now) return double.NaN;
+                return (double)SalesIn(from, from.AddMonths(1));
             };
             var series = new List<ChartSeries>
             {
@@ -374,13 +400,12 @@ namespace LABATRACK.Admin
             // A month still in progress would plot as a sudden drop next to last year's whole month,
             // so it stays off the line and is compared day for day in the note instead.
             string sub = "Monthly sales, " + y + " in blue and " + (y - 1) + " in grey.";
-            DateTime now = SampleSales.Now;
             if (y == now.Year)
             {
                 var monthStart = new DateTime(now.Year, now.Month, 1);
                 series[0].Values[now.Month - 1] = double.NaN;
-                double soFar = (double)Live(SampleSales.Jobs).Where(j => j.DroppedOff >= monthStart && j.DroppedOff < now).Sum(j => j.Total);
-                double sameDays = (double)Live(SampleSales.Jobs).Where(j => j.DroppedOff >= monthStart.AddYears(-1) && j.DroppedOff < now.AddYears(-1)).Sum(j => j.Total);
+                double soFar = (double)SalesIn(monthStart, now);
+                double sameDays = (double)SalesIn(monthStart.AddYears(-1), now.AddYears(-1));
                 sub += " " + monthStart.ToString("MMMM", Inv) + " is not over, so it is left off: " + SvgChart.Peso(soFar)
                      + " so far against " + SvgChart.Peso(sameDays) + " on the same days last year.";
             }
@@ -398,15 +423,14 @@ namespace LABATRACK.Admin
             int days = Math.Max(DateTime.DaysInMonth(m.Year, m.Month), DateTime.DaysInMonth(pm.Year, pm.Month));
             Func<DateTime, double[]> running = first =>
             {
-                var list = Live(SampleSales.Jobs).Where(j => j.DroppedOff >= first && j.DroppedOff < first.AddMonths(1)).ToList();
                 var result = new double[days];
                 double sum = 0;
                 int monthDays = DateTime.DaysInMonth(first.Year, first.Month);
                 for (int d = 0; d < days; d++)
                 {
                     DateTime day = first.AddDays(d);
-                    if (d >= monthDays || day > SampleSales.Now || day.AddDays(1) <= SampleSales.Opened) { result[d] = double.NaN; continue; }
-                    sum += (double)list.Where(j => j.DroppedOff.Date == day).Sum(j => j.Total);
+                    if (d >= monthDays || day > now || day.AddDays(1) <= opened) { result[d] = double.NaN; continue; }
+                    sum += (double)SalesIn(day, day.AddDays(1));
                     result[d] = sum;
                 }
                 return result;
@@ -427,16 +451,15 @@ namespace LABATRACK.Admin
         private string CompareDay()
         {
             var b = Buckets();
-            var today = SumBy(b, Live(jobs), j => true);
+            var today = b.Select(x => (double)SalesIn(x.From, x.To)).ToArray();
             // The same weekday over the four weeks before, averaged hour by hour.
-            var weeks = Enumerable.Range(1, 4).Select(k => Start.AddDays(-7 * k)).Where(d => d >= SampleSales.Opened).ToList();
+            var weeks = Enumerable.Range(1, 4).Select(k => Start.AddDays(-7 * k)).Where(d => d >= opened).ToList();
             double[] avg = new double[b.Count];
             if (weeks.Count > 0)
                 for (int i = 0; i < b.Count; i++)
-                    avg[i] = weeks.Average(w => (double)Live(SampleSales.Jobs)
-                        .Where(j => j.DroppedOff >= w.Add(b[i].From - Start) && j.DroppedOff < w.Add(b[i].To - Start)).Sum(j => j.Total));
+                    avg[i] = weeks.Average(w => (double)SalesIn(w.Add(b[i].From - Start), w.Add(b[i].To - Start)));
             // Hours that have not happened yet are a gap, not a zero.
-            for (int i = 0; i < b.Count; i++) if (b[i].From >= SampleSales.Now) today[i] = double.NaN;
+            for (int i = 0; i < b.Count; i++) if (b[i].From >= now) today[i] = double.NaN;
 
             string weekday = Start.ToString("dddd", Inv);
             var series = new List<ChartSeries>
@@ -456,35 +479,37 @@ namespace LABATRACK.Admin
         protected string YearsChart()
         {
             if (View != "year") return "";
-            int first = SampleSales.Opened.Year, last = SampleSales.Now.Year;
+            int first = opened.Year, last = now.Year;
+            var totals = ReportService.YearTotals();
             var years = Enumerable.Range(first, last - first + 1).ToList();
-            double[] totals = years.Select(y => (double)Live(SampleSales.Jobs).Where(j => j.DroppedOff.Year == y).Sum(j => j.Total)).ToArray();
-            string[] tips = years.Select(y => y + (y == first ? " (opened " + SampleSales.Opened.ToString("MMM d", Inv) + ")" : y == last ? " (to " + SampleSales.Now.ToString("MMM d", Inv) + ")" : "") + " · click to open").ToArray();
-            var series = new List<ChartSeries> { new ChartSeries("Sales", SvgChart.Blue, totals) };
-            var rows = years.Select((y, i) => new[] { tips[i].Replace(" · click to open", ""), SvgChart.Peso(totals[i]), JobsIn(y).ToString("N0", Inv) });
-            return Card("Every year", "Total sales per year since the shop opened. The first and the current year are part-years.",
+            Func<int, YearTotal> of = y => totals.FirstOrDefault(t => t.Year == y) ?? new YearTotal { Year = y };
+            double[] sales = years.Select(y => (double)of(y).Sales).ToArray();
+            string[] tips = years.Select(y => y + (y == first ? " (from " + opened.ToString("MMM d", Inv) + ")" : y == last ? " (to " + now.ToString("MMM d", Inv) + ")" : "") + " · click to open").ToArray();
+            var series = new List<ChartSeries> { new ChartSeries("Sales", SvgChart.Blue, sales) };
+            var rows = years.Select((y, i) => new[] { tips[i].Replace(" · click to open", ""), SvgChart.Peso(sales[i]), of(y).Orders.ToString("N0", Inv) });
+            return Card("Every year", "Total sales per year since the first job. The first and the current year are part-years.",
                 SvgChart.Columns("Sales per year", years.Select(y => y.ToString(Inv)).ToArray(), tips, series, SvgChart.PesoShort, 240, 1,
                     years.Select(y => "Reports.aspx?view=year&y=" + y).ToArray(), years.IndexOf(Start.Year), tipFormat: SvgChart.Peso)
                 + SvgChart.Table("Show as table", new[] { "Year", "Sales", "Job orders" }, rows), "chart-card");
         }
 
-        private static int JobsIn(int year)
-        {
-            return Live(SampleSales.Jobs).Count(j => j.DroppedOff.Year == year);
-        }
-
         protected string WeekdayChart()
         {
             if (View == "day") return "";
-            var live = Live(jobs).ToList();
             // Average per weekday, not total: a month can hold five Saturdays and four Mondays.
             double[] avg = new double[7];
             for (int w = 0; w < 7; w++)
             {
                 var dow = (DayOfWeek)((w + 1) % 7);
                 int dayCount = 0;
-                for (var d = Start.Date; d < End; d = d.AddDays(1)) if (d.DayOfWeek == dow) dayCount++;
-                avg[w] = dayCount == 0 ? 0 : (double)live.Where(j => j.DroppedOff.DayOfWeek == dow).Sum(j => j.Total) / dayCount;
+                double total = 0;
+                for (var d = Start.Date; d < End; d = d.AddDays(1))
+                {
+                    if (d.DayOfWeek != dow) continue;
+                    dayCount++;
+                    total += (double)SalesIn(d, d.AddDays(1));
+                }
+                avg[w] = dayCount == 0 ? 0 : total / dayCount;
             }
             int best = Array.IndexOf(avg, avg.Max());
             var series = new List<ChartSeries> { new ChartSeries("Average sales", SvgChart.Blue, avg) };
@@ -513,8 +538,8 @@ namespace LABATRACK.Admin
             var counts = new int[7, 14];
             foreach (var j in jobs)
             {
-                int w = ((int)j.DroppedOff.DayOfWeek + 6) % 7;   // Monday first
-                int h = j.DroppedOff.Hour - 7;
+                int w = ((int)j.CreatedAt.DayOfWeek + 6) % 7;   // Monday first
+                int h = j.CreatedAt.Hour - 7;
                 if (h >= 0 && h < 14) counts[w, h]++;
             }
             string[] hours = Enumerable.Range(7, 14).Select(h => new DateTime(2000, 1, 1, h, 0, 0).ToString("h tt", Inv).Replace(" ", "").ToLowerInvariant()).ToArray();
@@ -530,18 +555,19 @@ namespace LABATRACK.Admin
         {
             var live = Live(jobs).ToList();
             int total = live.Count;
-            var rows = SampleSales.Services.Select(s => new
+            var rows = live.GroupBy(j => j.ServiceName).Select(g => new
             {
-                Name = s,
-                Jobs = live.Count(j => j.Service == s),
-                Sales = live.Where(j => j.Service == s).Sum(j => j.Total),
-                Kg = live.Where(j => j.Service == s).Sum(j => j.WeightKg),
+                Name = g.Key,
+                Jobs = g.Count(),
+                Sales = g.Sum(j => j.TotalAmount),
+                Kg = g.Sum(j => j.WeightKg),
             }).OrderByDescending(r => r.Jobs).ToList();
 
             return Card("Most availed services", "Job orders by service, counted on the day the job was created.",
                 SvgChart.HBars(rows.Select(r => r.Name).ToList(), rows.Select(r => (double)r.Jobs).ToList(),
                     rows.Select(r => r.Jobs.ToString("N0", Inv) + " · " + Pct(r.Jobs, total)).ToList(),
                     rows.Select(r => r.Jobs.ToString("N0", Inv) + " orders · " + Peso0((double)r.Sales)).ToList(), "Orders")
+                + (rows.Count == 0 ? "<p class=\"muted small\">No job orders in this period.</p>" : "")
                 + SvgChart.Table("Show as table", new[] { "Service", "Orders", "Share", "Laundry (kg)", "Sales" },
                     rows.Select(r => new[] { r.Name, r.Jobs.ToString("N0", Inv), Pct(r.Jobs, total), r.Kg.ToString("N0", Inv), Peso0((double)r.Sales) })),
                 "chart-card");
@@ -551,15 +577,16 @@ namespace LABATRACK.Admin
         {
             var live = Live(jobs).ToList();
             int total = live.Count;
-            var rows = SampleSales.AddOnNames.Select(a => new
+            var lines = live.SelectMany(j => j.AddOns).ToList();
+            var rows = lines.GroupBy(a => a.Name).Select(g => new
             {
-                Name = a,
-                Jobs = live.Count(j => j.AddOns.Any(x => x.Name == a)),
-                Qty = live.SelectMany(j => j.AddOns).Where(x => x.Name == a).Sum(x => x.Quantity),
-                Sales = live.SelectMany(j => j.AddOns).Where(x => x.Name == a).Sum(x => x.Amount),
-                Product = a == "Fabric conditioner" || a == "Detergent sachet",
+                Name = g.Key,
+                Jobs = g.Select(a => a.JobId).Distinct().Count(),
+                Qty = g.Sum(a => a.Quantity),
+                Sales = g.Sum(a => PricingService.LineAmount(a.Quantity, a.PriceAtCreation)),
+                Product = g.First().IsProduct,
             }).OrderByDescending(r => r.Jobs).ToList();
-            decimal addOnSales = rows.Sum(r => r.Sales), allSales = live.Sum(j => j.Total);
+            decimal addOnSales = rows.Sum(r => r.Sales), allSales = live.Sum(j => j.TotalAmount);
 
             return Card("Add-ons", "How often each add-on is taken, as a share of all orders. Add-ons made "
                     + Pct((double)addOnSales, (double)allSales) + " of sales (" + Peso0((double)addOnSales) + ").",
@@ -567,6 +594,7 @@ namespace LABATRACK.Admin
                     rows.Select(r => total == 0 ? 0 : r.Jobs * 100.0 / total).ToList(),
                     rows.Select(r => Pct(r.Jobs, total) + " · " + Peso0((double)r.Sales)).ToList(),
                     rows.Select(r => r.Jobs.ToString("N0", Inv) + " orders" + (r.Product ? ", " + r.Qty.ToString("N0", Inv) + " pieces" : "") + " · " + Peso0((double)r.Sales)).ToList(), "Taken")
+                + (rows.Count == 0 ? "<p class=\"muted small\">No add-ons were taken in this period.</p>" : "")
                 + SvgChart.Table("Show as table", new[] { "Add-on", "Orders with it", "Share of orders", "Pieces", "Sales" },
                     rows.Select(r => new[] { r.Name, r.Jobs.ToString("N0", Inv), Pct(r.Jobs, total), r.Product ? r.Qty.ToString("N0", Inv) : "—", Peso0((double)r.Sales) })),
                 "chart-card");
@@ -585,11 +613,11 @@ namespace LABATRACK.Admin
                 double kg = (double)j.WeightKg;
                 for (int i = 0; i < labels.Length; i++) if (kg >= edges[i] && kg < edges[i + 1]) { counts[i]++; break; }
             }
-            int atMinimum = live.Count(j => j.MinimumApplied);
+            int atMinimum = live.Count(j => PricingService.MinimumApplied(j.BillableKg, j.RatePerKgAtCreation, j.LaundryCharge));
             double avgKg = live.Count == 0 ? 0 : (double)live.Average(j => j.WeightKg);
             var series = new List<ChartSeries> { new ChartSeries("Orders", SvgChart.Blue, counts) };
             return Card("Load sizes", "Orders by weight in kilos. Average load " + avgKg.ToString("0.0", Inv) + " kg; "
-                    + Pct(atMinimum, live.Count) + " were billed at the ₱120 minimum.",
+                    + Pct(atMinimum, live.Count) + " were billed at the minimum charge.",
                 SvgChart.Columns("Orders by load weight", labels, labels.Select(l => l + " kg").ToArray(), series, v => v.ToString("N0", Inv), 230)
                 + SvgChart.Table("Show as table", new[] { "Weight (kg)", "Orders", "Share" },
                     labels.Select((l, i) => new[] { l, counts[i].ToString("N0", Inv), Pct(counts[i], live.Count) })),
@@ -598,17 +626,17 @@ namespace LABATRACK.Admin
 
         protected string TurnaroundCard()
         {
-            var hours = Live(jobs).Where(j => j.ReadyAt.HasValue).Select(j => (j.ReadyAt.Value - j.DroppedOff).TotalHours).ToList();
+            var hours = Live(jobs).Where(j => j.FirstReadyAt.HasValue).Select(j => (j.FirstReadyAt.Value - j.CreatedAt).TotalHours).ToList();
             string[] labels = { "Under 12", "12–18", "18–24", "24–30", "30–36", "36–48", "48+" };
             double[] edges = { 0, 12, 18, 24, 30, 36, 48, double.MaxValue };
             double[] counts = new double[labels.Length];
             foreach (double h in hours)
                 for (int i = 0; i < labels.Length; i++) if (h >= edges[i] && h < edges[i + 1]) { counts[i]++; break; }
-            int onTime = hours.Count(h => h <= 24);
+            int onTime = hours.Count(h => h <= turnaroundTarget);
             var series = new List<ChartSeries> { new ChartSeries("Orders", SvgChart.Blue, counts) };
             string sub = hours.Count == 0
                 ? "No load from this period has reached Ready for pick-up yet."
-                : "Hours from drop-off to Ready for pick-up. " + Pct(onTime, hours.Count) + " were ready within the 24-hour turnaround.";
+                : "Hours from drop-off to Ready for pick-up. " + Pct(onTime, hours.Count) + " were ready within the " + turnaroundTarget + "-hour turnaround.";
             return Card("Turnaround", sub,
                 SvgChart.Columns("Orders by turnaround time", labels, labels.Select(l => l + " hours").ToArray(), series, v => v.ToString("N0", Inv), 230)
                 + SvgChart.Table("Show as table", new[] { "Hours", "Orders", "Share" },
@@ -628,7 +656,7 @@ namespace LABATRACK.Admin
             if (View != "day")
             {
                 var b = Buckets();
-                Func<Func<SalesJob, bool>, double[]> count = f => b.Select(x => (double)live.Count(j => f(j) && j.DroppedOff >= x.From && j.DroppedOff < x.To)).ToArray();
+                Func<Func<ReportJob, bool>, double[]> count = f => b.Select(x => (double)live.Count(j => f(j) && j.CreatedAt >= x.From && j.CreatedAt < x.To)).ToArray();
                 var series = new List<ChartSeries>
                 {
                     new ChartSeries("Returning", SvgChart.Blue, count(j => j.IsReturning)),
@@ -654,13 +682,13 @@ namespace LABATRACK.Admin
         {
             var live = Live(jobs).ToList();
             var top = live.GroupBy(j => j.CustomerId)
-                .Select(g => new { Customer = SampleSales.Customers[g.Key - 1], Orders = g.Count(), Sales = g.Sum(j => j.Total), Kg = g.Sum(j => j.WeightKg) })
+                .Select(g => new { Name = g.First().CustomerName, Since = g.First().CustomerFirstJobAt, Orders = g.Count(), Sales = g.Sum(j => j.TotalAmount), Kg = g.Sum(j => j.WeightKg) })
                 .OrderByDescending(x => x.Sales).ThenByDescending(x => x.Orders).Take(8).ToList();
 
             var sb = new System.Text.StringBuilder("<div class=\"table-wrap\"><table class=\"table\"><thead><tr><th>Customer</th><th class=\"right\">Orders</th><th class=\"right\">Laundry</th><th class=\"right\">Sales</th></tr></thead><tbody>");
             foreach (var t in top)
-                sb.Append("<tr><td><div class=\"cell-main\">").Append(HttpUtility.HtmlEncode(t.Customer.Name))
-                  .Append("</div><div class=\"cell-sub\">Customer since ").Append(t.Customer.FirstVisit.ToString("MMM yyyy", Inv)).Append("</div></td>")
+                sb.Append("<tr><td><div class=\"cell-main\">").Append(HttpUtility.HtmlEncode(t.Name))
+                  .Append("</div><div class=\"cell-sub\">Customer since ").Append(t.Since.HasValue ? t.Since.Value.ToString("MMM yyyy", Inv) : "—").Append("</div></td>")
                   .Append("<td class=\"right num\">").Append(t.Orders.ToString("N0", Inv)).Append("</td>")
                   .Append("<td class=\"right num\">").Append(t.Kg.ToString("N0", Inv)).Append(" kg</td>")
                   .Append("<td class=\"right num strong\">").Append(Peso0((double)t.Sales)).Append("</td></tr>");
@@ -673,12 +701,12 @@ namespace LABATRACK.Admin
 
         protected string StaffCard()
         {
-            var rows = SampleSales.Staff.Select(s => new
+            var rows = jobs.GroupBy(j => j.CreatedByName).Select(g => new
             {
-                Name = s,
-                Orders = jobs.Count(j => j.Staff == s && !j.Voided),
-                Voids = jobs.Count(j => j.Staff == s && j.Voided),
-                Sales = jobs.Where(j => j.Staff == s && !j.Voided).Sum(j => j.Total),
+                Name = g.Key,
+                Orders = g.Count(j => !j.IsVoided),
+                Voids = g.Count(j => j.IsVoided),
+                Sales = g.Where(j => !j.IsVoided).Sum(j => j.TotalAmount),
             }).Where(r => r.Orders + r.Voids > 0).OrderByDescending(r => r.Orders).ToList();
             int total = rows.Sum(r => r.Orders);
 
@@ -686,6 +714,7 @@ namespace LABATRACK.Admin
                 SvgChart.HBars(rows.Select(r => r.Name).ToList(), rows.Select(r => (double)r.Orders).ToList(),
                     rows.Select(r => r.Orders.ToString("N0", Inv) + " · " + Pct(r.Orders, total)).ToList(),
                     rows.Select(r => r.Orders.ToString("N0", Inv) + " orders · " + Peso0((double)r.Sales) + " · " + r.Voids + " voided").ToList(), "Taken")
+                + (rows.Count == 0 ? "<p class=\"muted small\">No job orders in this period.</p>" : "")
                 + SvgChart.Table("Show as table", new[] { "Staff", "Orders", "Share", "Sales", "Voided" },
                     rows.Select(r => new[] { r.Name, r.Orders.ToString("N0", Inv), Pct(r.Orders, total), Peso0((double)r.Sales), r.Voids.ToString("N0", Inv) })),
                 "chart-card");
@@ -693,9 +722,9 @@ namespace LABATRACK.Admin
 
         protected string VoidsCard()
         {
-            var voided = jobs.Where(j => j.Voided).ToList();
-            decimal refunded = voided.Sum(j => j.Total);
-            var reasons = voided.GroupBy(j => j.VoidReason).Select(g => new { Reason = g.Key, Count = g.Count(), Amount = g.Sum(j => j.Total) })
+            var voided = jobs.Where(j => j.IsVoided).ToList();
+            decimal refunded = voided.Sum(j => j.TotalAmount);
+            var reasons = voided.GroupBy(j => j.VoidReason ?? "").Select(g => new { Reason = g.Key, Count = g.Count(), Amount = g.Sum(j => j.TotalAmount) })
                 .OrderByDescending(r => r.Count).ToList();
 
             var sb = new System.Text.StringBuilder("<div class=\"mini-stats\">");
@@ -745,5 +774,12 @@ namespace LABATRACK.Admin
 
         private static string Peso0(double v) { return SvgChart.Peso(v); }
         private static string Peso2(decimal v) { return "₱" + v.ToString("N2", Inv); }
+
+        // ---- Used by the markup: the unclaimed table ----
+
+        protected string DaysWaiting(DateTime readySince)
+        {
+            return ReportService.DaysWaiting(readySince, now).ToString(Inv);
+        }
     }
 }

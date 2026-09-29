@@ -21,7 +21,7 @@
                 </header>
 
                 <div class="content">
-                    <%-- DRAFT: sample jobs from Helpers/SampleData.cs. Phase 4 searches JobOrders instead. --%>
+                    <%-- The search runs in SQL (usp_JobOrders_Search), one page at a time. --%>
                     <section class="card">
                         <div class="card-b history-filters">
                             <div class="field grow">
@@ -89,29 +89,28 @@
                                 <tbody>
                                     <asp:Repeater ID="rptJobs" runat="server">
                                         <ItemTemplate>
-                                            <tr class="<%# (string)Eval("Status") == "Voided" ? "is-voided" : "" %>">
-                                                <td class="mono"><%#: Eval("Claim") %></td>
-                                                <td><div class="cell-main"><%#: Eval("Customer") %></div><div class="cell-sub"><%#: Eval("Contact") %></div></td>
-                                                <td><div class="cell-main"><%#: Eval("Service") %></div><div class="cell-sub"><%# ((decimal)Eval("WeightKg")).ToString("0.0") %> kg</div></td>
-                                                <td class="num"><%# When((DateTime)Eval("DroppedOff")) %></td>
+                                            <tr class="<%# (string)Eval("CurrentStatus") == "Voided" ? "is-voided" : "" %>">
+                                                <td class="mono"><%#: Eval("ClaimNumber") %></td>
+                                                <td><div class="cell-main"><%#: Eval("CustomerName") %></div><div class="cell-sub"><%#: Eval("ContactNumber") %></div></td>
+                                                <td><div class="cell-main"><%#: Eval("ServiceName") %></div><div class="cell-sub"><%# ((decimal)Eval("WeightKg")).ToString("0.0") %> kg</div></td>
+                                                <td class="num"><%# When((DateTime)Eval("CreatedAt")) %></td>
                                                 <td>
-                                                    <span class="pill <%# StageCss((string)Eval("Status")) %>"><%#: Eval("Status") %></span>
-                                                    <div class="cell-sub" style="margin-top:3px;"><%#: Eval("StatusNote") %></div>
+                                                    <span class="pill <%# StageCss((string)Eval("CurrentStatus")) %>"><%#: Eval("CurrentStatus") %></span>
+                                                    <div class="cell-sub" style="margin-top:3px;"><%#: StatusNote((LABATRACK.Models.JobOrder)Container.DataItem) %></div>
                                                 </td>
                                                 <td class="right num">
-                                                    <span class="<%# (string)Eval("Status") == "Voided" ? "struck" : "" %>"><%# Peso((decimal)Eval("Total")) %></span>
-                                                    <%# (string)Eval("Status") == "Voided" ? "<div class=\"cell-sub\">refunded</div>" : "" %>
+                                                    <span class="<%# (string)Eval("CurrentStatus") == "Voided" ? "struck" : "" %>"><%# Peso((decimal)Eval("TotalAmount")) %></span>
+                                                    <%# (string)Eval("CurrentStatus") == "Voided" ? "<div class=\"cell-sub\">refunded</div>" : "" %>
                                                 </td>
-                                                <td><span class="pill pill-ok"><%#: Eval("Method") %></span></td>
+                                                <td><span class="pill pill-ok"><%#: Eval("PaymentMethod") %></span></td>
                                                 <% if (IsOwner) { %>
                                                 <td class="small">
-                                                    <div>Taken by <%#: Eval("CreatedBy") %></div>
-                                                    <%# string.IsNullOrEmpty((string)Eval("ClosedBy")) ? "" : "<div class=\"muted\">" + ((string)Eval("Status") == "Voided" ? "Voided" : "Handed over") + " by " + Server.HtmlEncode((string)Eval("ClosedBy")) + "</div>" %>
-                                                    <%# string.IsNullOrEmpty((string)Eval("VoidReason")) ? "" : "<div class=\"void-reason\">&ldquo;" + Server.HtmlEncode((string)Eval("VoidReason")) + "&rdquo;</div>" %>
+                                                    <div>Taken by <%#: Eval("CreatedByName") %></div>
+                                                    <%# ClosedByNote((LABATRACK.Models.JobOrder)Container.DataItem) %>
                                                 </td>
                                                 <% } %>
                                                 <td class="right">
-                                                    <a class="btn btn-sm" href="<%# DetailLink((string)Eval("Status")) %>" aria-label="View job <%#: Eval("Claim") %>"><%# Icons.Get("eye", "ico-sm") %>View</a>
+                                                    <a class="btn btn-sm" href="JobDetail.aspx?id=<%# Eval("JobId") %>" aria-label="View job <%#: Eval("ClaimNumber") %>"><%# Icons.Get("eye", "ico-sm") %>View</a>
                                                 </td>
                                             </tr>
                                         </ItemTemplate>
@@ -140,5 +139,7 @@
             </main>
         </div>
     </form>
+
+    <script src="<%= AssetUrl.Get("~/Assets/js/Sidebar.js") %>"></script>
 </body>
 </html>

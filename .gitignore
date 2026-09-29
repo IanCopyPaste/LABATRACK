@@ -109,6 +109,8 @@ _UpgradeReport_Files/
 .env
 .env.*
 appsettings.*.local.json
+# LabaTrack's SMTP settings (read by Web.config's <appSettings file="Secrets.config">)
+Secrets.config
 
 # OS files
 Thumbs.db

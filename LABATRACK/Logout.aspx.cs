@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Web.UI;
+using LABATRACK.Models;
+using LABATRACK.Services;
 
 namespace LABATRACK
 {
@@ -7,9 +9,11 @@ namespace LABATRACK
     {
         protected void Page_Load(object sender, EventArgs e)
         {
-            // DRAFT: nothing to clear yet. Phase 2 adds FormsAuthentication.SignOut() here.
+            // Back to the login page the account came from: the owner's for the owner.
+            UserAccount user = AuthService.CurrentUser;
+            AuthService.SignOut();
             Session.Abandon();
-            Response.Redirect("~/Default.aspx");
+            Response.Redirect(user != null && user.IsOwner ? "~/Admin/Login.aspx" : "~/Login.aspx");
         }
     }
 }

@@ -24,7 +24,7 @@
                 </header>
 
                 <div class="content">
-                    <%-- DRAFT: sample customers from Helpers/SampleData.cs, kept for this visit only. --%>
+                    <%-- Customers from the database (CustomerService). Staff add and search; only the owner edits. --%>
                     <asp:Literal ID="litNotice" runat="server" EnableViewState="false" />
 
                     <%-- The form sits on top in one row, and the list below it gets the full width so no
@@ -87,22 +87,22 @@
                                 <tbody>
                                     <asp:Repeater ID="rptCustomers" runat="server">
                                         <ItemTemplate>
-                                            <tr class="<%# RowCss((int)Eval("Id")) %>">
+                                            <tr class="<%# RowCss((int)Eval("CustomerId")) %>">
                                                 <td>
                                                     <div class="cell-main"><%#: Eval("Name") %></div>
                                                     <div class="cell-sub">Since <%# ((DateTime)Eval("CreatedAt")).ToString("MMM d, yyyy") %></div>
                                                 </td>
-                                                <td class="mono"><%#: Eval("Contact") %></td>
+                                                <td class="mono"><%#: Eval("ContactNumber") %></td>
                                                 <td class="small">
                                                     <%-- No email is allowed. The pick-up email is then logged as Skipped, not Failed. --%>
                                                     <%# string.IsNullOrEmpty((string)Eval("Email")) ? "<span class=\"muted\" title=\"Pick-up emails are skipped for this customer\">None</span>" : Server.HtmlEncode((string)Eval("Email")) %>
                                                 </td>
                                                 <td class="right num">
-                                                    <%# (int)Eval("JobCount") == 0 ? "<span class=\"muted\">0</span>" : "<a href=\"History.aspx?q=" + HttpUtility.UrlEncode((string)Eval("Contact")) + "\" title=\"See their jobs in History\">" + Eval("JobCount") + "</a>" %>
+                                                    <%# (int)Eval("JobCount") == 0 ? "<span class=\"muted\">0</span>" : "<a href=\"History.aspx?q=" + HttpUtility.UrlEncode((string)Eval("ContactNumber")) + "\" title=\"See their jobs in History\">" + Eval("JobCount") + "</a>" %>
                                                 </td>
                                                 <td class="num"><%# LastVisit((DateTime?)Eval("LastDropOff")) %></td>
                                                 <td class="right">
-                                                    <%# IsOwner ? "<a class=\"btn btn-sm btn-ghost\" href=\"Customers.aspx?edit=" + Eval("Id") + "\">" + Icons.Get("pencil", "ico-sm") + "Edit</a>" : "" %>
+                                                    <%# IsOwner ? "<a class=\"btn btn-sm btn-ghost\" href=\"Customers.aspx?edit=" + Eval("CustomerId") + "\">" + Icons.Get("pencil", "ico-sm") + "Edit</a>" : "" %>
                                                 </td>
                                             </tr>
                                         </ItemTemplate>
@@ -120,5 +120,7 @@
             </main>
         </div>
     </form>
+
+    <script src="<%= AssetUrl.Get("~/Assets/js/Sidebar.js") %>"></script>
 </body>
 </html>

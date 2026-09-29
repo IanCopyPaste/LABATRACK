@@ -5,6 +5,7 @@
 (function () {
     var loadCard = document.getElementById('loadCard');
     var serviceBox = document.getElementById('ddlService');
+    if (!loadCard || !serviceBox || serviceBox.options.length === 0) return;   // no service to price yet
     var weightBox = document.getElementById('txtWeight');
     var minimum = parseFloat(loadCard.getAttribute('data-minimum'));     // written by the page
     var rounding = parseFloat(loadCard.getAttribute('data-rounding'));
@@ -162,7 +163,6 @@
 
         var laundry = laundryCharge();
         var total = lines.reduce(function (sum, line) { return sum + line.amount; }, laundry);
-        document.getElementById('hfShownTotal').value = isFinite(total) ? total.toFixed(2) : '';
         document.getElementById('sumTotal').textContent = peso(total);
         document.getElementById('ewalletTotal').textContent = peso(total);
         exactBtn.setAttribute('data-cash', isFinite(total) ? total.toFixed(2) : '');
@@ -205,6 +205,22 @@
         document.getElementById('sumChange').textContent = (state === 'ok' || state === 'exact') && isCash ? peso(change) : '—';
         document.getElementById('sumMethod').textContent = 'Paid in full · ' + (isCash ? 'Cash' : 'E-wallet');
         createBtn.disabled = isCash && (state === 'idle' || state === 'short');
+        paintConfirm(lines, total, isCash, received, change);
+    }
+
+    // The question Confirm.js asks before the job is saved: the whole order in a few lines, so the
+    // cashier can read it back to the customer before pressing Continue.
+    function paintConfirm(lines, total, isCash, received, change) {
+        var name = document.getElementById('txtCustomerName').value.trim() || 'New customer';
+        var contact = document.getElementById('txtSearchContact').value.trim();
+        var text = name + (contact ? ' · ' + contact : '') + '\n'
+            + breakdown.sumService.textContent + ', ' + breakdown.sumWeight.textContent.replace(' → billable', '')
+            + ' (billed as ' + breakdown.sumBillable.textContent + ')\n'
+            + (lines.length ? lines.map(function (line) { return line.label; }).join(', ') + '\n' : '')
+            + '\nTotal ' + peso(total) + ' · '
+            + (isCash ? 'cash ' + peso(received) + ', change ' + peso(change) : 'e-wallet, exactly ' + peso(total))
+            + '\n\nThe prices are saved with the job and never change later. The claim number is given when you continue.';
+        createBtn.setAttribute('data-confirm-text', text);
     }
 
     function paintChange(state, label, amount) {
@@ -214,6 +230,8 @@
     }
 
     cash.addEventListener('input', update);
+    document.getElementById('txtCustomerName').addEventListener('input', update);
+    document.getElementById('txtSearchContact').addEventListener('input', update);
     serviceBox.addEventListener('change', update);
     weightBox.addEventListener('input', update);
     rbCash.addEventListener('change', update);
@@ -240,6 +258,14 @@
             cash.value = amount.toFixed(2);
             update();
         });
+    });
+
+    // Enter in the contact number box presses Find (the form's first button). Anywhere else it
+    // would do the same, which is never what the cashier meant, so there it does nothing.
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && e.target.tagName === 'INPUT' && !e.target.hasAttribute('data-find-box')) {
+            e.preventDefault();
+        }
     });
     update();
 })();

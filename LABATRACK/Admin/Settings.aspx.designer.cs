@@ -25,14 +25,29 @@ namespace LABATRACK.Admin
         protected global::System.Web.UI.WebControls.Literal litNav;
 
         /// <summary>
+        /// litNotice control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Literal litNotice;
+
+        /// <summary>
         /// txtShopName control.
         /// </summary>
         protected global::System.Web.UI.WebControls.TextBox txtShopName;
 
         /// <summary>
+        /// lblShopNameError control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Label lblShopNameError;
+
+        /// <summary>
         /// txtSlipHeader control.
         /// </summary>
         protected global::System.Web.UI.WebControls.TextBox txtSlipHeader;
+
+        /// <summary>
+        /// lblSlipHeaderError control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Label lblSlipHeaderError;
 
         /// <summary>
         /// txtClaimFormat control.
@@ -80,18 +95,38 @@ namespace LABATRACK.Admin
         protected global::System.Web.UI.WebControls.Button btnChangePassword;
 
         /// <summary>
-        /// txtRecoveryEmail control.
-        /// </summary>
-        protected global::System.Web.UI.WebControls.TextBox txtRecoveryEmail;
-
-        /// <summary>
         /// txtTurnaroundHours control.
         /// </summary>
         protected global::System.Web.UI.WebControls.TextBox txtTurnaroundHours;
 
         /// <summary>
+        /// lblTurnaroundError control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Label lblTurnaroundError;
+
+        /// <summary>
         /// txtUnclaimedDays control.
         /// </summary>
         protected global::System.Web.UI.WebControls.TextBox txtUnclaimedDays;
+
+        /// <summary>
+        /// lblUnclaimedError control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Label lblUnclaimedError;
+
+        /// <summary>
+        /// lblReworkError control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Label lblReworkError;
+
+        /// <summary>
+        /// txtRecoveryEmail control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.TextBox txtRecoveryEmail;
+
+        /// <summary>
+        /// lblRecoveryError control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Label lblRecoveryError;
     }
 }

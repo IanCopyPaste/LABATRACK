@@ -1,9 +1,9 @@
 ﻿using System;
-using System.Web.UI;
+using LABATRACK.Security;
 
 namespace LABATRACK.Admin
 {
-    public partial class Default : Page
+    public partial class Default : AdminBasePage
     {
         protected void Page_Load(object sender, EventArgs e)
         {

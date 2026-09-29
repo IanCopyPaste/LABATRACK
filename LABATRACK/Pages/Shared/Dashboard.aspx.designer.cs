@@ -43,5 +43,15 @@ namespace LABATRACK.Pages.Shared
         /// rptClaimed control.
         /// </summary>
         protected global::System.Web.UI.WebControls.Repeater rptClaimed;
+
+        /// <summary>
+        /// rptUnclaimed control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Repeater rptUnclaimed;
+
+        /// <summary>
+        /// rptVoided control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Repeater rptVoided;
     }
 }

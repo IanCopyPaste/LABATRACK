@@ -25,18 +25,13 @@ namespace LABATRACK.Admin
         protected global::System.Web.UI.WebControls.Literal litNav;
 
         /// <summary>
-        /// txtNewUsername control.
+        /// litNotice control.
         /// </summary>
-        protected global::System.Web.UI.WebControls.TextBox txtNewUsername;
+        protected global::System.Web.UI.WebControls.Literal litNotice;
 
         /// <summary>
-        /// txtNewPassword control.
+        /// rptUsers control.
         /// </summary>
-        protected global::System.Web.UI.WebControls.TextBox txtNewPassword;
-
-        /// <summary>
-        /// txtConfirmPassword control.
-        /// </summary>
-        protected global::System.Web.UI.WebControls.TextBox txtConfirmPassword;
+        protected global::System.Web.UI.WebControls.Repeater rptUsers;
     }
 }

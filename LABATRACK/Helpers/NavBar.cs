@@ -1,5 +1,6 @@
 ﻿using System.Text;
 using System.Web;
+using LABATRACK.Models;
 
 namespace LABATRACK.Helpers
 {
@@ -7,7 +8,8 @@ namespace LABATRACK.Helpers
     /// Builds the sidebar menu. Replaces a .master page: every page has an
     /// &lt;asp:Literal ID="litNav"&gt; and BasePage fills it with this HTML.
     /// There are two menus: the owner's (everything) and staff's (the counter screens).
-    /// DRAFT: the role comes from the draft sign-in until Phase 2 adds AuthService.
+    /// The menu only shows what a role may open; the pages themselves are guarded on the
+    /// server (BasePage, AdminBasePage, Web.config).
     /// </summary>
     public static class NavBar
     {
@@ -48,20 +50,31 @@ namespace LABATRACK.Helpers
         // is only ever written once.
         private static readonly Item[] StaffCounter = { Counter[1], Counter[0], Counter[2], Counter[3] };
 
-        public static string Render(string activeKey)
+        /// <summary>
+        /// The cookie Sidebar.js writes when the menu is collapsed to icons. It is read here, so
+        /// the next page is drawn collapsed straight away instead of opening and then shrinking.
+        /// </summary>
+        public const string CollapsedCookie = "lt-sidebar";
+
+        public static string Render(string activeKey, UserAccount user)
         {
-            // DRAFT: the role comes from the draft sign-in in SampleData. Phase 2 reads the
-            // signed-in account from AuthService instead. The menu only shows what a role may
-            // open; the pages themselves are guarded on the server (AdminBasePage, Web.config).
-            var session = HttpContext.Current == null ? null : HttpContext.Current.Session;
-            bool owner = SampleData.IsOwner(session);
-            string username = SampleData.Username(session);
+            bool owner = user.IsOwner;
+            string username = user.Username;
+            HttpCookie cookie = HttpContext.Current == null ? null : HttpContext.Current.Request.Cookies[CollapsedCookie];
+            bool collapsed = cookie != null && cookie.Value == "collapsed";
 
             var sb = new StringBuilder();
-            sb.Append("<aside class=\"sidebar\">");
+            sb.Append("<aside class=\"sidebar").Append(collapsed ? " is-collapsed" : "").Append("\" data-sidebar=\"true\">");
             sb.Append("<div class=\"brand\"><div class=\"brand-mark\">").Append(Icons.Get("washing-machine"))
-              .Append("</div><div><div class=\"brand-name\">LabaTrack</div><div class=\"brand-sub\">")
-              .Append(owner ? "Owner console" : "Counter").Append("</div></div></div>");
+              .Append("</div><div class=\"brand-text\"><div class=\"brand-name\">LabaTrack</div><div class=\"brand-sub\">")
+              .Append(owner ? "Owner console" : "Counter").Append("</div></div>")
+              // Collapses the menu to icons, or opens it again (Assets/js/Sidebar.js). Both icons are
+              // drawn; the stylesheet shows the one that matches the state.
+              .Append("<button type=\"button\" class=\"sidebar-toggle\" data-sidebar-toggle=\"true\" aria-expanded=\"")
+              .Append(collapsed ? "false" : "true").Append("\" aria-label=\"").Append(collapsed ? "Expand the menu" : "Collapse the menu")
+              .Append("\" title=\"").Append(collapsed ? "Expand the menu" : "Collapse the menu").Append("\">")
+              .Append(Icons.Get("panel-left-close", "when-open")).Append(Icons.Get("panel-left-open", "when-collapsed"))
+              .Append("</button></div>");
 
             sb.Append("<nav class=\"nav\">");
             if (owner)
@@ -83,7 +96,6 @@ namespace LABATRACK.Helpers
               .Append(owner ? "Owner" : "Staff").Append("</div></div>")
               .Append("<a class=\"icon-btn\" title=\"Sign out\" href=\"").Append(Url("~/Logout.aspx")).Append("\">")
               .Append(Icons.Get("log-out")).Append("</a></div>")
-              .Append("<div class=\"draft-note\">Design draft &middot; sample data only</div>")
               .Append("</div>");
 
             sb.Append("</aside>");
@@ -103,9 +115,10 @@ namespace LABATRACK.Helpers
                       .Append("<span class=\"nav-tag\">Soon</span></span>");
                     continue;
                 }
+                // The title shows the name as a tooltip when the menu is collapsed to icons.
                 string css = item.Key == activeKey ? " class=\"active\"" : "";
-                sb.Append("<a").Append(css).Append(" href=\"").Append(Url(item.Url)).Append("\">")
-                  .Append(Icons.Get(item.Icon)).Append(text).Append("</a>");
+                sb.Append("<a").Append(css).Append(" href=\"").Append(Url(item.Url)).Append("\" title=\"").Append(text).Append("\">")
+                  .Append(Icons.Get(item.Icon)).Append("<span class=\"nav-label\">").Append(text).Append("</span></a>");
             }
         }
 

@@ -25,6 +25,16 @@ namespace LABATRACK.Pages.Shared
         protected global::System.Web.UI.WebControls.Literal litNav;
 
         /// <summary>
+        /// litNotice control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Literal litNotice;
+
+        /// <summary>
+        /// hfShownStatus control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.HiddenField hfShownStatus;
+
+        /// <summary>
         /// rptStepper control.
         /// </summary>
         protected global::System.Web.UI.WebControls.Repeater rptStepper;
@@ -75,8 +85,18 @@ namespace LABATRACK.Pages.Shared
         protected global::System.Web.UI.WebControls.Repeater rptHistory;
 
         /// <summary>
+        /// rptLines control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Repeater rptLines;
+
+        /// <summary>
         /// rptPayments control.
         /// </summary>
         protected global::System.Web.UI.WebControls.Repeater rptPayments;
+
+        /// <summary>
+        /// rptEmails control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Repeater rptEmails;
     }
 }

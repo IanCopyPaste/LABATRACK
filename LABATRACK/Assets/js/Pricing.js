@@ -1,17 +1,20 @@
 ﻿// Admin/Pricing.aspx
 // One edit window (a <dialog>) for services, service add-ons and product add-ons. Edit fills it
-// from the clicked row; Add opens it empty. DRAFT: Save only updates the table on this page.
-// Phase 2 posts the same fields to the server, which checks them again and saves them to
-// Services or AddOns; the checks below are there so the owner sees a mistake straight away.
+// from the clicked row; Add opens it empty. Save posts the window to the server (the Save button is
+// a plain submit button named action=price), which checks everything again and saves it to Services
+// or AddOns; the checks below are there so the owner sees a mistake straight away.
 // A service with a load still in the shop has its Edit button turned off by the server, and the
 // server refuses the save as well: the button is a courtesy, not the rule.
 (function () {
     var dialog = document.getElementById('priceDialog');
     if (!dialog || typeof dialog.showModal !== 'function') return;
 
+    var kindBox = document.getElementById('pdKind');
+    var idBox = document.getElementById('pdId');
     var nameBox = document.getElementById('pdName');
     var priceBox = document.getElementById('pdPrice');
     var activeBox = document.getElementById('pdActive');
+    var saveBtn = document.getElementById('pdSave');
     var nameError = document.getElementById('pdNameError');
     var priceError = document.getElementById('pdPriceError');
     var stagesField = document.getElementById('pdStagesField');
@@ -76,7 +79,7 @@
             .map(function (box) { return box.getAttribute('data-stage'); });
         routeHint.textContent = work.length === 0
             ? ''
-            :'Route: ' + ['Queued'].concat(work, ['Inspection', 'Ready for pick-up']).join(' → ');
+            : 'Route: ' + ['Queued'].concat(work, ['Inspection', 'Ready for pick-up']).join(' → ');
     }
 
     function open(k, tr) {
@@ -84,6 +87,8 @@
         row = tr;
         var info = kinds[k];
         var title = (tr ? 'Edit ' : 'Add ') + info.noun;
+        kindBox.value = k;
+        idBox.value = tr ? tr.getAttribute('data-id') : '';
         document.getElementById('priceDialogTitle').textContent = title.charAt(0).toUpperCase() + title.slice(1);
         document.getElementById('pdPriceLabel').textContent = info.priceLabel;
         document.getElementById('pdSaveText').textContent = tr ? 'Save changes' : 'Add ' + info.noun;
@@ -96,8 +101,10 @@
         nameBox.value = current.name;
         priceBox.value = tr ? current.price.toFixed(2) : '';
         activeBox.checked = current.active;
+        // Only a service has stages. For an add-on the boxes are cleared, so nothing about
+        // stages is ever posted with an add-on.
         Array.prototype.forEach.call(stageBoxes, function (box) {
-            box.checked = current.stages.indexOf(box.getAttribute('data-stage').charAt(0)) >= 0;
+            box.checked = k === 'service' && current.stages.indexOf(box.getAttribute('data-stage').charAt(0)) >= 0;
         });
         paintRoute();
 
@@ -132,7 +139,7 @@
         }
 
         // Money is DECIMAL(10,2): digits only, at most two places after the point, more than zero.
-        if (!/^\d{1,6}(\.\d{1,2})?$/.test(priceText) || parseFloat(priceText) <= 0) {
+        if (!/^\d{1,5}(\.\d{1,2})?$/.test(priceText) || parseFloat(priceText) <= 0) {
             showError(priceError, 'Enter an amount in pesos, for example 40 or 42.50.'); ok = false;
         } else {
             showError(priceError, '');
@@ -145,66 +152,6 @@
             stagesError.hidden = true;
         }
         return ok;
-    }
-
-    function stageChips(code) {
-        var wrap = document.createElement('div');
-        wrap.className = 'stage-chips';
-        ['Washing', 'Drying', 'Folding'].forEach(function (stage) {
-            var chip = document.createElement('span');
-            var on = code.indexOf(stage.charAt(0)) >= 0;
-            chip.className = 'stage-chip' + (on ? '' : ' is-off');
-            if (!on) chip.title = 'Skipped by this service';
-            chip.textContent = stage;
-            wrap.appendChild(chip);
-        });
-        return wrap;
-    }
-
-    function paint(tr, name, price, active) {
-        cell(tr, 'name').textContent = name;
-        cell(tr, 'price').textContent = peso(price);
-        cell(tr, 'name').className = 'cell-main' + (active ? '' : ' muted');
-        cell(tr, 'price').className = 'right num' + (active ? '' : ' muted');
-
-        // The status cell is rebuilt from scratch: a newly added service has no loads yet, so
-        // it carries no "in use" note and its Edit button is on.
-        var pill = document.createElement('span');
-        pill.className = 'pill ' + (active ? 'pill-ok' : 'st-claimed');
-        pill.textContent = active ? 'Active' : 'Inactive';
-        cell(tr, 'status').textContent = '';
-        cell(tr, 'status').appendChild(pill);
-
-        if (kind === 'service') {
-            var code = stageCode();
-            tr.setAttribute('data-stages', code);
-            cell(tr, 'stages').textContent = '';
-            cell(tr, 'stages').appendChild(stageChips(code));
-        }
-
-        var edit = tr.querySelector('[data-price-edit]');
-        edit.disabled = false;
-        edit.removeAttribute('title');
-
-        // Picks the changed row out for a moment so the owner sees where it went.
-        tr.classList.remove('is-changed');
-        void tr.offsetWidth;
-        tr.classList.add('is-changed');
-    }
-
-    function save() {
-        if (!validate()) return;
-        var name = nameBox.value.trim();
-        var price = parseFloat(priceBox.value.replace(/,/g, ''));
-        var target = row;
-        if (!target) {
-            // A new row copies an existing one so it keeps the same cells and Edit button.
-            var body = document.querySelector('[data-price-table="' + kind + '"]').tBodies[0];
-            target = body.rows[0].cloneNode(true);
-            body.appendChild(target);
-        }
-        paint(target, name, price, activeBox.checked);
-        dialog.close();
     }
 
     document.addEventListener('click', function (e) {
@@ -226,7 +173,10 @@
         });
     });
 
-    document.getElementById('pdSave').addEventListener('click', save);
+    // Save is a real submit button: it goes to the server only when the window is filled in right.
+    saveBtn.addEventListener('click', function (e) {
+        if (!validate()) e.preventDefault();
+    });
     Array.prototype.forEach.call(dialog.querySelectorAll('[data-modal-close]'), function (b) {
         b.addEventListener('click', function () { dialog.close(); });
     });
@@ -236,12 +186,12 @@
         if (e.target === dialog) dialog.close();
     });
 
-    // The window sits inside the page's one server form, so Enter would post the whole page.
-    // Here it saves the window instead.
+    // The window sits inside the page's one server form, so Enter would press the page's first
+    // button (Save rules). Here it presses the window's own Save instead.
     dialog.addEventListener('keydown', function (e) {
         if (e.key === 'Enter' && e.target.tagName === 'INPUT') {
             e.preventDefault();
-            save();
+            saveBtn.click();
         }
     });
 })();

@@ -18,5 +18,15 @@ namespace LABATRACK.Pages.Shared
         /// form1 control.
         /// </summary>
         protected global::System.Web.UI.HtmlControls.HtmlForm form1;
+
+        /// <summary>
+        /// rptAddOns control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Repeater rptAddOns;
+
+        /// <summary>
+        /// rptLaterPayments control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Repeater rptLaterPayments;
     }
 }

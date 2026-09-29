@@ -4,19 +4,25 @@ using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Web;
+using LABATRACK.DataAccess;
 using LABATRACK.Helpers;
+using LABATRACK.Models;
 using LABATRACK.Security;
+using LABATRACK.Services;
 
 namespace LABATRACK.Admin
 {
-    // DRAFT: one day of payments from Helpers/SampleSales, the same made-up history the Reports
-    // page uses, so Sep 22 shows the same ₱850 as the dashboards. Phase 5 reads Payments where
-    // PaidAt falls inside the chosen day (PaidAt >= @day AND PaidAt < @nextDay) instead.
+    // One day of payments for the drawer check (?d=yyyy-MM-dd, default today), from
+    // ReportService.GetDailyReport. Money is counted on Payments.PaidAt, within the half-open day
+    // [midnight, next midnight), so the net total always equals, checked by hand:
+    //     SELECT SUM(Amount) FROM Payments WHERE PaidAt >= @day AND PaidAt < @nextDay
+    // The job counts (orders, voids, kilos, by service, by staff) are for the jobs dropped off
+    // that day.
     //
     // The page is laid out as one A4 sheet. On screen it is shown as a sheet of paper with a
     // toolbar above it; printing drops the toolbar and prints the sheet as it is, with its own
     // page margins and page numbers, rather than a copy of the screen.
-    public partial class DailySalesReport : BasePage
+    public partial class DailySalesReport : AdminBasePage
     {
         protected override string PageStyleSheet
         {
@@ -24,15 +30,13 @@ namespace LABATRACK.Admin
         }
 
         private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
-        private const string ShopName = "LabaTrack Laundry Shop";   // DRAFT: Phase 2 reads it from Settings
-        private string PreparedBy { get { return SampleData.Username(Session); } }   // DRAFT: Phase 2 uses AuthService
 
         protected DateTime Day { get; private set; }
         protected bool IsToday { get; private set; }
         protected string PrevDayLink { get; private set; }
         protected string NextDayLink { get; private set; }
 
-        // One line in the ledger: a payment at drop-off, or the refund when a job is voided.
+        // One line in the ledger: a payment at drop-off, a correction, or a refund.
         protected class Line
         {
             public DateTime At;
@@ -41,40 +45,52 @@ namespace LABATRACK.Admin
             public bool IsRefund;
         }
 
-        private List<SalesJob> dayJobs;
         protected List<Line> Lines { get; private set; }
 
-        protected decimal CashIn, CashRefunds, EwalletIn, EwalletRefunds;
-        protected decimal NetCash { get { return CashIn - CashRefunds; } }
-        protected decimal NetEwallet { get { return EwalletIn - EwalletRefunds; } }
-        protected decimal NetTotal { get { return NetCash + NetEwallet; } }
-        protected int Orders { get; private set; }
-        protected int Voids { get; private set; }
-        protected decimal Kilos { get; private set; }
-        protected decimal LastWeekTotal { get; private set; }
+        private ReportService.DailyReport report;
+        private List<JobOrder> liveJobs;   // dropped off that day and not voided
+        private DateTime now;
+        private string shopName;
+
+        protected decimal CashIn { get { return report.Sales.CashIn; } }
+        protected decimal CashRefunds { get { return report.Sales.CashRefunds; } }
+        protected decimal EwalletIn { get { return report.Sales.EwalletIn; } }
+        protected decimal EwalletRefunds { get { return report.Sales.EwalletRefunds; } }
+        protected decimal NetCash { get { return report.Sales.NetCash; } }
+        protected decimal NetEwallet { get { return report.Sales.NetEwallet; } }
+        protected decimal NetTotal { get { return report.Sales.NetTotal; } }
+        protected int Orders { get { return liveJobs.Count; } }
+        protected int Voids { get { return report.Jobs.Count - liveJobs.Count; } }
+        protected decimal Kilos { get { return liveJobs.Sum(j => j.WeightKg); } }
+        protected decimal LastWeekTotal { get { return report.SameDayLastWeek.NetTotal; } }
 
         protected void Page_Load(object sender, EventArgs e)
         {
+            now = DateTime.Now;
+            DateTime first = ReportService.FirstDay(now);
             DateTime d;
             if (!DateTime.TryParseExact(Request.QueryString["d"], "yyyy-MM-dd", Inv, DateTimeStyles.None, out d))
-                d = SampleSales.Now.Date;
-            Day = d < SampleSales.Opened ? SampleSales.Opened : d > SampleSales.Now.Date ? SampleSales.Now.Date : d;
-            IsToday = Day == SampleSales.Now.Date;
-            PrevDayLink = Day > SampleSales.Opened ? "DailySalesReport.aspx?d=" + Day.AddDays(-1).ToString("yyyy-MM-dd", Inv) : null;
+                d = now.Date;
+            Day = d < first ? first : d > now.Date ? now.Date : d;
+            IsToday = Day == now.Date;
+            PrevDayLink = Day > first ? "DailySalesReport.aspx?d=" + Day.AddDays(-1).ToString("yyyy-MM-dd", Inv) : null;
             NextDayLink = !IsToday ? "DailySalesReport.aspx?d=" + Day.AddDays(1).ToString("yyyy-MM-dd", Inv) : null;
 
             if (!IsPostBack)
             {
                 txtDate.Text = Day.ToString("yyyy-MM-dd", Inv);
-                txtDate.Attributes["min"] = SampleSales.Opened.ToString("yyyy-MM-dd", Inv);
-                txtDate.Attributes["max"] = SampleSales.Now.ToString("yyyy-MM-dd", Inv);
+                txtDate.Attributes["min"] = first.ToString("yyyy-MM-dd", Inv);
+                txtDate.Attributes["max"] = now.ToString("yyyy-MM-dd", Inv);
             }
 
             // The date goes in the title so a saved PDF or a browser tab says which day it is.
             // (Set here, not with a code block in <head>, because BasePage adds to the header.)
             Title = "Daily sales report · " + Day.ToString("MMM d, yyyy", Inv) + " · LabaTrack";
 
-            Build();
+            shopName = SettingsRepository.Get().ShopName;
+            report = ReportService.GetDailyReport(Day, now);
+            liveJobs = report.Jobs.Where(j => j.CurrentStatus != StatusService.Voided).ToList();
+            Lines = report.Ledger.Select(ToLine).ToList();
         }
 
         protected void btnShow_Click(object sender, EventArgs e)
@@ -83,46 +99,28 @@ namespace LABATRACK.Admin
             Context.ApplicationInstance.CompleteRequest();
         }
 
-        private void Build()
+        private static Line ToLine(Payment p)
         {
-            DateTime next = Day.AddDays(1);
-            dayJobs = SampleSales.Jobs.Where(j => j.DroppedOff >= Day && j.DroppedOff < next).OrderBy(j => j.DroppedOff).ToList();
-
-            Lines = new List<Line>();
-            int seq = 0;
-            foreach (var job in dayJobs)
+            string what;
+            if (p.Kind == Payment.VoidRefund)
+                what = "Refund on void" + (string.IsNullOrEmpty(p.Reason) ? "" : " · " + p.Reason);
+            else if (p.Kind == Payment.Adjustment)
+                what = (p.Amount > 0 ? "Correction, collected" : "Correction, refunded") + " · " + p.ServiceName;
+            else
+                what = p.ServiceName + " · " + p.WeightKg.ToString("0.0#", Inv) + " kg";
+            return new Line
             {
-                seq++;
-                string claim = "LT-" + Day.ToString("yyMMdd", Inv) + "-" + seq.ToString("000", Inv);
-                string customer = SampleSales.Customers[job.CustomerId - 1].Name;
-                string what = job.Service + " · " + job.WeightKg.ToString("0.0", Inv) + " kg";
-                Lines.Add(new Line { At = job.DroppedOff, Claim = claim, Customer = customer, What = what, Method = job.Method, Staff = job.Staff, Amount = job.Total });
-                if (job.Voided)
-                    // DRAFT: the sample history has no void time, so the refund is put 15 minutes later.
-                    Lines.Add(new Line { At = job.DroppedOff.AddMinutes(15), Claim = claim, Customer = customer, What = "Refund on void · " + job.VoidReason,
-                                         Method = job.Method, Staff = job.Staff, Amount = -job.Total, IsRefund = true });
-            }
-            Lines = Lines.OrderBy(l => l.At).ToList();
-
-            CashIn = Lines.Where(l => !l.IsRefund && l.Method == "Cash").Sum(l => l.Amount);
-            CashRefunds = -Lines.Where(l => l.IsRefund && l.Method == "Cash").Sum(l => l.Amount);
-            EwalletIn = Lines.Where(l => !l.IsRefund && l.Method == "E-wallet").Sum(l => l.Amount);
-            EwalletRefunds = -Lines.Where(l => l.IsRefund && l.Method == "E-wallet").Sum(l => l.Amount);
-            Orders = dayJobs.Count(j => !j.Voided);
-            Voids = dayJobs.Count(j => j.Voided);
-            Kilos = dayJobs.Where(j => !j.Voided).Sum(j => j.WeightKg);
-
-            // Same weekday last week, up to the same time of day, so a morning is not compared with a whole day.
-            DateTime cut = IsToday ? SampleSales.Now : next;
-            LastWeekTotal = SampleSales.Jobs.Where(j => !j.Voided && j.DroppedOff >= Day.AddDays(-7) && j.DroppedOff < cut.AddDays(-7)).Sum(j => j.Total);
+                At = p.PaidAt, Claim = p.ClaimNumber, Customer = p.CustomerName, What = what,
+                Method = p.Method, Staff = p.RecordedBy, Amount = p.Amount, IsRefund = p.Amount < 0,
+            };
         }
 
         // ================================================================ Pieces for the markup
 
         protected string DayTitle { get { return Day.ToString("dddd, d MMMM yyyy", Inv); } }
-        protected string ShopTitle { get { return ShopName; } }
-        protected string PreparedAt { get { return SampleSales.Now.ToString("MMM d, yyyy h:mm tt", Inv); } }
-        protected string Prepared { get { return PreparedAt + " by " + PreparedBy; } }
+        protected string ShopTitle { get { return shopName; } }
+        protected string PreparedAt { get { return now.ToString("MMM d, yyyy h:mm tt", Inv); } }
+        protected string Prepared { get { return PreparedAt + " by " + CurrentUser.Username; } }
         protected string ReportNo { get { return "DSR-" + Day.ToString("yyyyMMdd", Inv); } }
 
         protected static string Peso(decimal v)
@@ -146,48 +144,47 @@ namespace LABATRACK.Admin
         /// <summary>Net payments per hour, cash and e-wallet stacked, sized to the A4 sheet.</summary>
         protected string HourChart()
         {
-            var hours = Enumerable.Range(7, 14).ToList();
-            var live = dayJobs.Where(j => !j.Voided).ToList();
-            Func<string, double[]> by = method => hours.Select(h => (double)live.Where(j => j.Method == method && j.DroppedOff.Hour == h).Sum(j => j.Total)).ToArray();
+            // The shop's hours, 7 AM to 8 PM, stretched if a payment came in outside them.
+            int firstHour = Math.Min(7, Lines.Count == 0 ? 7 : Lines.Min(l => l.At.Hour));
+            int lastHour = Math.Max(20, Lines.Count == 0 ? 20 : Lines.Max(l => l.At.Hour));
+            var hours = Enumerable.Range(firstHour, lastHour - firstHour + 1).ToList();
+            Func<string, double[]> by = method => hours.Select(h => Math.Max(0, (double)Lines.Where(l => l.Method == method && l.At.Hour == h).Sum(l => l.Amount))).ToArray();
             var series = new List<ChartSeries>
             {
-                new ChartSeries("Cash", SvgChart.Blue, by("Cash")),
-                new ChartSeries("E-wallet", SvgChart.Orange, by("E-wallet")),
+                new ChartSeries("Cash", SvgChart.Blue, by(Payment.Cash)),
+                new ChartSeries("E-wallet", SvgChart.Orange, by(Payment.Ewallet)),
             };
             string[] labels = hours.Select(h => new DateTime(2000, 1, 1, h, 0, 0).ToString("h tt", Inv).Replace(" ", "").ToLowerInvariant()).ToArray();
-            string[] tips = hours.Select(h => new DateTime(2000, 1, 1, h, 0, 0).ToString("h:mm tt", Inv) + " – " + new DateTime(2000, 1, 1, h + 1, 0, 0).ToString("h:mm tt", Inv)).ToArray();
+            string[] tips = hours.Select(h => new DateTime(2000, 1, 1, h, 0, 0).ToString("h:mm tt", Inv) + " – " + new DateTime(2000, 1, 1, h, 0, 0).AddHours(1).ToString("h:mm tt", Inv)).ToArray();
             return SvgChart.Legend(series)
                  + SvgChart.Columns("Payments by hour, cash and e-wallet", labels, tips, series, SvgChart.PesoShort, 150, 1, null, -1, true, 690, SvgChart.Peso);
         }
 
         protected string ServiceRows()
         {
-            var live = dayJobs.Where(j => !j.Voided).ToList();
             var sb = new StringBuilder();
-            foreach (var s in SampleSales.Services)
+            foreach (var g in liveJobs.GroupBy(j => j.ServiceName).OrderByDescending(g => g.Count()))
             {
-                var list = live.Where(j => j.Service == s).ToList();
-                sb.Append("<tr><td>").Append(HttpUtility.HtmlEncode(s)).Append("</td><td class=\"right num\">").Append(list.Count)
-                  .Append("</td><td class=\"right num\">").Append(list.Sum(j => j.WeightKg).ToString("0.0", Inv))
-                  .Append(" kg</td><td class=\"right num\">").Append(Peso(list.Sum(j => j.LaundryCharge))).Append("</td></tr>");
+                sb.Append("<tr><td>").Append(HttpUtility.HtmlEncode(g.Key)).Append("</td><td class=\"right num\">").Append(g.Count())
+                  .Append("</td><td class=\"right num\">").Append(g.Sum(j => j.WeightKg).ToString("0.0", Inv))
+                  .Append(" kg</td><td class=\"right num\">").Append(Peso(g.Sum(j => j.LaundryCharge))).Append("</td></tr>");
             }
-            decimal services = live.SelectMany(j => j.AddOns).Where(a => a.Name == "Extra rinse" || a.Name == "Stain treatment").Sum(a => a.Amount);
-            decimal products = live.SelectMany(j => j.AddOns).Where(a => a.Name == "Fabric conditioner" || a.Name == "Detergent sachet").Sum(a => a.Amount);
-            sb.Append("<tr><td>Service add-ons</td><td></td><td></td><td class=\"right num\">").Append(Peso(services)).Append("</td></tr>");
-            sb.Append("<tr><td>Product add-ons</td><td></td><td></td><td class=\"right num\">").Append(Peso(products)).Append("</td></tr>");
+            if (sb.Length == 0)
+                sb.Append("<tr><td colspan=\"4\" class=\"muted\">No job orders taken.</td></tr>");
+            sb.Append("<tr><td>Service add-ons</td><td></td><td></td><td class=\"right num\">").Append(Peso(liveJobs.Sum(j => j.ServiceAddOnAmount))).Append("</td></tr>");
+            sb.Append("<tr><td>Product add-ons</td><td></td><td></td><td class=\"right num\">").Append(Peso(liveJobs.Sum(j => j.ProductAddOnAmount))).Append("</td></tr>");
             return sb.ToString();
         }
 
         protected string StaffRows()
         {
             var sb = new StringBuilder();
-            foreach (var s in SampleSales.Staff)
+            foreach (var g in report.Jobs.GroupBy(j => j.CreatedByName).OrderBy(g => g.Key))
             {
-                var list = dayJobs.Where(j => j.Staff == s).ToList();
-                if (list.Count == 0) continue;
-                sb.Append("<tr><td>").Append(HttpUtility.HtmlEncode(s)).Append("</td><td class=\"right num\">").Append(list.Count(j => !j.Voided))
-                  .Append("</td><td class=\"right num\">").Append(list.Count(j => j.Voided))
-                  .Append("</td><td class=\"right num\">").Append(Peso(list.Where(j => !j.Voided).Sum(j => j.Total))).Append("</td></tr>");
+                var live = g.Where(j => j.CurrentStatus != StatusService.Voided).ToList();
+                sb.Append("<tr><td>").Append(HttpUtility.HtmlEncode(g.Key)).Append("</td><td class=\"right num\">").Append(live.Count)
+                  .Append("</td><td class=\"right num\">").Append(g.Count() - live.Count)
+                  .Append("</td><td class=\"right num\">").Append(Peso(live.Sum(j => j.TotalAmount))).Append("</td></tr>");
             }
             return sb.Length == 0 ? "<tr><td colspan=\"4\" class=\"muted\">No orders taken.</td></tr>" : sb.ToString();
         }

@@ -43,5 +43,10 @@ namespace LABATRACK.Admin
         /// btnShow control.
         /// </summary>
         protected global::System.Web.UI.WebControls.Button btnShow;
+
+        /// <summary>
+        /// rptUnclaimed control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Repeater rptUnclaimed;
     }
 }

@@ -25,9 +25,29 @@ namespace LABATRACK.Admin
         protected global::System.Web.UI.WebControls.Literal litNav;
 
         /// <summary>
+        /// litNotice control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Literal litNotice;
+
+        /// <summary>
+        /// hfShownStatus control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.HiddenField hfShownStatus;
+
+        /// <summary>
+        /// hfShownDifference control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.HiddenField hfShownDifference;
+
+        /// <summary>
         /// txtCustomerName control.
         /// </summary>
         protected global::System.Web.UI.WebControls.TextBox txtCustomerName;
+
+        /// <summary>
+        /// lblNameError control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Label lblNameError;
 
         /// <summary>
         /// txtContactNumber control.
@@ -35,9 +55,19 @@ namespace LABATRACK.Admin
         protected global::System.Web.UI.WebControls.TextBox txtContactNumber;
 
         /// <summary>
+        /// lblContactError control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Label lblContactError;
+
+        /// <summary>
         /// txtEmail control.
         /// </summary>
         protected global::System.Web.UI.WebControls.TextBox txtEmail;
+
+        /// <summary>
+        /// lblEmailError control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Label lblEmailError;
 
         /// <summary>
         /// ddlService control.
@@ -50,9 +80,29 @@ namespace LABATRACK.Admin
         protected global::System.Web.UI.WebControls.TextBox txtWeight;
 
         /// <summary>
+        /// rptServiceAddOns control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Repeater rptServiceAddOns;
+
+        /// <summary>
+        /// rptProducts control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Repeater rptProducts;
+
+        /// <summary>
         /// txtRemarks control.
         /// </summary>
         protected global::System.Web.UI.WebControls.TextBox txtRemarks;
+
+        /// <summary>
+        /// rbAdjCash control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.RadioButton rbAdjCash;
+
+        /// <summary>
+        /// rbAdjEwallet control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.RadioButton rbAdjEwallet;
 
         /// <summary>
         /// txtAdjCashReceived control.

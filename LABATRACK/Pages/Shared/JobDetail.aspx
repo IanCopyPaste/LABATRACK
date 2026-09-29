@@ -5,7 +5,7 @@
 <head runat="server">
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Job LT-260921-004 · LabaTrack</title>
+    <title>Job · LabaTrack</title>
 </head>
 <body>
     <form id="form1" runat="server">
@@ -15,53 +15,52 @@
             <main class="main">
                 <header class="page-head">
                     <div>
-                        <a class="small" href="../../Admin/Dashboard.aspx"><%= Icons.Get("arrow-left", "ico-sm") %> Back to dashboard</a>
-                        <h1 style="margin-top:8px;"><span class="mono" style="font-size:20px;">LT-260921-004</span>
-                            <span class="pill <%= StageCss(CurrentStage) %>" style="margin-left:8px; vertical-align:middle;"><%: CurrentStage %></span></h1>
-                        <p class="sub">Dropped off Sep 21, 2026 9:12 AM by jcruz &middot; expected pick-up Sep 22, 9:12 AM</p>
+                        <a class="small" href="<%: BackUrl %>"><%= Icons.Get("arrow-left", "ico-sm") %> <%: BackText %></a>
+                        <h1 style="margin-top:8px;"><span class="mono" style="font-size:20px;"><%: Job.ClaimNumber %></span>
+                            <span class="pill <%= StageCss(Job.CurrentStatus) %>" style="margin-left:8px; vertical-align:middle;"><%: Job.CurrentStatus %></span></h1>
+                        <p class="sub">Dropped off <%: Job.CreatedAt.ToString("MMM d, yyyy h:mm tt") %> by <%: Job.CreatedByName %> &middot; expected pick-up <%: Job.ExpectedPickupAt.ToString("MMM d, h:mm tt") %><%: Job.LastEditedAt.HasValue ? " · corrected by " + Job.LastEditedByName + " " + Job.LastEditedAt.Value.ToString("MMM d, h:mm tt") : "" %></p>
                     </div>
                     <div class="page-actions">
-                        <a class="btn" href="JobSlip.aspx"><%= Icons.Get("printer", "ico-sm") %>Print slip</a>
+                        <a class="btn" href="JobSlip.aspx?id=<%= Job.JobId %>"><%= Icons.Get("printer", "ico-sm") %>Print slip</a>
                         <%-- Only the owner may edit a job order; staff fix a mistake by voiding a Queued job instead. --%>
-                        <% if (IsOwner) { %><a class="btn" href="../../Admin/EditJob.aspx"><%= Icons.Get("pencil", "ico-sm") %>Edit <span class="muted small">(owner)</span></a><% } %>
+                        <% if (IsOwner && InShop) { %><a class="btn" href="../../Admin/EditJob.aspx?id=<%= Job.JobId %>"><%= Icons.Get("pencil", "ico-sm") %>Edit <span class="muted small">(owner)</span></a><% } %>
                     </div>
                 </header>
 
                 <div class="content">
-                    <div class="notice notice-warn preview-links">
-                        <%= Icons.Get("eye", "ico-sm") %>
-                        <span><strong>Design draft.</strong> Preview this job at another stage:
-                            <a href="?stage=Queued">Queued</a><a href="?stage=Washing">Washing</a><a href="?stage=Inspection">Inspection</a><a href="?stage=Ready">Ready</a><a href="?stage=Claimed">Claimed</a><a href="?stage=Voided">Voided</a></span>
-                    </div>
+                    <asp:Literal ID="litNotice" runat="server" EnableViewState="false" />
+                    <%-- The status the page was showing. Every action sends it back, so a job someone else
+                         moved in the meantime is refused ("This job was already updated. Refresh."). --%>
+                    <asp:HiddenField ID="hfShownStatus" runat="server" />
 
                     <!-- Header: customer and load, shown once -->
                     <section class="card">
                         <div class="card-b grid grid-3" style="gap:24px;">
                             <div>
                                 <div class="label muted">Customer</div>
-                                <div class="strong" style="font-size:16px; margin-top:4px;">Maria Santos</div>
-                                <div class="muted small"><%= Icons.Get("phone", "ico-sm") %> 0917 555 0123 &nbsp; <%= Icons.Get("mail", "ico-sm") %> maria.santos@example.com</div>
+                                <div class="strong" style="font-size:16px; margin-top:4px;"><%: Job.CustomerName %></div>
+                                <div class="muted small"><%= Icons.Get("phone", "ico-sm") %> <%: Job.ContactNumber %> &nbsp; <%= Icons.Get("mail", "ico-sm") %> <%: string.IsNullOrEmpty(Job.CustomerEmail) ? "no email" : Job.CustomerEmail %></div>
                             </div>
                             <div>
                                 <div class="label muted">Load</div>
-                                <div class="strong" style="font-size:16px; margin-top:4px;">Wash-Dry-Fold &middot; 5.1 kg</div>
-                                <div class="muted small">Billed as 6 kg at ₱40.00/kg &middot; Extra rinse, Fabric conditioner &times; 2</div>
+                                <div class="strong" style="font-size:16px; margin-top:4px;"><%: Job.ServiceName %> &middot; <%: Kg(Job.WeightKg) %> kg</div>
+                                <div class="muted small">Billed as <%: Kg(Job.BillableKg) %> kg at <%: Peso(Job.RatePerKgAtCreation) %>/kg<%: string.IsNullOrEmpty(Job.AddOnSummary) ? "" : " · " + Job.AddOnSummary %></div>
                             </div>
                             <div>
                                 <div class="label muted">Remarks (intake check)</div>
-                                <div style="margin-top:4px;">1 blouse with a loose button. No stains noted.</div>
+                                <div style="margin-top:4px;"><%: string.IsNullOrEmpty(Job.Remarks) ? "None" : Job.Remarks %></div>
                             </div>
                         </div>
                     </section>
 
-                    <!-- Stage stepper, read from JobStatusHistory -->
+                    <!-- Stage stepper, read from JobStatusHistory: only the stages on this job's route -->
                     <section class="card <%= IsVoided ? "voided-banner" : "" %>">
                         <% if (IsVoided) { %>
                         <div class="card-b" style="display:flex; gap:12px; align-items:center; color:var(--danger);">
                             <%= Icons.Get("ban", "ico-lg") %>
                             <div>
-                                <div class="strong">Voided Sep 21, 9:20 AM by jcruz</div>
-                                <div class="small">Reason: Customer changed mind, took the load home. The ₱290.00 payment was refunded in cash.</div>
+                                <div class="strong">Voided <%: Job.StatusSince.ToString("MMM d, h:mm tt") %> by <%: Job.StatusBy %></div>
+                                <div class="small">Reason: <%: Job.StatusReason %>. <%: RefundNote %></div>
                             </div>
                         </div>
                         <% } %>
@@ -83,64 +82,65 @@
                     <div class="grid grid-main-side">
                         <div class="stack">
                             <!-- Action for the CURRENT stage only -->
-                            <asp:Panel ID="pnlQueued" runat="server" CssClass="card">
+                            <asp:Panel ID="pnlQueued" runat="server" CssClass="card" Visible="false">
                                 <div class="card-h"><div><h2>Queued</h2><div class="sub">Waiting for a free machine</div></div></div>
                                 <div class="card-b" style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
-                                    <span>Put the load in a washer, then record it here.</span>
-                                    <button type="button" class="btn btn-primary"><%= Icons.Get("arrow-right", "ico-sm") %>Move to Washing</button>
+                                    <span>Put the load in <%: NextStage == "Washing" ? "a washer" : "for " + (NextStage ?? "").ToLowerInvariant() %>, then record it here.</span>
+                                    <button type="submit" name="action" value="advance" class="btn btn-primary" data-confirm-title="<%: MoveTitle %>" data-confirm-text="<%: MoveText %>" data-confirm-ok="Move to <%: NextStage %>"><%= Icons.Get("arrow-right", "ico-sm") %>Move to <%: NextStage %></button>
                                 </div>
-                                <div class="card-f" style="justify-content:space-between; flex-wrap:wrap; align-items:flex-end;">
+                                <div class="card-f" style="justify-content:space-between; flex-wrap:wrap; align-items:flex-end;" data-enter-scope="true">
                                     <div class="field" style="flex:1; min-width:220px;">
-                                        <label for="txtVoidReason">Void this job (only while Queued). The full ₱290.00 is refunded.</label>
+                                        <label for="txtVoidReason">Void this job (only while Queued). The full <%: Peso(Job.AmountPaid) %> is refunded.</label>
                                         <asp:TextBox ID="txtVoidReason" runat="server" placeholder="Reason (required)" MaxLength="200" />
                                     </div>
-                                    <button type="button" class="btn btn-danger"><%= Icons.Get("ban", "ico-sm") %>Void job</button>
+                                    <button type="submit" name="action" value="void" class="btn btn-danger" data-confirm-title="Void <%: Job.ClaimNumber %>?" data-confirm-text="<%: VoidText %>" data-confirm-ok="Void and refund" data-confirm-danger="true"><%= Icons.Get("ban", "ico-sm") %>Void job</button>
                                 </div>
                             </asp:Panel>
 
-                            <asp:Panel ID="pnlAdvance" runat="server" CssClass="card">
-                                <div class="card-h"><div><h2><%: CurrentStage %> in progress</h2><div class="sub">Advance only when this step is finished</div></div></div>
+                            <asp:Panel ID="pnlAdvance" runat="server" CssClass="card" Visible="false">
+                                <div class="card-h"><div><h2><%: Job.CurrentStatus %> in progress</h2><div class="sub">Advance only when this step is finished</div></div></div>
                                 <div class="card-b" style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
                                     <span>Next step: <strong><%: NextStage %></strong></span>
-                                    <button type="button" class="btn btn-primary"><%= Icons.Get("arrow-right", "ico-sm") %>Move to <%: NextStage %></button>
+                                    <button type="submit" name="action" value="advance" class="btn btn-primary" data-confirm-title="<%: MoveTitle %>" data-confirm-text="<%: MoveText %>" data-confirm-ok="Move to <%: NextStage %>"><%= Icons.Get("arrow-right", "ico-sm") %>Move to <%: NextStage %></button>
                                 </div>
                             </asp:Panel>
 
-                            <asp:Panel ID="pnlInspection" runat="server" CssClass="card">
+                            <asp:Panel ID="pnlInspection" runat="server" CssClass="card" Visible="false">
                                 <div class="card-h"><div><h2>Inspection</h2><div class="sub">Check the finished load before shelving it</div></div></div>
                                 <div class="card-b grid grid-2" style="align-items:start;">
                                     <div class="stack" style="gap:10px;">
                                         <div class="strong" style="color:var(--success);"><%= Icons.Get("circle-check", "ico-sm") %> Pass</div>
                                         <span class="muted small">Moves the load to Ready for pick-up and sends the ready email.</span>
-                                        <button type="button" class="btn btn-primary"><%= Icons.Get("check", "ico-sm") %>Pass inspection</button>
+                                        <button type="submit" name="action" value="advance" class="btn btn-primary" data-confirm-title="<%: MoveTitle %>" data-confirm-text="<%: MoveText %>" data-confirm-ok="Pass inspection"><%= Icons.Get("check", "ico-sm") %>Pass inspection</button>
                                     </div>
-                                    <div class="stack" style="gap:10px;">
+                                    <div class="stack" style="gap:10px;" data-enter-scope="true">
                                         <div class="strong" style="color:var(--warning);"><%= Icons.Get("rotate-ccw", "ico-sm") %> Fail, send back</div>
                                         <%-- Filled in the code-behind with only the work stages on this job's route. --%>
                                         <asp:DropDownList ID="ddlReworkStage" runat="server" />
                                         <span class="hint">Only the stages this job's service includes are offered.</span>
                                         <asp:TextBox ID="txtReworkReason" runat="server" placeholder="Reason (required)" MaxLength="200" />
-                                        <button type="button" class="btn"><%= Icons.Get("rotate-ccw", "ico-sm") %>Send back</button>
+                                        <%-- JobDetail.js writes the chosen stage and the reason into the question. --%>
+                                        <button type="submit" name="action" value="rework" class="btn" id="btnRework" data-confirm-title="Send <%: Job.ClaimNumber %> back?" data-confirm-text="The load goes back to be redone, then through inspection again." data-confirm-ok="Send back"><%= Icons.Get("rotate-ccw", "ico-sm") %>Send back</button>
                                     </div>
                                 </div>
                             </asp:Panel>
 
-                            <asp:Panel ID="pnlReady" runat="server" CssClass="card">
+                            <asp:Panel ID="pnlReady" runat="server" CssClass="card" Visible="false">
                                 <div class="card-h">
                                     <div><h2>Release to customer</h2><div class="sub">Already paid in full at drop-off</div></div>
                                     <span class="pill pill-ok">Paid</span>
                                 </div>
                                 <div class="card-b" style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
-                                    <span>Check the customer's slip matches claim number <strong class="mono">LT-260921-004</strong>, then hand over the load.</span>
-                                    <button type="button" class="btn btn-primary"><%= Icons.Get("package-check", "ico-sm") %>Mark as claimed</button>
+                                    <span>Check the customer's slip matches claim number <strong class="mono"><%: Job.ClaimNumber %></strong>, then hand over the load.</span>
+                                    <button type="submit" name="action" value="advance" class="btn btn-primary" data-confirm-title="<%: MoveTitle %>" data-confirm-text="<%: MoveText %>" data-confirm-ok="Mark as claimed"><%= Icons.Get("package-check", "ico-sm") %>Mark as claimed</button>
                                 </div>
                             </asp:Panel>
 
-                            <asp:Panel ID="pnlClosed" runat="server" CssClass="card">
+                            <asp:Panel ID="pnlClosed" runat="server" CssClass="card" Visible="false">
                                 <div class="card-b" style="display:flex; gap:12px; align-items:center;">
                                     <%= Icons.Get(IsVoided ? "circle-x" : "package-check", "ico-lg") %>
                                     <div>
-                                        <div class="strong"><%= IsVoided ? "This job was voided." : "Claimed by the customer Sep 22, 4:10 PM." %></div>
+                                        <div class="strong"><%: IsVoided ? "This job was voided." : "Claimed by the customer " + Job.StatusSince.ToString("MMM d, h:mm tt") + " (handed over by " + Job.StatusBy + ")." %></div>
                                         <div class="muted small">Claimed and Voided are final. The job stays in history and cannot change.</div>
                                     </div>
                                 </div>
@@ -156,13 +156,13 @@
                                             <asp:Repeater ID="rptHistory" runat="server">
                                                 <ItemTemplate>
                                                     <tr class="<%# string.IsNullOrEmpty((string)Eval("Reason")) ? "" : "rework" %>">
-                                                        <td class="num"><%#: Eval("At") %></td>
+                                                        <td class="num"><%# When((DateTime)Eval("ChangedAt")) %></td>
                                                         <td>
-                                                            <%# string.IsNullOrEmpty((string)Eval("From")) ? "<span class=\"muted\">Created</span>" : "<span class=\"pill " + StageCss((string)Eval("From")) + "\">" + Server.HtmlEncode((string)Eval("From")) + "</span>" %>
-                                                            <%= Icons.Get("arrow-right", "ico-sm") %>
-                                                            <span class="pill <%# StageCss((string)Eval("To")) %>"><%#: Eval("To") %></span>
+                                                            <%# string.IsNullOrEmpty((string)Eval("FromStatus")) ? "<span class=\"muted\">Created</span>" : "<span class=\"pill " + StageCss((string)Eval("FromStatus")) + "\">" + Server.HtmlEncode((string)Eval("FromStatus")) + "</span>" %>
+                                                            <%# Icons.Get("arrow-right", "ico-sm") %>
+                                                            <span class="pill <%# StageCss((string)Eval("ToStatus")) %>"><%#: Eval("ToStatus") %></span>
                                                         </td>
-                                                        <td><%#: Eval("By") %></td>
+                                                        <td><%#: Eval("ChangedBy") %></td>
                                                         <td class="small"><%#: Eval("Reason") %></td>
                                                     </tr>
                                                 </ItemTemplate>
@@ -182,12 +182,15 @@
                                 </div>
                                 <div class="card-b">
                                     <dl class="dl">
-                                        <dt>6 kg &times; ₱40.00</dt><dd>₱240.00</dd>
-                                        <dt>Extra rinse</dt><dd>₱20.00</dd>
-                                        <dt>Fabric conditioner &times; 2</dt><dd>₱30.00</dd>
+                                        <dt><%: Kg(Job.BillableKg) %> kg &times; <%: Peso(Job.RatePerKgAtCreation) %><%: MinimumApplied ? " (raised to minimum)" : "" %></dt><dd><%: Peso(Job.LaundryCharge) %></dd>
+                                        <asp:Repeater ID="rptLines" runat="server">
+                                            <ItemTemplate>
+                                                <dt><%#: Eval("Name") %><%# (bool)Eval("IsProduct") ? " &times; " + Eval("Quantity") : "" %></dt><dd><%# Peso(LineAmount((LABATRACK.Models.JobAddOn)Container.DataItem)) %></dd>
+                                            </ItemTemplate>
+                                        </asp:Repeater>
                                     </dl>
                                     <div class="divider" style="margin:12px 0;"></div>
-                                    <div class="total-line" style="font-size:15px;"><span>Total</span><span class="num"><%= Peso(Total) %></span></div>
+                                    <div class="total-line" style="font-size:15px;"><span>Total</span><span class="num"><%: Peso(Job.TotalAmount) %></span></div>
                                 </div>
                                 <ul class="list" style="border-top:1px solid var(--border);">
                                     <asp:Repeater ID="rptPayments" runat="server">
@@ -195,48 +198,53 @@
                                             <li>
                                                 <span class="dot-icon" style="background:<%# (bool)Eval("IsRefund") ? "var(--danger-soft); color:var(--danger)" : "var(--success-soft); color:var(--success)" %>;"><%# Icons.Get((string)Eval("Method") == "Cash" ? "banknote" : "smartphone", "ico-sm") %></span>
                                                 <div class="grow">
-                                                    <div class="cell-main"><%# (bool)Eval("IsRefund") ? "Refund on void" : Server.HtmlEncode((string)Eval("Method")) %></div>
-                                                    <div class="cell-sub"><%#: Eval("At") %> &middot; <%#: Eval("By") %></div>
+                                                    <div class="cell-main"><%#: PaymentLabel((LABATRACK.Models.Payment)Container.DataItem) %></div>
+                                                    <div class="cell-sub"><%# When((DateTime)Eval("PaidAt")) %> &middot; <%#: Eval("RecordedBy") %></div>
                                                 </div>
                                                 <span class="num strong"><%# Peso((decimal)Eval("Amount")) %></span>
                                             </li>
                                         </ItemTemplate>
                                     </asp:Repeater>
                                 </ul>
+                                <% if (CashReceived.HasValue) { %>
                                 <div class="card-f" style="flex-direction:column; gap:4px;">
-                                    <div class="row-between"><span class="muted">Cash received</span><span class="num"><%= Peso(CashReceived) %></span></div>
-                                    <div class="row-between"><span class="muted">Change given</span><span class="num"><%= Peso(Change) %></span></div>
+                                    <div class="row-between"><span class="muted">Cash received</span><span class="num"><%: Peso(CashReceived.Value) %></span></div>
+                                    <div class="row-between"><span class="muted">Change given</span><span class="num"><%: Peso(Change) %></span></div>
                                 </div>
+                                <% } %>
                             </section>
 
                             <!-- Email log with resend -->
                             <section class="card">
                                 <div class="card-h"><div><h2>Notifications</h2><div class="sub">Email only. Every attempt is logged, and a failed send never blocks the job.</div></div></div>
-                                <%-- DRAFT: sample NotificationLog rows. The first drop-off email failed and staff resent it,
-                                     so both results show. A customer with no email gets one "Skipped" row instead. --%>
                                 <ul class="list">
-                                    <li>
-                                        <span class="dot-icon" style="background:var(--danger-soft); color:var(--danger);"><%= Icons.Get("mail", "ico-sm") %></span>
-                                        <div class="grow"><div class="cell-main">Drop-off email</div><div class="cell-sub">Sep 21, 9:13 AM &middot; the mail server did not answer</div></div>
-                                        <span class="pill pill-danger">Failed</span>
-                                    </li>
+                                    <asp:Repeater ID="rptEmails" runat="server">
+                                        <ItemTemplate>
+                                            <li>
+                                                <span class="dot-icon" style="<%# EmailDotStyle((string)Eval("Status")) %>"><%# Icons.Get("mail", "ico-sm") %></span>
+                                                <div class="grow">
+                                                    <div class="cell-main"><%#: Eval("Kind") %> email<%# (bool)Eval("IsResend") ? ", resent" : "" %></div>
+                                                    <div class="cell-sub"><%# When((DateTime)Eval("AttemptedAt")) %> &middot; <%#: EmailDetail((LABATRACK.Models.NotificationLogEntry)Container.DataItem) %></div>
+                                                </div>
+                                                <span class="pill <%# EmailPill((string)Eval("Status")) %>"><%#: Eval("Status") %></span>
+                                            </li>
+                                        </ItemTemplate>
+                                    </asp:Repeater>
+                                    <% if (!ReadyReached && InShop) { %>
                                     <li>
                                         <span class="dot-icon" style="background:var(--primary-soft); color:var(--primary);"><%= Icons.Get("mail", "ico-sm") %></span>
-                                        <div class="grow"><div class="cell-main">Drop-off email, resent</div><div class="cell-sub">Sep 21, 9:20 AM &middot; resent by jcruz</div></div>
-                                        <span class="pill pill-ok">Sent</span>
-                                        <button type="button" class="btn btn-sm btn-ghost" title="Resend"><%= Icons.Get("send", "ico-sm") %></button>
-                                    </li>
-                                    <li>
-                                        <span class="dot-icon" style="background:var(--primary-soft); color:var(--primary);"><%= Icons.Get("mail", "ico-sm") %></span>
-                                        <div class="grow"><div class="cell-main">Ready for pick-up email</div><div class="cell-sub"><%= ReadyEmailSent ? "Sep 21, 1:35 PM" : "Sent when the load passes inspection" %></div></div>
-                                        <% if (ReadyEmailSent) { %>
-                                        <span class="pill pill-ok">Sent</span>
-                                        <button type="button" class="btn btn-sm btn-ghost" title="Resend"><%= Icons.Get("send", "ico-sm") %></button>
-                                        <% } else { %>
+                                        <div class="grow"><div class="cell-main">Ready email</div><div class="cell-sub">Sent when the load passes inspection</div></div>
                                         <span class="pill st-claimed">Not yet</span>
-                                        <% } %>
                                     </li>
+                                    <% } %>
                                 </ul>
+                                <%-- A resend only makes sense while the load is still in the shop. --%>
+                                <% if (InShop) { %>
+                                <div class="card-f">
+                                    <button type="submit" name="action" value="resend-dropoff" class="btn btn-sm btn-ghost"><%= Icons.Get("send", "ico-sm") %>Resend drop-off email</button>
+                                    <% if (ReadyReached) { %><button type="submit" name="action" value="resend-ready" class="btn btn-sm btn-ghost"><%= Icons.Get("send", "ico-sm") %>Resend ready email</button><% } %>
+                                </div>
+                                <% } %>
                             </section>
                         </div>
                     </div>
@@ -244,5 +252,9 @@
             </main>
         </div>
     </form>
+
+    <script src="<%= AssetUrl.Get("~/Assets/js/Sidebar.js") %>"></script>
+    <script src="<%= AssetUrl.Get("~/Assets/js/Confirm.js") %>"></script>
+    <script src="<%= AssetUrl.Get("~/Assets/js/JobDetail.js") %>"></script>
 </body>
 </html>

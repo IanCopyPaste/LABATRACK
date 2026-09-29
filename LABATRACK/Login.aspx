@@ -45,7 +45,10 @@
                     </div>
                     <div class="field">
                         <label for="txtPassword">Password</label>
-                        <asp:TextBox ID="txtPassword" runat="server" TextMode="Password" MaxLength="100" autocomplete="current-password" />
+                        <div class="input-reveal">
+                            <asp:TextBox ID="txtPassword" runat="server" TextMode="Password" MaxLength="100" autocomplete="current-password" />
+                            <button type="button" class="reveal-btn" data-reveal="txtPassword" aria-pressed="false" aria-label="Show password" title="Show password"><%= Icons.Get("eye", "ico-sm when-hidden") %><%= Icons.Get("eye-off", "ico-sm when-shown") %></button>
+                        </div>
                         <span class="auth-aside muted">Forgot it? Ask the owner to reset it.</span>
                     </div>
                     <asp:Button ID="btnSignIn" runat="server" Text="Sign in" CssClass="btn btn-primary btn-block" OnClick="btnSignIn_Click" />
@@ -55,5 +58,7 @@
             <p class="auth-note">Quezon City University &middot; IPT102</p>
         </div>
     </form>
+
+    <script src="<%= AssetUrl.Get("~/Assets/js/ShowPassword.js") %>"></script>
 </body>
 </html>
