@@ -831,7 +831,8 @@ END
 GO
 
 -- Every payment and refund within [@From, @To), oldest first, with the job it belongs to:
--- the ledger on the daily sales report. Reason is the void reason for a void refund.
+-- the ledger on the daily sales report. Reason is the void reason for a void refund. JobTotal
+-- tells a down payment (a drop-off payment below the job's total) from a payment in full.
 CREATE OR ALTER PROCEDURE dbo.usp_Payments_GetBetween
     @From DATETIME2,
     @To   DATETIME2
@@ -840,7 +841,7 @@ BEGIN
     SET NOCOUNT ON;
     SELECT p.PaymentId, p.JobId, p.Kind, p.Amount, p.Method, p.CashReceived, p.PaidAt, p.RecordedByUserId,
            u.Username AS RecordedBy,
-           j.ClaimNumber, c.Name AS CustomerName, s.Name AS ServiceName, j.WeightKg,
+           j.ClaimNumber, c.Name AS CustomerName, s.Name AS ServiceName, j.WeightKg, j.TotalAmount AS JobTotal,
            (SELECT TOP (1) h.Reason FROM dbo.JobStatusHistory AS h
             WHERE h.JobId = p.JobId AND h.ToStatus = N'Voided' ORDER BY h.HistoryId DESC) AS Reason
     FROM dbo.Payments AS p
@@ -917,6 +918,7 @@ GO
 --   IsReturning        1 if the customer had an earlier job that was not voided
 --   CustomerFirstJobAt the customer's first job that was not voided ("customer since")
 --   VoidReason         why it was voided, for a voided job
+--   AmountRefunded     what its void refunds gave back (0 if it was not voided, or nothing was paid)
 CREATE OR ALTER PROCEDURE dbo.usp_Reports_GetJobsBetween
     @From DATETIME2,
     @To   DATETIME2
@@ -935,7 +937,9 @@ BEGIN
            (SELECT MIN(p.CreatedAt) FROM dbo.JobOrders AS p
             WHERE p.CustomerId = j.CustomerId AND p.CurrentStatus <> N'Voided') AS CustomerFirstJobAt,
            (SELECT TOP (1) h.Reason FROM dbo.JobStatusHistory AS h
-            WHERE h.JobId = j.JobId AND h.ToStatus = N'Voided' ORDER BY h.HistoryId DESC) AS VoidReason
+            WHERE h.JobId = j.JobId AND h.ToStatus = N'Voided' ORDER BY h.HistoryId DESC) AS VoidReason,
+           CAST(ISNULL((SELECT -SUM(p.Amount) FROM dbo.Payments AS p
+                        WHERE p.JobId = j.JobId AND p.Kind = N'Void refund'), 0) AS DECIMAL(10,2)) AS AmountRefunded
     FROM dbo.JobOrders AS j
     JOIN dbo.Services AS s  ON s.ServiceId = j.ServiceId
     JOIN dbo.Customers AS c ON c.CustomerId = j.CustomerId

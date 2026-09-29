@@ -1,7 +1,8 @@
 ﻿// Pages/Shared/NewJob.aspx
-// Keeps the order summary and the change in step with what the cashier ticks and types.
-// Display only: on save the server recomputes the total from the stored prices and checks
-// the cash again, and those are the values that are stored.
+// Keeps the order summary, the amount paid now, the balance and the change in step with what
+// the cashier ticks and types. Display only: on save the server recomputes the total from the
+// stored prices, checks the down payment against the owner's minimum and the cash again, and
+// those are the values that are stored.
 (function () {
     var loadCard = document.getElementById('loadCard');
     var serviceBox = document.getElementById('ddlService');
@@ -23,6 +24,13 @@
     var cash = document.getElementById('txtCashReceived');
     var rbCash = document.getElementById('rbCash');
     var rbEwallet = document.getElementById('rbEwallet');
+    // How much is paid now. The down payment and pay-at-pick-up choices are only on the page
+    // when the owner's minimum allows them (Pricing), so either may be missing.
+    var rbPayFull = document.getElementById('rbPayFull');
+    var rbPayPart = document.getElementById('rbPayPart');
+    var rbPayLater = document.getElementById('rbPayLater');
+    var downBox = document.getElementById('txtDownPayment');
+    var minPercent = parseInt(document.getElementById('paymentCard').getAttribute('data-min-percent'), 10) || 0;
     var createBtn = document.getElementById('btnCreate');
     var exactBtn = document.getElementById('btnExact');
     var sumLines = document.getElementById('sumLines');
@@ -155,6 +163,20 @@
         return Math.max(charge, minimum);
     }
 
+    // Money is worked in centavos so 500.00 - 289.99 never comes out as 210.00999...
+    function cents(n) { return Math.round(n * 100); }
+
+    function pesosTyped(box) {
+        var typed = box.value.replace(/[,₱\s]/g, '');
+        return typed === '' ? NaN : parseFloat(typed);
+    }
+
+    // The least the customer may pay now: the owner's percentage of the total, rounded up to the
+    // centavo, the same as PaymentService.MinimumDownPayment.
+    function minimumDown(total) {
+        return Math.ceil(Math.round(total * 100) * minPercent / 100) / 100;
+    }
+
     function update() {
         paintProducts();
 
@@ -164,14 +186,48 @@
         var laundry = laundryCharge();
         var total = lines.reduce(function (sum, line) { return sum + line.amount; }, laundry);
         document.getElementById('sumTotal').textContent = peso(total);
-        document.getElementById('ewalletTotal').textContent = peso(total);
-        exactBtn.setAttribute('data-cash', isFinite(total) ? total.toFixed(2) : '');
-        exactBtn.disabled = !isFinite(total);   // no exact amount until there is a total
 
+        // What is paid now: everything, a down payment, or nothing (pay at pick-up).
+        var plan = rbPayPart && rbPayPart.checked ? 'part' : rbPayLater && rbPayLater.checked ? 'later' : 'full';
+        var minimum = isFinite(total) ? minimumDown(total) : NaN;
+        var down = pesosTyped(downBox);
+        var paidNow = plan === 'full' ? total : plan === 'later' ? 0 : down;
+        var downProblem = '';
+        if (plan === 'part' && isFinite(total)) {
+            if (isNaN(down)) { downProblem = 'Enter the down payment.'; }
+            else if (cents(down) < cents(minimum)) { downProblem = 'At least ' + peso(minimum) + ' (' + minPercent + '% of the total).'; }
+            else if (cents(down) > cents(total)) { downProblem = 'The down payment can\'t be more than the ' + peso(total) + ' total.'; }
+        }
+        var balance = isFinite(total) && isFinite(paidNow) ? (cents(total) - cents(paidNow)) / 100 : NaN;
+
+        document.getElementById('downFields').hidden = plan !== 'part';
+        document.getElementById('laterNote').hidden = plan !== 'later';
+        document.getElementById('downHint').textContent = isFinite(minimum)
+            ? 'At least ' + peso(minimum) + ' (' + minPercent + '% of the total). The rest is paid before the load is claimed.'
+            : 'At least ' + minPercent + '% of the total. The rest is paid before the load is claimed.';
+        var downError = document.getElementById('downError');
+        downError.textContent = downProblem;
+        downError.hidden = downProblem === '' || isNaN(down);
+
+        var paysNow = plan !== 'later';
         var isCash = rbCash.checked;
-        document.getElementById('cashFields').style.display = isCash ? '' : 'none';
-        document.getElementById('cashSummary').style.display = isCash ? '' : 'none';
-        document.getElementById('ewalletNote').style.display = isCash ? 'none' : '';
+        document.getElementById('methodField').hidden = !paysNow;
+        document.getElementById('cashFields').style.display = paysNow && isCash ? '' : 'none';
+        document.getElementById('cashSummary').style.display = paysNow && isCash ? '' : 'none';
+        document.getElementById('ewalletNote').style.display = paysNow && !isCash ? '' : 'none';
+        document.getElementById('balanceSummary').hidden = plan === 'full';
+        document.getElementById('sumPaidNow').textContent = isFinite(paidNow) ? peso(paidNow) : '—';
+        document.getElementById('sumBalance').textContent = isFinite(balance) ? peso(balance) : '—';
+
+        var amountOk = isFinite(total) && isFinite(paidNow) && downProblem === '';
+        document.getElementById('ewalletTotal').textContent = amountOk ? peso(paidNow) : '—';
+        exactBtn.setAttribute('data-cash', amountOk ? paidNow.toFixed(2) : '');
+        exactBtn.disabled = !amountOk;   // no exact amount until there is one to pay
+
+        var pill = document.getElementById('sumMethod');
+        pill.className = 'pill ' + (plan === 'full' ? 'pill-ok' : plan === 'part' ? 'pill-warn' : 'pill-danger');
+        pill.textContent = plan === 'later' ? 'Unpaid · pay at pick-up'
+            : (plan === 'full' ? 'Paid in full · ' : 'Down payment · ') + (isCash ? 'Cash' : 'E-wallet');
 
         // No total without a weight: say what is missing rather than print NaN, and hold the
         // save until there is a price to collect.
@@ -183,42 +239,48 @@
             return;
         }
 
-        var typed = cash.value.replace(/[,₱\s]/g, '');
-        var received = parseFloat(typed);
-        // Worked in centavos so 500.00 - 289.99 never comes out as 210.00999...
-        var change = (Math.round(received * 100) - Math.round(total * 100)) / 100;
+        var received = pesosTyped(cash);
+        var change = (cents(received) - cents(paidNow)) / 100;
 
         var state;
-        if (!isCash) { state = 'ok'; }
-        else if (typed === '' || isNaN(received)) { state = 'idle'; }
+        if (!paysNow || !isCash) { state = 'ok'; }
+        else if (!amountOk) { state = 'waiting'; }
+        else if (isNaN(received)) { state = 'idle'; }
         else if (change < 0) { state = 'short'; }
         else if (change === 0) { state = 'exact'; }
         else { state = 'ok'; }
 
-        if (state === 'idle') { paintChange('idle', 'Change', 'Enter cash received'); }
+        if (state === 'waiting') { paintChange('idle', 'Change', 'Enter the down payment first'); }
+        else if (state === 'idle') { paintChange('idle', 'Change', 'Enter cash received'); }
         else if (state === 'short') { paintChange('short', 'Short by', peso(-change)); }
         else if (state === 'exact') { paintChange('exact', 'Exact amount', 'No change'); }
-        else if (isCash) { paintChange('', 'Change', peso(change)); }
+        else if (isCash && paysNow) { paintChange('', 'Change', peso(change)); }
 
-        var receivedOk = isCash && state !== 'idle';
-        document.getElementById('sumReceived').textContent = receivedOk ? peso(received) : '—';
-        document.getElementById('sumChange').textContent = (state === 'ok' || state === 'exact') && isCash ? peso(change) : '—';
-        document.getElementById('sumMethod').textContent = 'Paid in full · ' + (isCash ? 'Cash' : 'E-wallet');
-        createBtn.disabled = isCash && (state === 'idle' || state === 'short');
-        paintConfirm(lines, total, isCash, received, change);
+        var cashShown = paysNow && isCash && (state === 'ok' || state === 'exact' || state === 'short');
+        document.getElementById('sumReceived').textContent = cashShown ? peso(received) : '—';
+        document.getElementById('sumChange').textContent = cashShown && state !== 'short' ? peso(change) : '—';
+        createBtn.disabled = !amountOk || (paysNow && isCash && state !== 'ok' && state !== 'exact');
+        paintConfirm(lines, total, plan, paidNow, balance, isCash, received, change);
     }
 
     // The question Confirm.js asks before the job is saved: the whole order in a few lines, so the
     // cashier can read it back to the customer before pressing Continue.
-    function paintConfirm(lines, total, isCash, received, change) {
+    function paintConfirm(lines, total, plan, paidNow, balance, isCash, received, change) {
         var name = document.getElementById('txtCustomerName').value.trim() || 'New customer';
         var contact = document.getElementById('txtSearchContact').value.trim();
+        var paying;
+        if (plan === 'later') {
+            paying = 'Nothing paid now. The whole ' + peso(total) + ' is paid before pick-up.';
+        } else {
+            paying = (plan === 'full' ? 'Paid in full, ' : 'Down payment ' + peso(paidNow) + ', ')
+                + (isCash ? 'cash ' + peso(received) + ', change ' + peso(change) : 'e-wallet, exactly ' + peso(paidNow))
+                + (plan === 'part' ? '.\nBalance ' + peso(balance) + ', paid before pick-up.' : '.');
+        }
         var text = name + (contact ? ' · ' + contact : '') + '\n'
             + breakdown.sumService.textContent + ', ' + breakdown.sumWeight.textContent.replace(' → billable', '')
             + ' (billed as ' + breakdown.sumBillable.textContent + ')\n'
             + (lines.length ? lines.map(function (line) { return line.label; }).join(', ') + '\n' : '')
-            + '\nTotal ' + peso(total) + ' · '
-            + (isCash ? 'cash ' + peso(received) + ', change ' + peso(change) : 'e-wallet, exactly ' + peso(total))
+            + '\nTotal ' + peso(total) + '\n' + paying
             + '\n\nThe prices are saved with the job and never change later. The claim number is given when you continue.';
         createBtn.setAttribute('data-confirm-text', text);
     }
@@ -230,6 +292,10 @@
     }
 
     cash.addEventListener('input', update);
+    downBox.addEventListener('input', update);
+    [rbPayFull, rbPayPart, rbPayLater].forEach(function (rb) {
+        if (rb) { rb.addEventListener('change', update); }
+    });
     document.getElementById('txtCustomerName').addEventListener('input', update);
     document.getElementById('txtSearchContact').addEventListener('input', update);
     serviceBox.addEventListener('change', update);

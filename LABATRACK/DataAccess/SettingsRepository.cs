@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data;
+using System.Data.SqlClient;
 using System.Globalization;
 using LABATRACK.Models;
 
@@ -16,20 +18,30 @@ namespace LABATRACK.DataAccess
 
         public static ShopSettings Get()
         {
-            var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            using (var conn = Db.Open())
-            using (var cmd = Db.Proc(conn, null, "dbo.usp_Settings_GetAll"))
-            using (var r = cmd.ExecuteReader())
+            Dictionary<string, string> values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
+            using (SqlCommand cmd = new SqlCommand("dbo.usp_Settings_GetAll", conn))
             {
-                while (r.Read())
-                    values[Db.GetText(r, "SettingKey")] = Db.GetText(r, "SettingValue");
+                cmd.CommandType = CommandType.StoredProcedure;
+
+                conn.Open();
+                using (SqlDataReader r = cmd.ExecuteReader())
+                {
+                    while (r.Read())
+                    {
+                        string key = (string)r["SettingKey"];
+                        string value = r["SettingValue"] as string;
+                        values[key] = value;
+                    }
+                }
             }
 
             // A missing or unreadable row keeps the default from ShopSettings.
-            var s = new ShopSettings();
+            ShopSettings s = new ShopSettings();
             s.MinimumCharge = ReadDecimal(values, ShopSettings.MinimumChargeKey, s.MinimumCharge);
             s.RoundingIncrementKg = ReadDecimal(values, ShopSettings.RoundingIncrementKgKey, s.RoundingIncrementKg);
             s.MaxWeightKg = ReadDecimal(values, ShopSettings.MaxWeightKgKey, s.MaxWeightKg);
+            s.MinimumDownPaymentPercent = Math.Min(100, Math.Max(0, ReadInt(values, ShopSettings.MinimumDownPaymentPercentKey, s.MinimumDownPaymentPercent)));
             s.UnclaimedThresholdDays = ReadInt(values, ShopSettings.UnclaimedThresholdDaysKey, s.UnclaimedThresholdDays);
             s.DefaultTurnaroundHours = ReadInt(values, ShopSettings.DefaultTurnaroundHoursKey, s.DefaultTurnaroundHours);
             s.ShopName = ReadText(values, ShopSettings.ShopNameKey, s.ShopName);
@@ -40,11 +52,14 @@ namespace LABATRACK.DataAccess
 
         public static void Set(string key, string value)
         {
-            using (var conn = Db.Open())
-            using (var cmd = Db.Proc(conn, null, "dbo.usp_Settings_Set"))
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
+            using (SqlCommand cmd = new SqlCommand("dbo.usp_Settings_Set", conn))
             {
-                Db.AddText(cmd, "@SettingKey", key, 50);
-                Db.AddText(cmd, "@SettingValue", value, 400);
+                cmd.CommandType = CommandType.StoredProcedure;
+                cmd.Parameters.Add("@SettingKey", SqlDbType.NVarChar, 50).Value = key;
+                cmd.Parameters.Add("@SettingValue", SqlDbType.NVarChar, 400).Value = value;
+
+                conn.Open();
                 cmd.ExecuteNonQuery();
             }
         }

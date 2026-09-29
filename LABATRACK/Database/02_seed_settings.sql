@@ -32,6 +32,11 @@ IF NOT EXISTS (SELECT 1 FROM dbo.Settings WHERE SettingKey = N'RoundingIncrement
     INSERT INTO dbo.Settings (SettingKey, SettingValue) VALUES (N'RoundingIncrementKg', N'1');         -- 1 or 0.5 kg
 IF NOT EXISTS (SELECT 1 FROM dbo.Settings WHERE SettingKey = N'MaxWeightKg')
     INSERT INTO dbo.Settings (SettingKey, SettingValue) VALUES (N'MaxWeightKg', N'100');               -- per job
+-- The least a customer may pay at drop-off, as a percentage of the total (0 to 100). The rest is
+-- the balance, paid before the load is claimed. 0 allows paying everything at pick-up; 100 means
+-- full payment at drop-off only.
+IF NOT EXISTS (SELECT 1 FROM dbo.Settings WHERE SettingKey = N'MinimumDownPaymentPercent')
+    INSERT INTO dbo.Settings (SettingKey, SettingValue) VALUES (N'MinimumDownPaymentPercent', N'50');
 IF NOT EXISTS (SELECT 1 FROM dbo.Settings WHERE SettingKey = N'UnclaimedThresholdDays')
     INSERT INTO dbo.Settings (SettingKey, SettingValue) VALUES (N'UnclaimedThresholdDays', N'7');
 IF NOT EXISTS (SELECT 1 FROM dbo.Settings WHERE SettingKey = N'DefaultTurnaroundHours')

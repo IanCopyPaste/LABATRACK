@@ -76,16 +76,33 @@ namespace LABATRACK.Admin
             return sb.ToString();
         }
 
+        /// <summary>What customers still owe on the loads in the shop (collected before each is claimed).</summary>
+        protected decimal BalancesDue
+        {
+            get { return Data.Active.Sum(j => j.Balance); }
+        }
+
+        protected int LoadsOwing
+        {
+            get { return Data.Active.Count(j => j.Balance > 0); }
+        }
+
         protected string UnclaimedNote(JobOrder job)
         {
             int days = ReportService.DaysWaiting(job.StatusSince, Data.Now);
-            return "Ready since " + job.StatusSince.ToString("MMM d", Inv) + " · " + days + (days == 1 ? " day" : " days") + " unclaimed · paid";
+            return "Ready since " + job.StatusSince.ToString("MMM d", Inv) + " · " + days + (days == 1 ? " day" : " days") + " unclaimed · "
+                 + (job.Balance > 0 ? Peso(job.Balance) + " still to pay" : "paid");
         }
 
         protected static string VoidNote(JobOrder job)
         {
             return "Voided " + job.StatusSince.ToString("h:mm tt", Inv) + " by " + job.StatusBy
-                 + " · “" + job.StatusReason + "” · " + Peso(job.TotalAmount) + " refunded";
+                 + " · “" + job.StatusReason + "” · " + (job.PaymentMethod == null ? "nothing was paid" : "payment refunded");
+        }
+
+        protected static string PaymentBadgeFor(JobOrder job)
+        {
+            return Helpers.PaymentBadge.Html(job);
         }
 
         protected static string Peso(decimal amount)

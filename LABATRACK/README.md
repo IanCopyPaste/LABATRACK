@@ -1,8 +1,9 @@
-# LabaTrack: Laundry Shop Job Order and Sales Management System
+﻿# LabaTrack: Laundry Shop Job Order and Sales Management System
 
 IPT102 project (Quezon City University, BSIT). A web app for a small laundry shop: take in a
-load at the counter, price it automatically, take the full payment, print the claim slip, move
-the load through its stages until it is claimed, and see the day's sales and the owner's reports.
+load at the counter, price it automatically, take the payment (in full, or a down payment with the
+balance paid before pick-up), print the claim slip, move the load through its stages until it is
+claimed, and see the day's sales and the owner's reports.
 
 ASP.NET Web Forms (C#, .NET Framework 4.7.2) with SQL Server LocalDB. Every database query is a
 stored procedure. The rules the code follows are in `CLAUDE.md`; the build phases and the test
@@ -66,8 +67,10 @@ from the owner unlocks it at once).
 
 ## Email setup (SMTP)
 
-The shop sends three emails: to the customer at drop-off (with the claim number) and when the
-load is ready for pick-up, and to the owner for a forgotten password. They go out through the
+The shop sends five emails. To the customer: at drop-off (with the claim number), when the owner
+corrects the order (what changed and how it now stands), when the order is cancelled (the reason,
+the refund and what to do next), and when the load is ready for pick-up. To the owner: a forgotten
+password. A customer with no email address is skipped and the attempt is logged. They go out through the
 shop's Gmail account. Its password is a secret, so it lives in `Secrets.config` next to
 `Web.config`. That file is listed in `.gitignore` and is never committed; `Web.config` reads it
 with `<appSettings file="Secrets.config" />`.
@@ -117,7 +120,7 @@ the demo:
 |---|---|
 | `Admin/` | owner-only pages (dashboard, staff, pricing, settings, reports, daily sales report, edit job) |
 | `Pages/Shared/` | counter pages for staff and owner (job board, new job, job page, slip, history, customers) |
-| `Services/` | the shop's rules: `PricingService`, `StatusService`, `AuthService`, `JobOrderService`, ... |
+| `Services/` | the shop's rules: `PricingService`, `StatusService`, `AuthService`, `JobOrderService`, `PaymentService`, ... |
 | `DataAccess/` | `Db.cs` and the repositories, the only code that calls the database |
 | `Models/` | plain classes for the table rows |
 | `Security/` | `BasePage`, `AdminBasePage`, `PasswordHasher`, the role provider for `Web.config` |
@@ -134,8 +137,17 @@ the *Daily sales report* total must equal
 SELECT SUM(Amount) FROM dbo.Payments WHERE PaidAt >= '2026-09-29' AND PaidAt < '2026-09-30';
 ```
 
-for the same day, and this must return only voided jobs (paid and refunded, so 0 paid):
+for the same day. A job is Paid, Partially paid or Unpaid by comparing what was paid with its total,
+so this lists the jobs that are not paid in full: the voided ones (paid and refunded, so 0 paid) and
+every load that still owes a balance. No claimed job should ever appear, because a load is only
+claimed once its balance is collected:
 
 ```sql
-SELECT JobId, TotalAmount, AmountPaid FROM dbo.vw_JobPayments WHERE AmountPaid <> TotalAmount;
+SELECT v.JobId, j.CurrentStatus, v.TotalAmount, v.AmountPaid, v.TotalAmount - v.AmountPaid AS Balance
+FROM dbo.vw_JobPayments AS v JOIN dbo.JobOrders AS j ON j.JobId = v.JobId
+WHERE v.AmountPaid <> v.TotalAmount;
 ```
+
+The least a customer pays at drop-off is set on the *Pricing* page (minimum down payment, a
+percentage of the total, 50% to start with; 100 means full payment only, 0 lets a customer pay
+everything at pick-up).

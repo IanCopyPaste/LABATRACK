@@ -35,6 +35,11 @@ namespace LABATRACK.Pages.Shared
         protected global::System.Web.UI.WebControls.HiddenField hfShownStatus;
 
         /// <summary>
+        /// hfShownBalance control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.HiddenField hfShownBalance;
+
+        /// <summary>
         /// rptStepper control.
         /// </summary>
         protected global::System.Web.UI.WebControls.Repeater rptStepper;

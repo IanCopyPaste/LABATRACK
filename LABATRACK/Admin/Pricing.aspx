@@ -155,6 +155,14 @@
                                         <asp:Label ID="lblMaxWeightError" runat="server" CssClass="error-text" Visible="false" EnableViewState="false" />
                                         <span class="hint">A job heavier than this can't be saved. A bigger load is split into two or more jobs.</span>
                                     </div>
+                                    <%-- The least a customer pays at drop-off. New Job shows it, and PaymentService checks it
+                                         again on save. The balance is always paid before the load is claimed. --%>
+                                    <div class="field">
+                                        <label for="txtMinDownPayment">Minimum down payment (% of the total)</label>
+                                        <asp:TextBox ID="txtMinDownPayment" runat="server" inputmode="numeric" MaxLength="3" />
+                                        <asp:Label ID="lblMinDownError" runat="server" CssClass="error-text" Visible="false" EnableViewState="false" />
+                                        <span class="hint">The least paid at drop-off; the rest is paid before pick-up. 100 means full payment only, 0 lets a customer pay everything at pick-up.</span>
+                                    </div>
                                 </div>
                                 <div class="card-f">
                                     <button type="submit" name="action" value="rules" class="btn btn-primary"><%= Icons.Get("save", "ico-sm") %>Save rules</button>
@@ -233,6 +241,10 @@
             </div>
         </dialog>
     </form>
+
+    <script src="<%= AssetUrl.Get("~/Assets/js/Loading.js") %>"></script>
+
+    <script src="<%= AssetUrl.Get("~/Assets/js/NumericInput.js") %>"></script>
 
     <script src="<%= AssetUrl.Get("~/Assets/js/Sidebar.js") %>"></script>
     <script src="<%= AssetUrl.Get("~/Assets/js/Pricing.js") %>"></script>

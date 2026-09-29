@@ -722,9 +722,11 @@ namespace LABATRACK.Admin
 
         protected string VoidsCard()
         {
+            // Refunded = what the voids actually gave back: everything paid, which after a down
+            // payment can be less than the job's total.
             var voided = jobs.Where(j => j.IsVoided).ToList();
-            decimal refunded = voided.Sum(j => j.TotalAmount);
-            var reasons = voided.GroupBy(j => j.VoidReason ?? "").Select(g => new { Reason = g.Key, Count = g.Count(), Amount = g.Sum(j => j.TotalAmount) })
+            decimal refunded = voided.Sum(j => j.AmountRefunded);
+            var reasons = voided.GroupBy(j => j.VoidReason ?? "").Select(g => new { Reason = g.Key, Count = g.Count(), Amount = g.Sum(j => j.AmountRefunded) })
                 .OrderByDescending(r => r.Count).ToList();
 
             var sb = new System.Text.StringBuilder("<div class=\"mini-stats\">");
@@ -744,7 +746,7 @@ namespace LABATRACK.Admin
             {
                 sb.Append("<p class=\"muted small\" style=\"padding:0 20px 18px;\">No orders were voided in this period.</p>");
             }
-            return Card("Voids and refunds", "Every void is refunded in full, so none of this is in the sales figures. Look at the reasons, not just the count.",
+            return Card("Voids and refunds", "Every void gives back all that was paid on it, so none of this is in the sales figures. Look at the reasons, not just the count.",
                 sb.ToString(), "chart-card flush");
         }
 

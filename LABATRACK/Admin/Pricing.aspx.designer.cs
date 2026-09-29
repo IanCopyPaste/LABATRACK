@@ -68,5 +68,15 @@ namespace LABATRACK.Admin
         /// lblMaxWeightError control.
         /// </summary>
         protected global::System.Web.UI.WebControls.Label lblMaxWeightError;
+
+        /// <summary>
+        /// txtMinDownPayment control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.TextBox txtMinDownPayment;
+
+        /// <summary>
+        /// lblMinDownError control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Label lblMinDownError;
     }
 }

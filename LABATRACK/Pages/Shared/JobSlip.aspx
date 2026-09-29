@@ -50,25 +50,27 @@
 
             <hr class="rule" />
             <div class="row grand"><span>TOTAL</span><span>₱<%: Money(Job.TotalAmount) %></span></div>
-            <% if (!HasLaterPayments && DropOff != null && DropOff.Method == "Cash") { %>
+            <% if (PaidInOneGo && DropOff.Method == "Cash") { %>
+            <%-- The usual slip: paid in full at drop-off, in one payment. --%>
             <div class="row" style="margin-top:4px;"><span class="lbl">Cash received</span><span><%: Money(DropOff.CashReceived ?? DropOff.Amount) %></span></div>
-            <div class="row bal" style="margin-top:4px;"><span>CHANGE</span><span>₱<%: Money(Change) %></span></div>
-            <% } else if (!HasLaterPayments && DropOff != null) { %>
+            <div class="row bal" style="margin-top:4px;"><span>CHANGE</span><span>₱<%: Money(DropOff.Change) %></span></div>
+            <% } else if (PaidInOneGo) { %>
             <div class="row" style="margin-top:4px;"><span class="lbl">E-wallet</span><span><%: Money(DropOff.Amount) %></span></div>
-            <% } else if (DropOff != null) { %>
-            <%-- After a correction or a void, each payment is listed on its own line with its own change,
-                 so the slip still adds up: drop-off + corrections = total (or 0 once voided). --%>
-            <div class="row" style="margin-top:4px;"><span class="lbl">Paid at drop-off (<%: DropOff.Method %>)</span><span><%: Money(DropOff.Amount) %></span></div>
-            <% if (DropOff.CashReceived.HasValue) { %><div class="item-sub">Cash received <%: Money(DropOff.CashReceived.Value) %> &middot; change <%: Money(Change) %></div><% } %>
-            <% } %>
-            <%-- An owner's correction after drop-off (the difference collected or refunded), or a void refund. --%>
-            <asp:Repeater ID="rptLaterPayments" runat="server">
+            <% } else { %>
+            <%-- A down payment, later payments, a correction or a void: every payment on its own line
+                 with its own change, then what is still owed, so the slip always adds up:
+                 payments + balance due = total (or payments = 0 once voided). --%>
+            <asp:Repeater ID="rptPayments" runat="server">
                 <ItemTemplate>
-                    <div class="row" style="margin-top:4px;"><span class="lbl"><%#: LaterLabel((LABATRACK.Models.Payment)Container.DataItem) %></span><span><%# SignedMoney((decimal)Eval("Amount")) %></span></div>
-                    <%# Eval("CashReceived") == null ? "" : "<div class=\"item-sub\">Cash received " + Money((decimal)Eval("CashReceived")) + " &middot; change " + Money((decimal)Eval("CashReceived") - (decimal)Eval("Amount")) + "</div>" %>
+                    <div class="row" style="margin-top:4px;"><span class="lbl"><%#: PaymentLabel((LABATRACK.Models.Payment)Container.DataItem) %></span><span><%# SignedMoney((decimal)Eval("Amount")) %></span></div>
+                    <%# Eval("CashReceived") == null ? "" : "<div class=\"item-sub\">Cash received " + Money((decimal)Eval("CashReceived")) + " &middot; change " + Money(((LABATRACK.Models.Payment)Container.DataItem).Change) + "</div>" %>
                 </ItemTemplate>
             </asp:Repeater>
-            <div style="margin-top:6px;"><span class="status"><%: IsVoided ? "VOIDED · REFUNDED" : "PAID IN FULL" %></span> <span class="lbl" style="font-size:11px;">&nbsp;<%: DropOff != null ? DropOff.Method + " · " + DropOff.PaidAt.ToString("MMM d h:mm tt") : "" %></span></div>
+            <% if (NothingPaid) { %><div class="row" style="margin-top:4px;"><span class="lbl">Paid at drop-off</span><span>0.00</span></div><% } %>
+            <% if (Job.Balance > 0) { %><div class="row bal" style="margin-top:4px;"><span>BALANCE DUE</span><span>₱<%: Money(Job.Balance) %></span></div>
+            <div class="item-sub">To be paid before the laundry is released.</div><% } %>
+            <% } %>
+            <div style="margin-top:6px;"><span class="status"><%: Stamp %></span> <span class="lbl" style="font-size:11px;">&nbsp;<%: DropOff != null ? DropOff.Method + " · " + DropOff.PaidAt.ToString("MMM d h:mm tt") : "" %></span></div>
 
             <% if (!string.IsNullOrEmpty(Job.Remarks)) { %>
             <hr class="rule" />
@@ -90,7 +92,7 @@
                 <div style="font-size:14px; font-weight:600;"><%: Job.CustomerName %></div>
                 <div><%: Job.ServiceName %> &middot; <%: Kg(Job.WeightKg) %> kg</div>
                 <% if (!string.IsNullOrEmpty(Job.AddOnSummary)) { %><div style="margin-top:6px;"><%: Job.AddOnSummary.Replace(", ", " · ") %></div><% } %>
-                <div class="fine" style="margin-top:6px;">Ready by <%: Job.ExpectedPickupAt.ToString("MMM d, h:mm tt") %> &middot; <%: IsVoided ? "Voided" : "Paid" %></div>
+                <div class="fine" style="margin-top:6px;">Ready by <%: Job.ExpectedPickupAt.ToString("MMM d, h:mm tt") %> &middot; <%: IsVoided ? "Voided" : Job.Balance > 0 ? "₱" + Money(Job.Balance) + " due" : "Paid" %></div>
             </div>
         </div>
     </form>

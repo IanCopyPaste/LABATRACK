@@ -11,7 +11,8 @@ namespace LABATRACK.Pages.Shared
 {
     // The printable job order slip and bag tag for one job (?id=<JobId>). Everything on it comes
     // from the saved job: the frozen prices, its add-ons, and its payments. The cash received is
-    // stored on the payment, so a reprint shows the same cash and change as the first print.
+    // stored on each payment, so a reprint shows the same cash and change as the first print.
+    // A job with a balance says what is still due, so the customer knows before pick-up.
     public partial class JobSlip : BasePage
     {
         protected override string PageStyleSheet
@@ -26,12 +27,20 @@ namespace LABATRACK.Pages.Shared
         protected Payment DropOff { get; private set; }
         protected bool IsVoided { get; private set; }
         protected bool MinimumApplied { get; private set; }
-        protected bool HasLaterPayments { get; private set; }   // a correction or a void refund after drop-off
+        protected bool NothingPaid { get; private set; }
 
-        /// <summary>Change = cash received - total, from the stored drop-off payment.</summary>
-        protected decimal Change
+        /// <summary>The usual case: one payment at drop-off for the whole total, and nothing since.</summary>
+        protected bool PaidInOneGo { get; private set; }
+
+        /// <summary>The stamp under the payments: how the job stands.</summary>
+        protected string Stamp
         {
-            get { return DropOff != null && DropOff.CashReceived.HasValue ? DropOff.CashReceived.Value - DropOff.Amount : 0m; }
+            get
+            {
+                if (IsVoided) return "VOIDED · REFUNDED";
+                if (Job.PaymentStatus == PaymentService.Paid) return "PAID IN FULL";
+                return Job.PaymentStatus == PaymentService.PartiallyPaid ? "PARTIALLY PAID" : "UNPAID";
+            }
         }
 
         protected void Page_Load(object sender, EventArgs e)
@@ -51,12 +60,13 @@ namespace LABATRACK.Pages.Shared
 
             List<Payment> payments = PaymentRepository.GetByJob(Job.JobId);
             DropOff = payments.FirstOrDefault(p => p.Kind == Payment.DropOff);
-            HasLaterPayments = payments.Any(p => p.Kind != Payment.DropOff);
+            NothingPaid = payments.Count == 0;
+            PaidInOneGo = payments.Count == 1 && DropOff != null && DropOff.Amount == Job.TotalAmount && !IsVoided;
 
             rptAddOns.DataSource = JobOrderRepository.GetAddOns(Job.JobId);
             rptAddOns.DataBind();
-            rptLaterPayments.DataSource = payments.Where(p => p.Kind != Payment.DropOff);
-            rptLaterPayments.DataBind();
+            rptPayments.DataSource = payments;
+            rptPayments.DataBind();
 
             // The claim number goes in the title, so a saved PDF or a browser tab says which job it is.
             Title = "Slip " + Job.ClaimNumber + " · LabaTrack";
@@ -82,8 +92,10 @@ namespace LABATRACK.Pages.Shared
             return PricingService.LineAmount(line.Quantity, line.PriceAtCreation);
         }
 
-        protected static string LaterLabel(Payment p)
+        protected static string PaymentLabel(Payment p)
         {
+            if (p.Kind == Payment.DropOff) return "Paid at drop-off (" + p.Method + ")";
+            if (p.Kind == Payment.BalancePayment) return "Balance paid " + p.PaidAt.ToString("MMM d", Inv) + " (" + p.Method + ")";
             if (p.Kind == Payment.VoidRefund) return "Refunded on void (" + p.Method + ")";
             return (p.Amount > 0 ? "Collected on correction (" : "Refunded on correction (") + p.Method + ")";
         }

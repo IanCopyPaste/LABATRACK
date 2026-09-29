@@ -16,7 +16,7 @@
                 <header class="page-head">
                     <div>
                         <h1>New job order</h1>
-                        <p class="sub">Find the customer, weigh the load, take the full payment, then print the slip.</p>
+                        <p class="sub">Find the customer, weigh the load, take the payment, then print the slip.</p>
                     </div>
                 </header>
 
@@ -131,11 +131,30 @@
                                 </div>
                             </section>
 
-                            <!-- 3. Payment: full amount only, collected now -->
-                            <section class="card" id="paymentCard">
-                                <div class="card-h"><div class="title"><span class="step-no">3</span><div><h2>Payment</h2><div class="sub">Full payment is collected now. No partial payments or balances.</div></div></div></div>
+                            <!-- 3. Payment: in full, or at least the minimum down payment; the rest before pick-up -->
+                            <%-- data-min-percent is the minimum down payment set on Pricing. NewJob.js shows the
+                                 least the customer may pay; JobOrderService checks it again on save. --%>
+                            <section class="card" id="paymentCard" data-min-percent="<%: MinDownPercent %>">
+                                <div class="card-h"><div class="title"><span class="step-no">3</span><div><h2>Payment</h2><div class="sub"><%: PaymentSub %></div></div></div></div>
                                 <div class="card-b form">
                                     <div class="field">
+                                        <span class="label">Paid now</span>
+                                        <div class="method">
+                                            <label class="check"><asp:RadioButton ID="rbPayFull" runat="server" GroupName="plan" Checked="true" />Pay in full</label>
+                                            <% if (MinDownPercent < 100) { %><label class="check"><asp:RadioButton ID="rbPayPart" runat="server" GroupName="plan" />Down payment</label><% } %>
+                                            <% if (MinDownPercent == 0) { %><label class="check"><asp:RadioButton ID="rbPayLater" runat="server" GroupName="plan" />Pay at pick-up</label><% } %>
+                                        </div>
+                                    </div>
+                                    <div class="field" id="downFields" hidden>
+                                        <label for="txtDownPayment">Down payment</label>
+                                        <div class="input-prefix"><span>₱</span><asp:TextBox ID="txtDownPayment" runat="server" inputmode="decimal" autocomplete="off" /></div>
+                                        <span class="hint" id="downHint">At least <%: MinDownPercent %>% of the total. The rest is paid before the load is claimed.</span>
+                                    </div>
+                                    <div id="laterNote" class="notice notice-info" hidden>
+                                        <%= Icons.Get("info", "ico-sm") %>
+                                        <span>Nothing is paid now. The whole total is collected before the load is handed over.</span>
+                                    </div>
+                                    <div class="field" id="methodField">
                                         <span class="label">Method</span>
                                         <div class="method">
                                             <label class="check"><asp:RadioButton ID="rbCash" runat="server" GroupName="method" Checked="true" /><%= Icons.Get("banknote", "ico-sm") %>Cash</label>
@@ -165,6 +184,7 @@
                                         <%= Icons.Get("smartphone", "ico-sm") %>
                                         <span>Confirm the customer sent exactly <strong id="ewalletTotal">—</strong> before saving. E-wallet is recorded only; it is not verified by the system.</span>
                                     </div>
+                                    <span class="error-text" id="downError" hidden></span>
                                 </div>
                             </section>
                         </div>
@@ -187,6 +207,11 @@
                                     </dl>
                                     <div class="divider" style="margin:14px 0;"></div>
                                     <div class="total-line"><span>Total</span><span class="num" id="sumTotal">—</span></div>
+                                    <%-- Shown for a down payment or pay at pick-up: what is paid now and what is left. --%>
+                                    <dl class="dl" id="balanceSummary" style="margin-top:12px;" hidden>
+                                        <dt>Paid now</dt><dd id="sumPaidNow">—</dd>
+                                        <dt class="strong" style="color:var(--text);">Balance due</dt><dd class="strong" id="sumBalance" style="color:var(--warning);">—</dd>
+                                    </dl>
                                     <dl class="dl" id="cashSummary" style="margin-top:12px;">
                                         <dt>Cash received</dt><dd id="sumReceived">—</dd>
                                         <dt class="strong" style="color:var(--text);">Change</dt><dd class="strong" id="sumChange" style="color:var(--success);">—</dd>
@@ -216,6 +241,10 @@
             </main>
         </div>
     </form>
+
+    <script src="<%= AssetUrl.Get("~/Assets/js/Loading.js") %>"></script>
+
+    <script src="<%= AssetUrl.Get("~/Assets/js/NumericInput.js") %>"></script>
 
     <script src="<%= AssetUrl.Get("~/Assets/js/Sidebar.js") %>"></script>
     <script src="<%= AssetUrl.Get("~/Assets/js/Confirm.js") %>"></script>

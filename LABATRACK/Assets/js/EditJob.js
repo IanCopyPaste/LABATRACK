@@ -1,9 +1,10 @@
 ﻿// Admin/EditJob.aspx
 // Reprices the corrected job as the owner types, with the prices frozen on the job (the page puts
-// them in data- attributes), and shows how the difference is settled: collect, refund, or nothing.
+// them in data- attributes), and shows what the new total means: a balance still owed (collected
+// before pick-up), an overpayment to refund now, or nothing.
 // Display only: on save the server prices the job again (JobOrderService.QuoteEdit) and refuses the
-// save if the amount to settle is not the one shown here (hfShownDifference), so the owner never
-// collects or refunds a wrong amount. It also checks the cash again and works out the change itself.
+// save if the amount is not the one shown here (hfShownDifference), so the owner never refunds a
+// wrong amount.
 (function () {
     var card = document.getElementById('loadCard');
     if (!card) return;
@@ -24,9 +25,6 @@
     var services = document.querySelectorAll('[data-service]');
     var products = document.querySelectorAll('[data-product]');
     var shownDiff = document.getElementById('hfShownDifference');
-    var rbCash = document.getElementById('rbAdjCash');
-    var rbEwallet = document.getElementById('rbAdjEwallet');
-    var cash = document.getElementById('txtAdjCashReceived');
     var saveBtn = document.getElementById('btnSave');
     var sumLines = document.getElementById('sumLines');
 
@@ -117,50 +115,35 @@
         });
     }
 
-    // Higher total: collect the difference. Lower: the customer overpaid, so refund it. Same: nothing.
+    // Higher total than paid: a balance, collected before pick-up (nothing is taken now). Lower: the
+    // customer overpaid, so the excess is refunded now. Same: paid in full.
     function paintSettle(q) {
         var diff = q ? (cents(q.total) - cents(paid)) / 100 : 0;
-        var state = !q || diff === 0 ? 'none' : diff > 0 ? 'collect' : 'refund';
+        var state = !q || diff === 0 ? 'none' : diff > 0 ? 'balance' : 'refund';
         var amount = Math.abs(diff);
         shownDiff.value = q ? diff.toFixed(2) : '';
 
         $('settleCard').setAttribute('data-state', state);
         var pill = $('settlePill');
-        pill.className = 'pill ' + (state === 'refund' ? 'pill-danger' : state === 'collect' ? 'pill-warn' : 'pill-ok');
-        pill.textContent = state === 'refund' ? 'Overpaid' : state === 'collect' ? 'Collect' : 'No change';
-        $('settleLine').style.color = state === 'refund' ? 'var(--danger)' : state === 'collect' ? 'var(--warning)' : 'var(--text)';
-        $('settleLabel').textContent = state === 'refund' ? 'Refund to customer' : state === 'collect' ? 'Collect from customer' : 'Nothing to settle';
+        pill.className = 'pill ' + (state === 'refund' ? 'pill-danger' : state === 'balance' ? 'pill-warn' : 'pill-ok');
+        pill.textContent = state === 'refund' ? 'Overpaid' : state === 'balance' ? 'Balance due' : 'Paid in full';
+        $('settleLine').style.color = state === 'refund' ? 'var(--danger)' : state === 'balance' ? 'var(--warning)' : 'var(--text)';
+        $('settleLabel').textContent = state === 'refund' ? 'Refund to customer' : state === 'balance' ? 'Balance due' : 'Nothing owed';
         $('settleAmount').textContent = state === 'none' ? '' : peso(amount);
 
+        $('balanceNotice').hidden = state !== 'balance';
+        if (state === 'balance') {
+            $('balanceText').textContent = 'The customer has paid ' + peso(paid) + ' of the ' + peso(q.total)
+                + ' total. The ' + peso(amount) + ' balance is collected before pick-up, on the job page. Nothing is collected now.';
+        }
         $('refundNotice').hidden = state !== 'refund';
         if (state === 'refund') {
             $('refundText').textContent = 'The customer paid ' + peso(paid) + ' but the corrected total is ' + peso(q.total)
                 + '. Give back ' + peso(amount) + ' before saving. It is recorded as a −' + peso(amount) + ' refund row.';
         }
-        $('methodField').hidden = state === 'none';
-        $('methodLabel').textContent = state === 'refund' ? 'Refund by' : 'Method';
-
-        var collectCash = state === 'collect' && rbCash.checked;
-        $('adjCashFields').hidden = !collectCash;
-        $('saveLabel').textContent = state === 'collect' ? 'Save and collect ' + peso(amount)
-                                   : state === 'refund' ? 'Save and refund ' + peso(amount) : 'Save changes';
-
-        // The change while the owner types the cash for the difference.
-        var typed = cash.value.replace(/[,₱\s]/g, '');
-        var received = parseFloat(typed);
-        var box = $('adjChangeBox');
-        if (!collectCash || typed === '' || isNaN(received)) {
-            box.className = 'change-box idle';
-            $('adjChangeLabel').textContent = 'Change';
-            $('adjChange').textContent = 'Enter cash received';
-        } else {
-            var change = (cents(received) - cents(amount)) / 100;
-            box.className = 'change-box' + (change < 0 ? ' short' : change === 0 ? ' exact' : '');
-            $('adjChangeLabel').textContent = change < 0 ? 'Short by' : change === 0 ? 'Exact amount' : 'Change';
-            $('adjChange').textContent = change < 0 ? peso(-change) : change === 0 ? 'No change' : peso(change);
-        }
-
-        saveBtn.disabled = !q || (collectCash && (typed === '' || isNaN(received) || cents(received) < cents(amount)));
+        $('methodField').hidden = state !== 'refund';
+        $('saveLabel').textContent = state === 'refund' ? 'Save and refund ' + peso(amount) : 'Save changes';
+        saveBtn.disabled = !q;
     }
 
     function update() {
@@ -172,9 +155,6 @@
 
     serviceBox.addEventListener('change', update);
     weightBox.addEventListener('input', update);
-    cash.addEventListener('input', update);
-    rbCash.addEventListener('change', update);
-    rbEwallet.addEventListener('change', update);
     Array.prototype.forEach.call(services, function (box) {
         box.addEventListener('change', update);
     });
@@ -189,8 +169,8 @@
         });
     });
 
-    // Enter would save the whole correction (the form's only submit button). A save that collects
-    // or refunds money should be a deliberate click, so Enter in a box does nothing here.
+    // Enter would save the whole correction (the form's only submit button). A save that changes
+    // what a customer owes should be a deliberate click, so Enter in a box does nothing here.
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Enter' && e.target.tagName === 'INPUT') { e.preventDefault(); }
     });

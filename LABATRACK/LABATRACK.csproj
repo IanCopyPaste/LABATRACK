@@ -93,7 +93,9 @@
     <Content Include="Assets\js\Dashboard.js" />
     <Content Include="Assets\js\EditJob.js" />
     <Content Include="Assets\js\JobDetail.js" />
+    <Content Include="Assets\js\Loading.js" />
     <Content Include="Assets\js\NewJob.js" />
+    <Content Include="Assets\js\NumericInput.js" />
     <Content Include="Assets\js\Pricing.js" />
     <Content Include="Assets\js\Print.js" />
     <Content Include="Assets\js\Settings.js" />
@@ -211,6 +213,8 @@
     <Content Include="Assets\icons\shield-check.svg" />
     <Content Include="Assets\icons\shirt.svg" />
     <Content Include="Assets\icons\smartphone.svg" />
+    <Content Include="Assets\icons\spinner-dark.svg" />
+    <Content Include="Assets\icons\spinner-light.svg" />
     <Content Include="Assets\icons\store.svg" />
     <Content Include="Assets\icons\tags.svg" />
     <Content Include="Assets\icons\timer.svg" />
@@ -317,6 +321,7 @@
     <Compile Include="Helpers\SvgChart.cs" />
     <Compile Include="Helpers\EmailTemplates.cs" />
     <Compile Include="Helpers\MoveConfirm.cs" />
+    <Compile Include="Helpers\PaymentBadge.cs" />
     <Compile Include="Security\BasePage.cs">
       <SubType>ASPXCodeBehind</SubType>
     </Compile>
@@ -333,6 +338,7 @@
     <Compile Include="Models\JobAddOn.cs" />
     <Compile Include="Models\JobOrder.cs" />
     <Compile Include="Models\JobPayments.cs" />
+    <Compile Include="Models\EditSummary.cs" />
     <Compile Include="Models\LaundryService.cs" />
     <Compile Include="Models\NotificationLogEntry.cs" />
     <Compile Include="Models\Payment.cs" />
@@ -357,6 +363,7 @@
     <Compile Include="Services\CustomerService.cs" />
     <Compile Include="Services\EmailService.cs" />
     <Compile Include="Services\JobOrderService.cs" />
+    <Compile Include="Services\PaymentService.cs" />
     <Compile Include="Services\PricingService.cs" />
     <Compile Include="Services\ReportService.cs" />
     <Compile Include="Services\StatusService.cs" />

@@ -1,4 +1,7 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
+using System.Data;
+using System.Data.SqlClient;
 using LABATRACK.Models;
 
 namespace LABATRACK.DataAccess
@@ -9,16 +12,19 @@ namespace LABATRACK.DataAccess
         public static void Insert(int jobId, string kind, string recipient, string status, string detail,
                                   bool isResend, int attemptedByUserId)
         {
-            using (var conn = Db.Open())
-            using (var cmd = Db.Proc(conn, null, "dbo.usp_NotificationLog_Insert"))
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
+            using (SqlCommand cmd = new SqlCommand("dbo.usp_NotificationLog_Insert", conn))
             {
-                Db.AddInt(cmd, "@JobId", jobId);
-                Db.AddText(cmd, "@Kind", kind, 10);
-                Db.AddText(cmd, "@Recipient", recipient, 254);
-                Db.AddText(cmd, "@Status", status, 10);
-                Db.AddText(cmd, "@Detail", detail, 400);
-                Db.AddBit(cmd, "@IsResend", isResend);
-                Db.AddInt(cmd, "@AttemptedByUserId", attemptedByUserId);
+                cmd.CommandType = CommandType.StoredProcedure;
+                cmd.Parameters.Add("@JobId", SqlDbType.Int).Value = jobId;
+                cmd.Parameters.Add("@Kind", SqlDbType.NVarChar, 10).Value = kind;
+                cmd.Parameters.Add("@Recipient", SqlDbType.NVarChar, 254).Value = (object)recipient ?? DBNull.Value;
+                cmd.Parameters.Add("@Status", SqlDbType.NVarChar, 10).Value = status;
+                cmd.Parameters.Add("@Detail", SqlDbType.NVarChar, 400).Value = (object)detail ?? DBNull.Value;
+                cmd.Parameters.Add("@IsResend", SqlDbType.Bit).Value = isResend;
+                cmd.Parameters.Add("@AttemptedByUserId", SqlDbType.Int).Value = attemptedByUserId;
+
+                conn.Open();
                 cmd.ExecuteNonQuery();
             }
         }
@@ -26,32 +32,34 @@ namespace LABATRACK.DataAccess
         /// <summary>A job's email attempts, oldest first.</summary>
         public static List<NotificationLogEntry> GetByJob(int jobId)
         {
-            using (var conn = Db.Open())
-            using (var cmd = Db.Proc(conn, null, "dbo.usp_NotificationLog_GetByJob"))
+            List<NotificationLogEntry> list = new List<NotificationLogEntry>();
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
+            using (SqlCommand cmd = new SqlCommand("dbo.usp_NotificationLog_GetByJob", conn))
             {
-                Db.AddInt(cmd, "@JobId", jobId);
-                var list = new List<NotificationLogEntry>();
-                using (var r = cmd.ExecuteReader())
+                cmd.CommandType = CommandType.StoredProcedure;
+                cmd.Parameters.Add("@JobId", SqlDbType.Int).Value = jobId;
+
+                conn.Open();
+                using (SqlDataReader r = cmd.ExecuteReader())
                 {
                     while (r.Read())
                     {
-                        list.Add(new NotificationLogEntry
-                        {
-                            NotificationId = Db.GetInt(r, "NotificationId"),
-                            JobId = Db.GetInt(r, "JobId"),
-                            Kind = Db.GetText(r, "Kind"),
-                            Recipient = Db.GetText(r, "Recipient"),
-                            Status = Db.GetText(r, "Status"),
-                            Detail = Db.GetText(r, "Detail"),
-                            IsResend = Db.GetBool(r, "IsResend"),
-                            AttemptedAt = Db.GetDateTime(r, "AttemptedAt"),
-                            AttemptedByUserId = Db.GetInt(r, "AttemptedByUserId"),
-                            AttemptedBy = Db.GetText(r, "AttemptedBy"),
-                        });
+                        NotificationLogEntry entry = new NotificationLogEntry();
+                        entry.NotificationId = (int)r["NotificationId"];
+                        entry.JobId = (int)r["JobId"];
+                        entry.Kind = (string)r["Kind"];
+                        entry.Recipient = r["Recipient"] as string;
+                        entry.Status = (string)r["Status"];
+                        entry.Detail = r["Detail"] as string;
+                        entry.IsResend = (bool)r["IsResend"];
+                        entry.AttemptedAt = (DateTime)r["AttemptedAt"];
+                        entry.AttemptedByUserId = (int)r["AttemptedByUserId"];
+                        entry.AttemptedBy = (string)r["AttemptedBy"];
+                        list.Add(entry);
                     }
                 }
-                return list;
             }
+            return list;
         }
     }
 }

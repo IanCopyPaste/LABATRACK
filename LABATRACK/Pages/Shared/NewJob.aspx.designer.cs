@@ -105,6 +105,26 @@ namespace LABATRACK.Pages.Shared
         protected global::System.Web.UI.WebControls.TextBox txtExpectedPickup;
 
         /// <summary>
+        /// rbPayFull control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.RadioButton rbPayFull;
+
+        /// <summary>
+        /// rbPayPart control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.RadioButton rbPayPart;
+
+        /// <summary>
+        /// rbPayLater control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.RadioButton rbPayLater;
+
+        /// <summary>
+        /// txtDownPayment control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.TextBox txtDownPayment;
+
+        /// <summary>
         /// rbCash control.
         /// </summary>
         protected global::System.Web.UI.WebControls.RadioButton rbCash;

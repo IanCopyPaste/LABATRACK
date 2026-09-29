@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Configuration;
+using System.Linq;
 using System.Net;
 using System.Net.Mail;
 using System.Text;
@@ -10,9 +12,10 @@ using LABATRACK.Models;
 namespace LABATRACK.Services
 {
     /// <summary>
-    /// Sends the shop's emails through SMTP (no SMS): two to customers (at drop-off, with the
-    /// claim number, and when the load is ready for pick-up) and one to the owner (the password
-    /// reset link). The message bodies are built in Helpers/EmailTemplates.cs.
+    /// Sends the shop's emails through SMTP (no SMS): four to customers (at drop-off, with the
+    /// claim number; when the owner corrects the order; when the order is cancelled; and when the
+    /// load is ready for pick-up) and one to the owner (the password reset link). The message
+    /// bodies are built in Helpers/EmailTemplates.cs.
     ///
     /// A failed email never blocks or undoes a job: these methods never throw. Every attempt to
     /// reach a customer is written to NotificationLog as Sent, Failed (with the error) or Skipped
@@ -72,13 +75,28 @@ namespace LABATRACK.Services
         /// <summary>The drop-off email: the claim number, the load, the total, and the expected pick-up.</summary>
         public static void SendDropOff(int jobId, int userId, bool isResend)
         {
-            SendToCustomer(jobId, NotificationLogEntry.DropOffKind, userId, isResend);
+            SendToCustomer(jobId, NotificationLogEntry.DropOffKind, userId, isResend, null);
         }
 
         /// <summary>The ready-for-pick-up email, sent when a load passes inspection.</summary>
         public static void SendReady(int jobId, int userId, bool isResend)
         {
-            SendToCustomer(jobId, NotificationLogEntry.ReadyKind, userId, isResend);
+            SendToCustomer(jobId, NotificationLogEntry.ReadyKind, userId, isResend, null);
+        }
+
+        /// <summary>
+        /// The order-updated email, sent after the owner corrects a job: what changed and how the
+        /// order stands now. <paramref name="summary"/> is built by JobOrderService.SaveEdit.
+        /// </summary>
+        public static void SendModified(int jobId, int userId, EditSummary summary)
+        {
+            SendToCustomer(jobId, NotificationLogEntry.ModifiedKind, userId, false, summary);
+        }
+
+        /// <summary>The order-cancelled email, sent when a job is voided: the reason, the refund and what to do next.</summary>
+        public static void SendVoided(int jobId, int userId, bool isResend)
+        {
+            SendToCustomer(jobId, NotificationLogEntry.VoidedKind, userId, isResend, null);
         }
 
         /// <summary>
@@ -99,7 +117,7 @@ namespace LABATRACK.Services
             }
         }
 
-        private static void SendToCustomer(int jobId, string kind, int userId, bool isResend)
+        private static void SendToCustomer(int jobId, string kind, int userId, bool isResend, EditSummary summary)
         {
             string recipient = null;
             try
@@ -120,9 +138,29 @@ namespace LABATRACK.Services
                 }
 
                 ShopSettings settings = SettingsRepository.Get();
-                bool ready = kind == NotificationLogEntry.ReadyKind;
-                string subject = ready ? EmailTemplates.ReadySubject(settings, job) : EmailTemplates.DropOffSubject(settings, job);
-                string body = ready ? EmailTemplates.ReadyBody(settings, job) : EmailTemplates.DropOffBody(settings, job);
+                string subject;
+                string body;
+                switch (kind)
+                {
+                    case NotificationLogEntry.ReadyKind:
+                        subject = EmailTemplates.ReadySubject(settings, job);
+                        body = EmailTemplates.ReadyBody(settings, job);
+                        break;
+                    case NotificationLogEntry.ModifiedKind:
+                        subject = EmailTemplates.ModifiedSubject(settings, job);
+                        body = EmailTemplates.ModifiedBody(settings, job, summary);
+                        break;
+                    case NotificationLogEntry.VoidedKind:
+                        // The refunds come from the job's own payment rows, so a resend says the same as the first email.
+                        List<Payment> refunds = PaymentRepository.GetByJob(jobId).Where(p => p.Kind == Payment.VoidRefund).ToList();
+                        subject = EmailTemplates.VoidedSubject(settings, job);
+                        body = EmailTemplates.VoidedBody(settings, job, refunds);
+                        break;
+                    default:
+                        subject = EmailTemplates.DropOffSubject(settings, job);
+                        body = EmailTemplates.DropOffBody(settings, job);
+                        break;
+                }
 
                 Send(recipient, subject, body);
                 Log(jobId, kind, recipient, NotificationLogEntry.Sent, null, isResend, userId);

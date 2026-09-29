@@ -1,4 +1,4 @@
-# LabaTrack Build Process
+﻿# LabaTrack Build Process
 
 Target: a working demo about 15 working days after planning starts. Rules live in `CLAUDE.md`. This file covers order of work, what "done" means for each phase, what to cut if time runs short, and how to test.
 
@@ -7,10 +7,10 @@ Target: a working demo about 15 working days after planning starts. Rules live i
 - Login with owner and staff roles, enforced on the server
 - Job order creation with automatic price computation
 - Rate snapshot stored inside each job
-- Full payment at drop-off (Cash with change computed, or E-wallet)
+- Payment at drop-off: in full or at least a minimum down payment, with the balance collected before the load is claimed (Cash with change computed, or E-wallet), and each job shown as paid, partially paid or unpaid
 - Claim number and printable slip
 - Status board with a timestamp and staff name on every change
-- Mark as claimed
+- Mark as claimed (only with nothing owed)
 - Daily sales total with the cash and e-wallet split
 
 ## Phases
@@ -62,6 +62,8 @@ Done when the totals below match by hand. These are example numbers (rate 40 per
 
 Also done when a job created at one rate keeps its total after the owner changes that rate, and when a weight above the maximum set on the Pricing page is refused by the server, not only by the page.
 
+Payment, by hand, with the 5.1 kg job above at 240 and the minimum down payment at 50% (so at least 120): a down payment of 100 is refused; 150 paid in cash with 200 handed over saves, prints change 50, and leaves a balance of 90; paying everything (240) saves as paid in full; a down payment above 240 is refused, and so is cash below the amount paid now.
+
 ### Phase 4: Status board and job detail (Days 9 to 11)
 
 Build `Dashboard.aspx` (staff and owner, with the job cards as a Repeater template and the same repository query), `StatusService`, `JobDetail.aspx` (the stage timeline as a Repeater bound to the history rows, plus advance, rework, void, and claim), and `History.aspx`.
@@ -71,8 +73,9 @@ Done when:
 - An illegal transition (for example Queued straight to Folding) is rejected.
 - Failing inspection sends a job back to Washing and the timeline shows both passes.
 - A job on a service without Folding goes from its last work stage straight to Inspection, and neither its stepper nor its rework choices show Folding.
-- Voiding a Queued job creates a full refund row and the day's total is correct.
-- A job cannot be saved without a full payment, and cash received below the total is rejected.
+- Voiding a Queued job creates a refund row for everything that was paid on it (all of it, or only the down payment) and the day's total is correct.
+- A job cannot be saved with less than the minimum down payment, and cash received below the amount paid now is rejected.
+- A load with a balance cannot be claimed until the balance is collected, on the page and in `StatusService` (a plain move to Claimed is refused). A load paid in full is claimed as before.
 - A job dropped off yesterday is still on the board today.
 
 ### Phase 5: Reports and email (Days 12 to 13)
@@ -107,20 +110,26 @@ Run this at the end of each phase that touches it, and once more before the demo
 3. Fail inspection, send it back to Washing, and advance it again. Confirm the timeline shows the rework.
 4. Void a Queued job. Confirm the full refund row and that the daily total nets it out.
 5. Open the same job in two browser windows and advance it in both. The second must get the "already updated" message.
-6. Try to create a job with cash received below the total. It must be rejected. Then create it with enough cash and claim it once Ready.
+6. Try to create a job with cash received below the amount being paid now. It must be rejected. Then create it with enough cash and claim it once Ready.
 7. Log in as staff and open an admin URL directly. It must redirect to the admin login. Then, as the owner, try to change the password on Settings with a wrong current password (it must be refused), change it properly, sign out, and confirm only the new password works.
 8. As the owner, change the rate of a service that has no load in the shop. Old jobs must keep their totals. Then create a job with that service and confirm the service cannot be edited until that job is claimed or voided.
 9. Compare the on-screen daily total with a `SELECT` on `Payments` for the same day.
-10. As the owner, correct a paid job's weight upward, then another one downward. Confirm each save adds one adjustment row (positive, then negative) and that each job's payments add up to its new total.
+10. As the owner, correct a paid job's weight upward, then another one downward. The upward one must add no payment row and only raise the balance; the downward one must add one negative adjustment row that refunds exactly the excess, and its payments must then add up to its new total. Try to save a correction after another window changed what the customer paid: it must be refused.
 11. Give a service only Washing and Drying, create a job with it, and advance it. Confirm it goes Drying → Inspection with no Folding step, that a failed inspection offers only Washing or Drying, and that the owner cannot change its service once it has left Queued.
 12. Set the maximum weight per job on Pricing to 50 kg, then try to create a job at 50.5 kg. It must be refused with the limit shown, and 50 kg must be accepted.
 13. On the owner login, use "Forgot password?" with the owner username, open the emailed link, and set a new password. Confirm the old password no longer works, the new one does, and the same link cannot be used a second time. Then try a staff username: the page must say the same thing, and no email may arrive.
-
+14. Part payments. With the minimum at 50%, create a 240 job with a down payment of 150 (cash 200): the slip must show change 50, balance due 90 and a PARTIALLY PAID stamp, and the job lists must show "Partial · ₱90.00 due". Take a 50 payment on the job page, then try to take 100 (refused: the balance is only 40). Move the load to Ready and try to claim it: the release card must collect the remaining 40, and only then does the job become Claimed. Check that no claimed job appears in the `vw_JobPayments` query in the README.
+15. On Pricing set the minimum down payment to 100: New Job must offer only "Pay in full". Set it to 0: New Job must also offer "Pay at pick-up", and a job created that way is Unpaid, has no payment row, and can be voided with nothing refunded. Set it back to 50. Values above 100 or below 0 must be refused.
+16. Emails, for a customer whose email is yours (or with `Smtp.PickupDirectory` in `Secrets.config` to save them as files instead). Correct a job''s weight as the owner: an "order was updated" email must arrive listing the old and new weight and the new total, the balance due if there is one, and the slip-reprint instruction; correcting only the remarks must send nothing; a correction that lowers the total below what was paid must say how much is given back. Void a Queued job with a reason: a "your order was cancelled" email must arrive with that reason, the refund (only what was paid) and the instructions, and "Resend cancellation email" on the voided job must send the same again. For a customer with no email, the job's Notifications card must show these as Skipped.
+17. Number boxes. In New job (weight, down payment, cash received, product quantities and the contact number), the job page (payment amount and cash), Edit job, Customers and Pricing, type letters, a second dot, a comma, a minus sign and a peso sign: none may appear. Paste "abc12.3.4x" into a weight box: it must become 12.34. Contact numbers must still take spaces, dashes, brackets and a plus sign.
+18. Loading feedback. Press Create job, Record payment, Collect and mark claimed, Save changes, and Sign in: the pressed button must show a spinner and keep its width, a thin bar must slide along the top of the window, and pressing again quickly must not send anything twice (check that only one job or one payment row was made). Going Back after a page change must not leave a button spinning.
 ## Defense questions to be ready for
 
 Each of these maps to a starred file. The student should be able to answer them without looking at the code.
 
 - Why is the rate copied into each job instead of read from the price setting? (`PricingService`, schema)
+- How does the system know a job is paid, partially paid or unpaid, and why is that never stored? (`PaymentService`, `vw_JobPayments`)
+- Why can a load with a balance never be claimed, even by typing the request by hand? (`StatusService.Claim` and `StatusService.Move`)
 - What happens if two staff advance the same job at the same time? (`StatusService`)
 - Why is there a status history table instead of date columns on the job? (`StatusService`, schema)
 - How is a staff member kept out of the admin pages, even by typing the URL? (`AdminBasePage`, `Web.config`)

@@ -52,8 +52,23 @@ namespace LABATRACK.Models
         /// <summary>Net of refunds, from vw_JobPayments.</summary>
         public decimal AmountPaid { get; set; }
 
-        /// <summary>How the job was paid at drop-off: Cash or E-wallet.</summary>
+        /// <summary>How the job was paid at drop-off: Cash or E-wallet (null if nothing was paid then).</summary>
         public string PaymentMethod { get; set; }
+
+        /// <summary>
+        /// What the customer still owes: the total minus what has been paid. A voided job owes
+        /// nothing (what was paid was refunded).
+        /// </summary>
+        public decimal Balance
+        {
+            get { return CurrentStatus == Services.StatusService.Voided ? 0m : Math.Max(0m, TotalAmount - AmountPaid); }
+        }
+
+        /// <summary>Paid, Partially paid or Unpaid (Services/PaymentService.StatusOf).</summary>
+        public string PaymentStatus
+        {
+            get { return Services.PaymentService.StatusOf(TotalAmount, AmountPaid); }
+        }
 
         public decimal ServiceAddOnAmount { get; set; }
         public decimal ProductAddOnAmount { get; set; }

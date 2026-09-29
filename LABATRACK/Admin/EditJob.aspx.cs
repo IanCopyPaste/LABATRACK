@@ -14,9 +14,10 @@ namespace LABATRACK.Admin
 {
     // The owner's correction of a job (?id=<JobId>) that is not yet Claimed or Voided: a wrong
     // weight, service, add-on, remark or customer detail. The new total is worked out with the
-    // prices frozen on the job, and the difference is settled in the same save (collected or
-    // refunded), so the job's payments always add up to its total. JobOrderService.SaveEdit
-    // checks every rule; this page only collects what was typed and shows the result.
+    // prices frozen on the job. A higher total only raises the balance (paid before pick-up); if
+    // the customer already paid more than the new total, the excess is refunded in the same save.
+    // JobOrderService.SaveEdit checks every rule; this page only collects what was typed and
+    // shows the result.
     public partial class EditJob : AdminBasePage
     {
         private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
@@ -25,7 +26,7 @@ namespace LABATRACK.Admin
         protected decimal AmountPaid { get; private set; }
         protected PriceQuote Quote { get; private set; }
         protected decimal Difference { get; private set; }
-        protected string SettleState { get; private set; }   // collect, refund or none
+        protected string SettleState { get; private set; }   // balance, refund or none
         protected string RatesData { get; private set; }
         protected string MaxWeightData { get; private set; }
 
@@ -79,7 +80,7 @@ namespace LABATRACK.Admin
                     ddlService.Items.Add(new ListItem(s.Name + " · ₱" + RateFor(s).ToString("N2", Inv) + "/kg", s.ServiceId.ToString(Inv)));
                 ddlService.SelectedValue = Job.ServiceId.ToString(Inv);
                 hfShownStatus.Value = Job.CurrentStatus;
-                // The difference is settled by the same method the job was paid with, unless the owner picks the other.
+                // An overpayment is refunded by the same method the job was paid with, unless the owner picks the other.
                 rbAdjCash.Checked = Job.PaymentMethod != Payment.Ewallet;
                 rbAdjEwallet.Checked = Job.PaymentMethod == Payment.Ewallet;
             }
@@ -125,18 +126,6 @@ namespace LABATRACK.Admin
             }
 
             decimal shown;
-            decimal? cash = null;
-            if (rbAdjCash.Checked && txtAdjCashReceived.Text.Trim() != "")
-            {
-                decimal typed;
-                if (!decimal.TryParse(txtAdjCashReceived.Text.Replace(",", "").Replace("₱", "").Trim(), NumberStyles.Number, Inv, out typed))
-                {
-                    ShowNotice("warn", "Nothing was saved. Enter the cash received in pesos.");
-                    return;
-                }
-                cash = typed;
-            }
-
             var request = new JobOrderService.EditRequest
             {
                 JobId = Job.JobId,
@@ -148,7 +137,6 @@ namespace LABATRACK.Admin
                 WeightKg = weight,
                 Remarks = txtRemarks.Text,
                 Method = rbAdjCash.Checked ? Payment.Cash : Payment.Ewallet,
-                CashReceived = cash,
                 ShownDifference = decimal.TryParse(hfShownDifference.Value, NumberStyles.Number, Inv, out shown) ? shown : (decimal?)null,
             };
             foreach (var pair in PostedQuantities())
@@ -189,7 +177,7 @@ namespace LABATRACK.Admin
                 }
             }
             Difference = Quote != null ? Quote.Total - AmountPaid : 0m;
-            SettleState = Difference > 0 ? "collect" : Difference < 0 ? "refund" : "none";
+            SettleState = Difference > 0 ? "balance" : Difference < 0 ? "refund" : "none";
         }
 
         private int SelectedServiceId()
@@ -252,11 +240,26 @@ namespace LABATRACK.Admin
 
         protected string SaveLabel
         {
+            get { return SettleState == "refund" ? "Save and refund " + Peso(-Difference) : "Save changes"; }
+        }
+
+        protected string SettlePill
+        {
+            get { return SettleState == "refund" ? "pill-danger" : SettleState == "balance" ? "pill-warn" : "pill-ok"; }
+        }
+
+        protected string SettlePillText
+        {
+            get { return SettleState == "refund" ? "Overpaid" : SettleState == "balance" ? "Balance due" : "Paid in full"; }
+        }
+
+        protected string BalanceText
+        {
             get
             {
-                if (SettleState == "collect") return "Save and collect " + Peso(Difference);
-                if (SettleState == "refund") return "Save and refund " + Peso(-Difference);
-                return "Save changes";
+                if (Quote == null || Difference <= 0) return "";
+                return "The customer has paid " + Peso(AmountPaid) + " of the " + Peso(Quote.Total)
+                     + " total. The " + Peso(Difference) + " balance is collected before pick-up, on the job page. Nothing is collected now.";
             }
         }
 

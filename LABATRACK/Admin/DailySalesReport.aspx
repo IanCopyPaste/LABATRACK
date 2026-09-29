@@ -123,6 +123,8 @@
         </article>
     </form>
 
+    <script src="<%= AssetUrl.Get("~/Assets/js/Loading.js") %>"></script>
+
     <script src="<%= AssetUrl.Get("~/Assets/js/Print.js") %>"></script>
     <script src="<%= AssetUrl.Get("~/Assets/js/Charts.js") %>"></script>
 </body>

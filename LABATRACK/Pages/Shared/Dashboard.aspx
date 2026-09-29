@@ -33,7 +33,7 @@
                         <div class="card kpi">
                             <div class="kpi-top">Today's total <span class="kpi-icon"><%= Icons.Get("wallet", "ico-sm") %></span></div>
                             <div class="kpi-value"><%= Peso(Data.Today.NetTotal) %></div>
-                            <div class="kpi-foot">Paid at drop-off, net of refunds</div>
+                            <div class="kpi-foot">Money received today, net of refunds</div>
                         </div>
                         <div class="card kpi">
                             <div class="kpi-top">On the board <span class="kpi-icon"><%= Icons.Get("washing-machine", "ico-sm") %></span></div>
@@ -82,6 +82,8 @@
                                                     <%# RouteNote((LABATRACK.Models.JobOrder)Container.DataItem) == "" ? "" : "<div class=\"job-card-route\">" + RouteNote((LABATRACK.Models.JobOrder)Container.DataItem) + "</div>" %>
                                                     <%# string.IsNullOrEmpty((string)Eval("AddOnSummary")) ? "" : "<div class=\"job-card-addons\">" + Server.HtmlEncode((string)Eval("AddOnSummary")) + "</div>" %>
                                                     <%# ReworkNote((LABATRACK.Models.JobOrder)Container.DataItem) == "" ? "" : "<div class=\"job-card-rework\">" + Icons.Get("rotate-ccw", "ico-sm") + "<span>" + Server.HtmlEncode(ReworkNote((LABATRACK.Models.JobOrder)Container.DataItem)) + "</span></div>" %>
+                                                    <%-- Still owed: a down payment was taken, or nothing yet. Paid before the load is claimed. --%>
+                                                    <%# (decimal)Eval("Balance") > 0 ? "<div class=\"job-card-balance\">" + Icons.Get("wallet", "ico-sm") + "<span>" + Peso((decimal)Eval("Balance")) + " still to pay</span></div>" : "" %>
                                                     <%-- The column already names the stage, so the second line only says when the
                                                          load got here and who moved it. --%>
                                                     <dl class="job-card-meta">
@@ -90,8 +92,11 @@
                                                         <dt>By</dt><dd><%#: Eval("StatusBy") %></dd>
                                                     </dl>
                                                     <div class="job-card-actions">
-                                                        <%-- Confirm.js asks first, with the words from Helpers/MoveConfirm.cs. --%>
-                                                        <asp:Button runat="server" CssClass='<%# (string)Eval("CurrentStatus") == "Ready for pick-up" ? "btn btn-sm btn-primary" : "btn btn-sm" %>'
+                                                        <%-- Confirm.js asks first, with the words from Helpers/MoveConfirm.cs. A load that
+                                                             still owes money is claimed on its job page, which takes the balance first. --%>
+                                                        <%# CollectFirst((LABATRACK.Models.JobOrder)Container.DataItem) ? "<a class=\"btn btn-sm btn-primary\" href=\"JobDetail.aspx?id=" + Eval("JobId") + "#pay\">Collect " + Peso((decimal)Eval("Balance")) + "&hellip;</a>" : "" %>
+                                                        <asp:Button runat="server" Visible='<%# !CollectFirst((LABATRACK.Models.JobOrder)Container.DataItem) %>'
+                                                            CssClass='<%# (string)Eval("CurrentStatus") == "Ready for pick-up" ? "btn btn-sm btn-primary" : "btn btn-sm" %>'
                                                             Text='<%# ActionLabel((LABATRACK.Models.JobOrder)Container.DataItem) %>'
                                                             CommandName="Move" CommandArgument='<%# Eval("JobId") + "|" + Eval("CurrentStatus") %>'
                                                             data-confirm-title='<%# MoveConfirm.Title((LABATRACK.Models.JobOrder)Container.DataItem) %>'
@@ -115,7 +120,7 @@
                             <div class="card-h">
                                 <div>
                                     <h2>Claimed today</h2>
-                                    <div class="sub">Handed back to the customer. Already paid at drop-off.</div>
+                                    <div class="sub">Handed back to the customer, paid in full.</div>
                                 </div>
                             </div>
                             <ul class="list">
@@ -173,6 +178,8 @@
             </main>
         </div>
     </form>
+
+    <script src="<%= AssetUrl.Get("~/Assets/js/Loading.js") %>"></script>
 
     <script src="<%= AssetUrl.Get("~/Assets/js/Sidebar.js") %>"></script>
     <script src="<%= AssetUrl.Get("~/Assets/js/Confirm.js") %>"></script>

@@ -44,6 +44,7 @@ namespace LABATRACK.Models
         public bool IsReturning { get; set; }             // the customer had an earlier job
         public DateTime? CustomerFirstJobAt { get; set; }
         public string VoidReason { get; set; }
+        public decimal AmountRefunded { get; set; }       // what its void gave back (0 if nothing was paid)
         public List<ReportAddOnLine> AddOns { get; private set; }
 
         public bool IsVoided

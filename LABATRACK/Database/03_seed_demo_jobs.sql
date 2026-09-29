@@ -5,17 +5,22 @@
     Run it after 02_seed_settings.sql, on a database with no jobs yet.
 
     It covers every stage, a load sent back from inspection (rework), two voided jobs with their
-    refunds, cash payments with change and e-wallet payments, an owner's correction that collected
-    a difference, and loads left unclaimed for over a week.
+    refunds (one of a down payment), cash payments with change and e-wallet payments, down
+    payments with the balance paid when the load was claimed, loads still in the shop with a
+    balance, an owner's correction that raised the total (paid as a balance at claim), and loads
+    left unclaimed for over a week.
 
     The dates are relative to the moment the script runs (today's loads are placed a few hours
     back from now), so the dashboards show a real "today". Run it on the day of the demo, on a
     fresh database. If the database already has jobs, it does nothing.
 
     Every amount is written out and follows the pricing rules (rate x billable kg, weight rounded
-    up to the next kg, minimum 120, then add-ons). Hand check after running it:
-        SELECT JobId, TotalAmount, AmountPaid FROM dbo.vw_JobPayments WHERE AmountPaid <> TotalAmount;
-    returns only the two voided jobs (paid and refunded, so AmountPaid is 0).
+    up to the next kg, minimum 120, then add-ons). Every down payment is at least 50% of the total
+    (the starting minimum in 02_seed_settings.sql). Hand check after running it:
+        SELECT v.JobId, j.CurrentStatus, v.TotalAmount, v.AmountPaid FROM dbo.vw_JobPayments AS v
+        JOIN dbo.JobOrders AS j ON j.JobId = v.JobId WHERE v.AmountPaid <> v.TotalAmount;
+    returns only the two voided jobs (paid and refunded, so AmountPaid is 0) and the loads still in
+    the shop with a balance. No claimed job appears: every claimed load was paid in full.
 
     The email log rows are examples only: no email was really sent for these demo jobs.
 
@@ -177,7 +182,9 @@ INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, Change
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Folding', N'Inspection', DATEADD(MINUTE, 1235, DATEADD(DAY, -19, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Inspection', N'Ready for pick-up', DATEADD(MINUTE, 1280, DATEADD(DAY, -19, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Ready for pick-up', N'Claimed', DATEADD(MINUTE, 600, DATEADD(DAY, -17, @Today)), @jcruz, NULL);
-INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, RecordedByUserId) VALUES (@JobId, N'Drop-off', 280.00, N'Cash', 300.00, @At, @jcruz);
+-- A down payment of 150.00; the balance of 130.00 is paid before the load is claimed.
+INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, RecordedByUserId) VALUES (@JobId, N'Drop-off', 150.00, N'Cash', 200.00, @At, @jcruz);
+INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, RecordedByUserId) VALUES (@JobId, N'Balance', 130.00, N'Cash', 150.00, DATEADD(MINUTE, 600, DATEADD(DAY, -17, @Today)), @jcruz);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Drop-off', NULL, N'Skipped', N'The customer has no email address.', 0, DATEADD(SECOND, 5, @At), @jcruz);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Ready', NULL, N'Skipped', N'The customer has no email address.', 0, DATEADD(MINUTE, 1280, DATEADD(DAY, -19, @Today)), @jcruz);
 
@@ -318,7 +325,9 @@ INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, Change
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Folding', N'Inspection', DATEADD(MINUTE, 655, DATEADD(DAY, -11, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Inspection', N'Ready for pick-up', DATEADD(MINUTE, 700, DATEADD(DAY, -11, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Ready for pick-up', N'Claimed', DATEADD(MINUTE, 1030, DATEADD(DAY, -10, @Today)), @arivera, NULL);
-INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, RecordedByUserId) VALUES (@JobId, N'Drop-off', 417.00, N'Cash', 500.00, @At, @arivera);
+-- A down payment of 250.00; the balance of 167.00 is paid before the load is claimed.
+INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, RecordedByUserId) VALUES (@JobId, N'Drop-off', 250.00, N'Cash', 300.00, @At, @arivera);
+INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, RecordedByUserId) VALUES (@JobId, N'Balance', 167.00, N'E-wallet', NULL, DATEADD(MINUTE, 1030, DATEADD(DAY, -10, @Today)), @arivera);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Drop-off', N'grace.v@example.com', N'Sent', NULL, 0, DATEADD(SECOND, 5, @At), @arivera);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Ready', N'grace.v@example.com', N'Sent', NULL, 0, DATEADD(MINUTE, 700, DATEADD(DAY, -11, @Today)), @arivera);
 
@@ -380,7 +389,8 @@ INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, Change
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Drying', N'Folding', DATEADD(MINUTE, 1080, DATEADD(DAY, -9, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Folding', N'Inspection', DATEADD(MINUTE, 1135, DATEADD(DAY, -9, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Inspection', N'Ready for pick-up', DATEADD(MINUTE, 1180, DATEADD(DAY, -9, @Today)), @arivera, NULL);
-INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, RecordedByUserId) VALUES (@JobId, N'Drop-off', 160.00, N'Cash', 200.00, @At, @arivera);
+-- A down payment of 100.00; the balance of 60.00 is paid before the load is claimed.
+INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, RecordedByUserId) VALUES (@JobId, N'Drop-off', 100.00, N'Cash', 100.00, @At, @arivera);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Drop-off', NULL, N'Skipped', N'The customer has no email address.', 0, DATEADD(SECOND, 5, @At), @arivera);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Ready', NULL, N'Skipped', N'The customer has no email address.', 0, DATEADD(MINUTE, 1180, DATEADD(DAY, -9, @Today)), @arivera);
 
@@ -483,8 +493,8 @@ INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, Change
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Inspection', N'Ready for pick-up', DATEADD(MINUTE, 687, DATEADD(DAY, -5, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Ready for pick-up', N'Claimed', DATEADD(MINUTE, 700, DATEADD(DAY, -3, @Today)), @jcruz, NULL);
 INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, RecordedByUserId) VALUES (@JobId, N'Drop-off', 195.00, N'E-wallet', NULL, @At, @jcruz);
--- The owner corrected the weight from 4.6 kg to 5.3 kg: 195.00 -> 230.00, so 35.00 was collected.
-INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, RecordedByUserId) VALUES (@JobId, N'Adjustment', 35.00, N'Cash', 50.00, DATEADD(MINUTE, 560, DATEADD(DAY, -5, @Today)), @owner);
+-- The owner corrected the weight from 4.6 kg to 5.3 kg: 195.00 -> 230.00. Nothing was taken then: the 35.00 became a balance.
+INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, RecordedByUserId) VALUES (@JobId, N'Balance', 35.00, N'Cash', 50.00, DATEADD(MINUTE, 700, DATEADD(DAY, -3, @Today)), @jcruz);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Drop-off', N'joy.castillo@example.com', N'Sent', NULL, 0, DATEADD(SECOND, 5, @At), @jcruz);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Ready', N'joy.castillo@example.com', N'Sent', NULL, 0, DATEADD(MINUTE, 687, DATEADD(DAY, -5, @Today)), @jcruz);
 
@@ -518,7 +528,8 @@ INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, Change
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Drying', N'Folding', DATEADD(MINUTE, 655, DATEADD(DAY, -4, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Folding', N'Inspection', DATEADD(MINUTE, 710, DATEADD(DAY, -4, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Inspection', N'Ready for pick-up', DATEADD(MINUTE, 755, DATEADD(DAY, -4, @Today)), @jcruz, NULL);
-INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, RecordedByUserId) VALUES (@JobId, N'Drop-off', 200.00, N'Cash', 500.00, @At, @jcruz);
+-- A down payment of 100.00; the balance of 100.00 is paid before the load is claimed.
+INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, RecordedByUserId) VALUES (@JobId, N'Drop-off', 100.00, N'E-wallet', NULL, @At, @jcruz);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Drop-off', N'maria.santos@example.com', N'Sent', NULL, 0, DATEADD(SECOND, 5, @At), @jcruz);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Ready', N'maria.santos@example.com', N'Sent', NULL, 0, DATEADD(MINUTE, 755, DATEADD(DAY, -4, @Today)), @jcruz);
 
@@ -660,7 +671,9 @@ INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, Change
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Folding', N'Inspection', DATEADD(MINUTE, 754, DATEADD(DAY, -1, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Inspection', N'Ready for pick-up', DATEADD(MINUTE, 789, DATEADD(DAY, -1, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Ready for pick-up', N'Claimed', DATEADD(MINUTE, -150, @Now), @jcruz, NULL);
-INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, RecordedByUserId) VALUES (@JobId, N'Drop-off', 290.00, N'Cash', 500.00, @At, @jcruz);
+-- A down payment of 150.00; the balance of 140.00 is paid before the load is claimed.
+INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, RecordedByUserId) VALUES (@JobId, N'Drop-off', 150.00, N'Cash', 200.00, @At, @jcruz);
+INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, RecordedByUserId) VALUES (@JobId, N'Balance', 140.00, N'Cash', 200.00, DATEADD(MINUTE, -150, @Now), @jcruz);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Drop-off', N'maria.santos@example.com', N'Sent', NULL, 0, DATEADD(SECOND, 5, @At), @jcruz);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Ready', N'maria.santos@example.com', N'Sent', NULL, 0, DATEADD(MINUTE, 789, DATEADD(DAY, -1, @Today)), @arivera);
 
@@ -743,7 +756,8 @@ VALUES (@Claim, @c13, @sWDF, 6.10, 7.00, 40.00, 120.00, 1.00, 280.00, 1, 1, 1, 2
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, -140, @Now), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Washing', DATEADD(MINUTE, -115, @Now), @arivera, NULL);
-INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, RecordedByUserId) VALUES (@JobId, N'Drop-off', 280.00, N'Cash', 300.00, @At, @arivera);
+-- A down payment of 150.00; the balance of 130.00 is paid before the load is claimed.
+INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, RecordedByUserId) VALUES (@JobId, N'Drop-off', 150.00, N'Cash', 200.00, @At, @arivera);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Drop-off', N'joy.castillo@example.com', N'Sent', NULL, 0, DATEADD(SECOND, 5, @At), @arivera);
 
 /* 39. Ramon Bautista, Wash-Dry-Fold 7 kg, Queued: 7.00 kg x 40.00 = laundry 280.00; total 280.00 */
@@ -764,8 +778,9 @@ VALUES (@Claim, @c12, @sWDF, 2.50, 3.00, 40.00, 120.00, 1.00, 120.00, 1, 1, 1, 1
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, -90, @Now), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Voided', DATEADD(MINUTE, -75, @Now), @jcruz, N'Customer cancelled, wrong bag');
-INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, RecordedByUserId) VALUES (@JobId, N'Drop-off', 120.00, N'Cash', 200.00, @At, @jcruz);
-INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, RecordedByUserId) VALUES (@JobId, N'Void refund', -120.00, N'Cash', NULL, DATEADD(MINUTE, -75, @Now), @jcruz);
+-- A down payment of 60.00; the balance of 60.00 is paid before the load is claimed.
+INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, RecordedByUserId) VALUES (@JobId, N'Drop-off', 60.00, N'Cash', 100.00, @At, @jcruz);
+INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, RecordedByUserId) VALUES (@JobId, N'Void refund', -60.00, N'Cash', NULL, DATEADD(MINUTE, -75, @Now), @jcruz);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Drop-off', NULL, N'Skipped', N'The customer has no email address.', 0, DATEADD(SECOND, 5, @At), @jcruz);
 
 /* 41. Grace Villanueva, Wash-Dry-Fold 1.5 kg, Queued: 2.00 kg x 40.00 = laundry 120.00; total 120.00 */
@@ -787,7 +802,8 @@ SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobAddOns (JobId, AddOnId, Quantity, PriceAtCreation, AddedAt) VALUES (@JobId, @aRinse, 1, 20.00, @At);
 INSERT INTO dbo.JobAddOns (JobId, AddOnId, Quantity, PriceAtCreation, AddedAt) VALUES (@JobId, @aSachet, 1, 12.00, @At);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, -35, @Now), @arivera, NULL);
-INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, RecordedByUserId) VALUES (@JobId, N'Drop-off', 232.00, N'Cash', 500.00, @At, @arivera);
+-- A down payment of 120.00; the balance of 112.00 is paid before the load is claimed.
+INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, RecordedByUserId) VALUES (@JobId, N'Drop-off', 120.00, N'Cash', 200.00, @At, @arivera);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Drop-off', N'dennis.uy@example.com', N'Sent', NULL, 0, DATEADD(SECOND, 5, @At), @arivera);
 
 PRINT N'03_seed_demo_jobs.sql finished: 42 job orders.';

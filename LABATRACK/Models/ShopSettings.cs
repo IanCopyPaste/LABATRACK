@@ -11,6 +11,7 @@
         public const string MinimumChargeKey = "MinimumCharge";
         public const string RoundingIncrementKgKey = "RoundingIncrementKg";
         public const string MaxWeightKgKey = "MaxWeightKg";
+        public const string MinimumDownPaymentPercentKey = "MinimumDownPaymentPercent";
         public const string UnclaimedThresholdDaysKey = "UnclaimedThresholdDays";
         public const string DefaultTurnaroundHoursKey = "DefaultTurnaroundHours";
         public const string ShopNameKey = "ShopName";
@@ -22,6 +23,7 @@
             MinimumCharge = 120.00m;
             RoundingIncrementKg = 1m;
             MaxWeightKg = 100m;
+            MinimumDownPaymentPercent = 50;
             UnclaimedThresholdDays = 7;
             DefaultTurnaroundHours = 24;
             ShopName = "LabaTrack Laundry Shop";
@@ -37,6 +39,12 @@
 
         /// <summary>The heaviest load one job may be; a bigger load is split into two or more jobs.</summary>
         public decimal MaxWeightKg { get; set; }
+
+        /// <summary>
+        /// The least a customer may pay at drop-off, as a percentage of the total (0 to 100).
+        /// 0 lets them pay everything at pick-up; 100 means full payment at drop-off only.
+        /// </summary>
+        public int MinimumDownPaymentPercent { get; set; }
 
         /// <summary>A load Ready for pick-up this many days or more is flagged as unclaimed.</summary>
         public int UnclaimedThresholdDays { get; set; }

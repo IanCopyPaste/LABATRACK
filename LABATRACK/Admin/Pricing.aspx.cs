@@ -59,6 +59,7 @@ namespace LABATRACK.Admin
                 txtMinimumCharge.Text = s.MinimumCharge.ToString("0.00", Inv);
                 ddlRounding.SelectedValue = s.RoundingIncrementKg == 0.5m ? "0.5" : "1";
                 txtMaxWeight.Text = s.MaxWeightKg.ToString("0.##", Inv);
+                txtMinDownPayment.Text = s.MinimumDownPaymentPercent.ToString(Inv);
             }
 
             rptServices.DataSource = services;
@@ -81,12 +82,16 @@ namespace LABATRACK.Admin
             if (!decimal.TryParse(txtMaxWeight.Text.Trim(), NumberStyles.Number, Inv, out maxWeight)
                 || maxWeight <= 0 || maxWeight > 1000 || maxWeight != Math.Round(maxWeight, 2))
                 ok = ShowError(lblMaxWeightError, "Enter a weight in kilos above 0 and at most 1,000, for example 100.");
+            int minDown;
+            if (!int.TryParse(txtMinDownPayment.Text.Trim().TrimEnd('%').Trim(), NumberStyles.None, Inv, out minDown) || minDown > 100)
+                ok = ShowError(lblMinDownError, "Enter a whole percentage from 0 to 100, for example 50.");
             decimal rounding = ddlRounding.SelectedValue == "0.5" ? 0.5m : 1m;
             if (!ok) return;
 
             SettingsRepository.Set(ShopSettings.MinimumChargeKey, minimum);
             SettingsRepository.Set(ShopSettings.RoundingIncrementKgKey, rounding);
             SettingsRepository.Set(ShopSettings.MaxWeightKgKey, maxWeight);
+            SettingsRepository.Set(ShopSettings.MinimumDownPaymentPercentKey, minDown);
             Redirect("rules");
         }
 

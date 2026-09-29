@@ -32,6 +32,9 @@
                     <%-- The status the page was showing. Every action sends it back, so a job someone else
                          moved in the meantime is refused ("This job was already updated. Refresh."). --%>
                     <asp:HiddenField ID="hfShownStatus" runat="server" />
+                    <%-- The balance the page was showing. A payment is refused if it changed in the meantime
+                         (someone else took one), so the same money is never taken twice. --%>
+                    <asp:HiddenField ID="hfShownBalance" runat="server" />
 
                     <!-- Header: customer and load, shown once -->
                     <section class="card">
@@ -90,7 +93,7 @@
                                 </div>
                                 <div class="card-f" style="justify-content:space-between; flex-wrap:wrap; align-items:flex-end;" data-enter-scope="true">
                                     <div class="field" style="flex:1; min-width:220px;">
-                                        <label for="txtVoidReason">Void this job (only while Queued). The full <%: Peso(Job.AmountPaid) %> is refunded.</label>
+                                        <label for="txtVoidReason">Void this job (only while Queued). <%: Job.AmountPaid > 0 ? "The " + Peso(Job.AmountPaid) + " paid is refunded." : "Nothing was paid, so nothing is refunded." %></label>
                                         <asp:TextBox ID="txtVoidReason" runat="server" placeholder="Reason (required)" MaxLength="200" />
                                     </div>
                                     <button type="submit" name="action" value="void" class="btn btn-danger" data-confirm-title="Void <%: Job.ClaimNumber %>?" data-confirm-text="<%: VoidText %>" data-confirm-ok="Void and refund" data-confirm-danger="true"><%= Icons.Get("ban", "ico-sm") %>Void job</button>
@@ -127,13 +130,38 @@
 
                             <asp:Panel ID="pnlReady" runat="server" CssClass="card" Visible="false">
                                 <div class="card-h">
-                                    <div><h2>Release to customer</h2><div class="sub">Already paid in full at drop-off</div></div>
-                                    <span class="pill pill-ok">Paid</span>
+                                    <div><h2>Release to customer</h2><div class="sub"><%: HasBalance ? "Collect the balance, then hand over the load" : "Paid in full" %></div></div>
+                                    <span class="pill <%= HasBalance ? "pill-warn" : "pill-ok" %>"><%: HasBalance ? Peso(Job.Balance) + " due" : "Paid" %></span>
                                 </div>
+                                <% if (!HasBalance) { %>
                                 <div class="card-b" style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
                                     <span>Check the customer's slip matches claim number <strong class="mono"><%: Job.ClaimNumber %></strong>, then hand over the load.</span>
                                     <button type="submit" name="action" value="advance" class="btn btn-primary" data-confirm-title="<%: MoveTitle %>" data-confirm-text="<%: MoveText %>" data-confirm-ok="Mark as claimed"><%= Icons.Get("package-check", "ico-sm") %>Mark as claimed</button>
                                 </div>
+                                <% } else { %>
+                                <%-- A load never leaves unpaid: the balance is taken and the job claimed in one save
+                                     (StatusService.Claim). JobDetail.js shows the change and writes the question. --%>
+                                <div class="card-b form pay-form" data-pay-form="true" data-balance="<%: Money(Job.Balance) %>" data-enter-scope="true"
+                                     data-what="claim" data-customer="<%: Job.CustomerName %> · <%: Job.ClaimNumber %>">
+                                    <span>Check the customer's slip matches claim number <strong class="mono"><%: Job.ClaimNumber %></strong>. They still owe <strong><%: Peso(Job.Balance) %></strong>: take it, then hand over the load.</span>
+                                    <div class="form-row">
+                                        <div class="field">
+                                            <span class="label">Method</span>
+                                            <div class="method">
+                                                <label class="check"><input type="radio" name="claimMethod" value="Cash" data-pay-method="true"<%= IsPosted("claimMethod", "E-wallet") ? "" : " checked=\"checked\"" %> /><%= Icons.Get("banknote", "ico-sm") %>Cash</label>
+                                                <label class="check"><input type="radio" name="claimMethod" value="E-wallet" data-pay-method="true"<%= IsPosted("claimMethod", "E-wallet") ? " checked=\"checked\"" : "" %> /><%= Icons.Get("smartphone", "ico-sm") %>E-wallet</label>
+                                            </div>
+                                        </div>
+                                        <div class="field" data-cash-field="true">
+                                            <label for="claimCashReceived">Cash received</label>
+                                            <div class="input-prefix"><span>₱</span><input type="text" id="claimCashReceived" name="claimCashReceived" inputmode="decimal" autocomplete="off" data-pay-cash="true" value="<%: Posted("claimCashReceived", "") %>" /></div>
+                                        </div>
+                                    </div>
+                                    <div class="change-box idle" data-change-box="true"><span class="small" data-change-label="true">Change</span><span class="change-amount num" data-change-amount="true">Enter cash received</span></div>
+                                    <button type="submit" name="action" value="claim" class="btn btn-primary" data-pay-submit="true"
+                                            data-confirm-title="Hand <%: Job.ClaimNumber %> over to the customer?" data-confirm-ok="Collect and mark claimed"><%= Icons.Get("package-check", "ico-sm") %>Collect <%: Peso(Job.Balance) %> and mark claimed</button>
+                                </div>
+                                <% } %>
                             </asp:Panel>
 
                             <asp:Panel ID="pnlClosed" runat="server" CssClass="card" Visible="false">
@@ -174,11 +202,11 @@
                         </div>
 
                         <div class="stack">
-                            <!-- Payment: one full payment at drop-off, plus a refund row if voided -->
-                            <section class="card">
+                            <!-- Payment: the price, every payment and refund, and what is still owed -->
+                            <section class="card" id="pay">
                                 <div class="card-h">
                                     <div><h2>Payment</h2><div class="sub">Price frozen when the job was created</div></div>
-                                    <span class="pill <%= IsVoided ? "pill-danger" : "pill-ok" %>"><%= IsVoided ? "Refunded" : "Paid in full" %></span>
+                                    <span class="pill <%= PaymentPill %>"><%: PaymentPillText %></span>
                                 </div>
                                 <div class="card-b">
                                     <dl class="dl">
@@ -199,24 +227,54 @@
                                                 <span class="dot-icon" style="background:<%# (bool)Eval("IsRefund") ? "var(--danger-soft); color:var(--danger)" : "var(--success-soft); color:var(--success)" %>;"><%# Icons.Get((string)Eval("Method") == "Cash" ? "banknote" : "smartphone", "ico-sm") %></span>
                                                 <div class="grow">
                                                     <div class="cell-main"><%#: PaymentLabel((LABATRACK.Models.Payment)Container.DataItem) %></div>
-                                                    <div class="cell-sub"><%# When((DateTime)Eval("PaidAt")) %> &middot; <%#: Eval("RecordedBy") %></div>
+                                                    <div class="cell-sub"><%# When((DateTime)Eval("PaidAt")) %> &middot; <%#: Eval("RecordedBy") %><%#: CashNote((LABATRACK.Models.Payment)Container.DataItem) %></div>
                                                 </div>
                                                 <span class="num strong"><%# Peso((decimal)Eval("Amount")) %></span>
                                             </li>
                                         </ItemTemplate>
                                     </asp:Repeater>
+                                    <% if (NothingPaid) { %><li class="muted small">Nothing paid yet.</li><% } %>
                                 </ul>
-                                <% if (CashReceived.HasValue) { %>
-                                <div class="card-f" style="flex-direction:column; gap:4px;">
-                                    <div class="row-between"><span class="muted">Cash received</span><span class="num"><%: Peso(CashReceived.Value) %></span></div>
-                                    <div class="row-between"><span class="muted">Change given</span><span class="num"><%: Peso(Change) %></span></div>
+                                <% if (HasBalance) { %>
+                                <div class="card-b pay-totals">
+                                    <div class="row-between"><span class="muted">Paid so far</span><span class="num"><%: Peso(Job.AmountPaid) %></span></div>
+                                    <div class="row-between strong balance-due"><span>Balance due</span><span class="num"><%: Peso(Job.Balance) %></span></div>
+                                </div>
+                                <% } %>
+                                <%-- Part of the balance or all of it, any time before Ready for pick-up (then the
+                                     release card takes it). PaymentService.Collect checks everything again. --%>
+                                <% if (CanCollect) { %>
+                                <div class="card-b form pay-form" data-pay-form="true" data-balance="<%: Money(Job.Balance) %>" data-enter-scope="true"
+                                     data-what="pay" data-customer="<%: Job.CustomerName %> · <%: Job.ClaimNumber %>">
+                                    <div>
+                                        <div class="strong">Take a payment</div>
+                                        <span class="hint">Part of the balance or all of it. Whatever is left is collected when the load is claimed.</span>
+                                    </div>
+                                    <div class="field">
+                                        <label for="payAmount">Amount</label>
+                                        <div class="input-prefix"><span>₱</span><input type="text" id="payAmount" name="payAmount" inputmode="decimal" autocomplete="off" data-pay-amount="true" value="<%: Posted("payAmount", Money(Job.Balance)) %>" /></div>
+                                    </div>
+                                    <div class="field">
+                                        <span class="label">Method</span>
+                                        <div class="method">
+                                            <label class="check"><input type="radio" name="payMethod" value="Cash" data-pay-method="true"<%= IsPosted("payMethod", "E-wallet") ? "" : " checked=\"checked\"" %> /><%= Icons.Get("banknote", "ico-sm") %>Cash</label>
+                                            <label class="check"><input type="radio" name="payMethod" value="E-wallet" data-pay-method="true"<%= IsPosted("payMethod", "E-wallet") ? " checked=\"checked\"" : "" %> /><%= Icons.Get("smartphone", "ico-sm") %>E-wallet</label>
+                                        </div>
+                                    </div>
+                                    <div class="field" data-cash-field="true">
+                                        <label for="payCash">Cash received</label>
+                                        <div class="input-prefix"><span>₱</span><input type="text" id="payCash" name="payCash" inputmode="decimal" autocomplete="off" data-pay-cash="true" value="<%: Posted("payCash", "") %>" /></div>
+                                    </div>
+                                    <div class="change-box idle" data-change-box="true"><span class="small" data-change-label="true">Change</span><span class="change-amount num" data-change-amount="true">Enter cash received</span></div>
+                                    <button type="submit" name="action" value="pay" class="btn btn-primary" data-pay-submit="true"
+                                            data-confirm-title="Record this payment?" data-confirm-ok="Record payment"><%= Icons.Get("hand-coins", "ico-sm") %>Record payment</button>
                                 </div>
                                 <% } %>
                             </section>
 
                             <!-- Email log with resend -->
                             <section class="card">
-                                <div class="card-h"><div><h2>Notifications</h2><div class="sub">Email only. Every attempt is logged, and a failed send never blocks the job.</div></div></div>
+                                <div class="card-h"><div><h2>Notifications</h2><div class="sub">Email only: at drop-off, when the order is updated or cancelled, and when it is ready. Every attempt is logged, and a failed send never blocks the job.</div></div></div>
                                 <ul class="list">
                                     <asp:Repeater ID="rptEmails" runat="server">
                                         <ItemTemplate>
@@ -244,6 +302,11 @@
                                     <button type="submit" name="action" value="resend-dropoff" class="btn btn-sm btn-ghost"><%= Icons.Get("send", "ico-sm") %>Resend drop-off email</button>
                                     <% if (ReadyReached) { %><button type="submit" name="action" value="resend-ready" class="btn btn-sm btn-ghost"><%= Icons.Get("send", "ico-sm") %>Resend ready email</button><% } %>
                                 </div>
+                                <% } else if (IsVoided) { %>
+                                <%-- The cancellation email says the same every time (reason and refund come from the job), so it can be sent again. --%>
+                                <div class="card-f">
+                                    <button type="submit" name="action" value="resend-voided" class="btn btn-sm btn-ghost"><%= Icons.Get("send", "ico-sm") %>Resend cancellation email</button>
+                                </div>
                                 <% } %>
                             </section>
                         </div>
@@ -252,6 +315,10 @@
             </main>
         </div>
     </form>
+
+    <script src="<%= AssetUrl.Get("~/Assets/js/Loading.js") %>"></script>
+
+    <script src="<%= AssetUrl.Get("~/Assets/js/NumericInput.js") %>"></script>
 
     <script src="<%= AssetUrl.Get("~/Assets/js/Sidebar.js") %>"></script>
     <script src="<%= AssetUrl.Get("~/Assets/js/Confirm.js") %>"></script>

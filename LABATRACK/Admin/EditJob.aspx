@@ -26,8 +26,8 @@
 
                 <div class="content">
                     <asp:Literal ID="litNotice" runat="server" EnableViewState="false" />
-                    <%-- The status the owner saw, and the amount to settle the page showed. The server saves
-                         only if the job is still in that status and the amount is still the same. --%>
+                    <%-- The status the owner saw, and the new total minus what was paid as the page showed it.
+                         The server saves only if the job is still in that status and the amount is the same. --%>
                     <asp:HiddenField ID="hfShownStatus" runat="server" />
                     <asp:HiddenField ID="hfShownDifference" runat="server" />
 
@@ -144,45 +144,39 @@
                                     <div class="divider" style="margin:14px 0;"></div>
                                     <div class="total-line"><span>New total</span><span class="num" id="sumTotal"><%: Quote != null ? Peso(Quote.Total) : "—" %></span></div>
                                     <dl class="dl" style="margin-top:12px;">
-                                        <dt>Already paid (<%: Job.PaymentMethod == "Cash" ? "cash" : "e-wallet" %>)</dt><dd><%: Peso(AmountPaid) %></dd>
+                                        <dt>Already paid</dt><dd><%: Peso(AmountPaid) %></dd>
                                     </dl>
                                 </div>
                             </section>
 
-                            <%-- The difference is always settled on save, so payments = total and there is never a balance.
-                                 Higher total: collect the difference. Lower (customer overpaid): refund it. Same: nothing to do. --%>
+                            <%-- A correction never takes money on the spot. A higher total only raises the balance,
+                                 which is paid before pick-up like any balance. Only when the customer has already
+                                 paid more than the new total is the excess refunded, in the same save. --%>
                             <section class="card" id="settleCard" data-state="<%: SettleState %>">
                                 <div class="card-h">
-                                    <div><h2>Settle the difference</h2><div class="sub">Saved together with the edit</div></div>
-                                    <span class="pill <%: SettleState == "refund" ? "pill-danger" : SettleState == "collect" ? "pill-warn" : "pill-ok" %>" id="settlePill"><%: SettleState == "refund" ? "Overpaid" : SettleState == "collect" ? "Collect" : "No change" %></span>
+                                    <div><h2>After the correction</h2><div class="sub">Saved together with the edit</div></div>
+                                    <span class="pill <%: SettlePill %>" id="settlePill"><%: SettlePillText %></span>
                                 </div>
                                 <div class="card-b form">
-                                    <div class="total-line" id="settleLine" style="color:<%: SettleState == "refund" ? "var(--danger)" : SettleState == "collect" ? "var(--warning)" : "var(--text)" %>;">
-                                        <span id="settleLabel"><%: SettleState == "refund" ? "Refund to customer" : SettleState == "collect" ? "Collect from customer" : "Nothing to settle" %></span>
+                                    <div class="total-line" id="settleLine" style="color:<%: SettleState == "refund" ? "var(--danger)" : SettleState == "balance" ? "var(--warning)" : "var(--text)" %>;">
+                                        <span id="settleLabel"><%: SettleState == "refund" ? "Refund to customer" : SettleState == "balance" ? "Balance due" : "Nothing owed" %></span>
                                         <span class="num" id="settleAmount"><%: SettleState == "none" ? "" : Peso(Math.Abs(Difference)) %></span>
+                                    </div>
+                                    <div class="notice notice-info" id="balanceNotice"<%= SettleState == "balance" ? "" : " hidden" %>>
+                                        <%= Icons.Get("info", "ico-sm") %>
+                                        <span id="balanceText"><%: BalanceText %></span>
                                     </div>
                                     <div class="notice notice-danger" id="refundNotice"<%= SettleState == "refund" ? "" : " hidden" %>>
                                         <%= Icons.Get("hand-coins", "ico-sm") %>
                                         <span id="refundText"><%: RefundText %></span>
                                     </div>
-                                    <div class="field" id="methodField"<%= SettleState == "none" ? " hidden" : "" %>>
-                                        <span class="label" id="methodLabel"><%: SettleState == "refund" ? "Refund by" : "Method" %></span>
+                                    <div class="field" id="methodField"<%= SettleState == "refund" ? "" : " hidden" %>>
+                                        <span class="label">Refund by</span>
                                         <div class="grid grid-2" style="gap:10px;">
                                             <label class="check"><asp:RadioButton ID="rbAdjCash" runat="server" GroupName="adjMethod" /><%= Icons.Get("banknote", "ico-sm") %>Cash</label>
                                             <label class="check"><asp:RadioButton ID="rbAdjEwallet" runat="server" GroupName="adjMethod" /><%= Icons.Get("smartphone", "ico-sm") %>E-wallet</label>
                                         </div>
                                         <span class="hint">Defaults to how the job was first paid.</span>
-                                    </div>
-                                    <%-- Collecting in cash only: the same cash received and change as a new job. --%>
-                                    <div id="adjCashFields" class="form-row"<%= SettleState == "collect" && rbAdjCash.Checked ? "" : " hidden" %>>
-                                        <div class="field">
-                                            <label for="txtAdjCashReceived">Cash received</label>
-                                            <div class="input-prefix"><span>₱</span><asp:TextBox ID="txtAdjCashReceived" runat="server" inputmode="decimal" autocomplete="off" /></div>
-                                        </div>
-                                        <div class="field">
-                                            <span class="label">Change to give</span>
-                                            <div id="adjChangeBox" class="change-box idle"><span class="muted small" id="adjChangeLabel">Change</span><span id="adjChange" class="change-amount num">Enter cash received</span></div>
-                                        </div>
                                     </div>
                                 </div>
                             </section>
@@ -209,6 +203,10 @@
             </main>
         </div>
     </form>
+
+    <script src="<%= AssetUrl.Get("~/Assets/js/Loading.js") %>"></script>
+
+    <script src="<%= AssetUrl.Get("~/Assets/js/NumericInput.js") %>"></script>
 
     <script src="<%= AssetUrl.Get("~/Assets/js/Sidebar.js") %>"></script>
     <script src="<%= AssetUrl.Get("~/Assets/js/EditJob.js") %>"></script>

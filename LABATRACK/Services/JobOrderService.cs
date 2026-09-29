@@ -10,14 +10,14 @@ namespace LABATRACK.Services
 {
     /// <summary>
     /// Creating a job at the counter, and the owner's corrections to a job. Both follow the
-    /// payment rules of the shop:
-    ///   - Full payment only, at drop-off. A job is saved only together with one payment for
-    ///     exactly its total; there is no partial payment and no balance.
-    ///   - Cash: the cash received must be at least the total. Change = cash received - total,
-    ///     worked out here, never taken from the browser. E-wallet is the exact total.
-    ///   - An owner's correction that changes the total is settled in the same save: a positive
-    ///     adjustment when the new total is higher (collected), a negative one when it is lower
-    ///     (refunded). So the payments on a job always add up to exactly its total.
+    /// payment rules of the shop (PaymentService):
+    ///   - At drop-off the customer pays in full, or at least the minimum down payment set on
+    ///     the Pricing page. What is left is the balance, paid before the load is claimed.
+    ///   - Cash: the cash received must cover the amount paid now. Change = cash received -
+    ///     amount paid now, worked out on the server. E-wallet is exactly the amount.
+    ///   - An owner's correction that changes the total only changes the balance. Only when the
+    ///     customer has already paid more than the new total is the excess refunded, in the same
+    ///     save. So the payments on a job never add up to more than its total.
     /// Every save here is one SqlTransaction: all of it is saved, or none of it.
     /// </summary>
     public static class JobOrderService
@@ -41,6 +41,7 @@ namespace LABATRACK.Services
             public Dictionary<int, int> AddOnQuantities { get; private set; }   // AddOnId -> how many
             public string Remarks { get; set; }
             public DateTime? ExpectedPickupAt { get; set; }
+            public decimal? AmountNow { get; set; }       // paid now: null = the full total, else a down payment (0 = nothing)
             public string Method { get; set; }            // Cash or E-wallet
             public decimal? CashReceived { get; set; }
         }
@@ -62,9 +63,8 @@ namespace LABATRACK.Services
             public decimal WeightKg { get; set; }
             public Dictionary<int, int> AddOnQuantities { get; private set; }
             public string Remarks { get; set; }
-            public string Method { get; set; }            // how the difference is collected or refunded
-            public decimal? CashReceived { get; set; }    // cash handed over, when collecting in cash
-            public decimal? ShownDifference { get; set; } // the amount to settle the page showed
+            public string Method { get; set; }            // how an overpayment is refunded
+            public decimal? ShownDifference { get; set; } // new total - paid, as the page showed it
         }
 
         // ------------------------------------------------------------ New job
@@ -91,9 +91,10 @@ namespace LABATRACK.Services
 
         /// <summary>
         /// Saves a new job: the customer (if new), the job with its prices and route copied in, its
-        /// add-ons, the first history row (Queued) and its one full payment, in one transaction.
-        /// Then emails the customer the claim number (a failed email does not undo anything).
-        /// Returns the new JobId. Throws BusinessRuleException, and saves nothing, if a rule says no.
+        /// add-ons, the first history row (Queued) and what was paid now (in full, or a down
+        /// payment), in one transaction. Then emails the customer the claim number (a failed email
+        /// does not undo anything). Returns the new JobId. Throws BusinessRuleException, and saves
+        /// nothing, if a rule says no.
         /// </summary>
         public static int Create(NewJobRequest req, int userId)
         {
@@ -106,8 +107,11 @@ namespace LABATRACK.Services
             PricingService.CheckWeight(req.WeightKg, settings.MaxWeightKg);
             PriceQuote quote = QuoteNew(service, req.WeightKg, req.AddOnQuantities, AddOnRepository.GetAll(), settings);
 
-            // Full payment now: cash of at least the total, or e-wallet for exactly the total.
-            decimal? cashReceived = CheckPayment(req.Method, req.CashReceived, quote.Total, "the total");
+            // Paid now: the full total, or a down payment of at least the minimum percentage. The
+            // rest is the balance, paid before the load is claimed. Cash must cover what is paid now.
+            decimal amountNow = req.AmountNow ?? quote.Total;
+            PaymentService.CheckDropOff(quote.Total, amountNow, settings.MinimumDownPaymentPercent);
+            decimal? cashReceived = amountNow > 0 ? PaymentService.CheckIncoming(req.Method, req.CashReceived, amountNow) : null;
 
             // The customer: the one found by contact number, or a new one. A number that already
             // belongs to someone is never added twice.
@@ -136,44 +140,48 @@ namespace LABATRACK.Services
             string remarks = CleanRemarks(req.Remarks);
 
             int jobId;
-            using (var conn = Db.Open())
-            using (var tx = conn.BeginTransaction())
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
             {
-                int customerId = existing != null
-                    ? existing.CustomerId
-                    : InsertCustomer(conn, tx, req.CustomerName, req.ContactNumber, req.CustomerEmail);
-
-                var job = new JobOrder
+                conn.Open();
+                using (SqlTransaction tx = conn.BeginTransaction())
                 {
-                    ClaimNumber = ClaimNumberGenerator.Next(conn, tx, now),
-                    CustomerId = customerId,
-                    ServiceId = service.ServiceId,
-                    WeightKg = req.WeightKg,
-                    BillableKg = quote.BillableKg,
-                    // Frozen at creation: a later change on the Pricing page never alters this job.
-                    RatePerKgAtCreation = service.RatePerKg,
-                    MinimumChargeAtCreation = settings.MinimumCharge,
-                    RoundingIncrementKgAtCreation = settings.RoundingIncrementKg,
-                    LaundryCharge = quote.LaundryCharge,
-                    // The route, frozen the same way.
-                    IncludesWashing = service.IncludesWashing,
-                    IncludesDrying = service.IncludesDrying,
-                    IncludesFolding = service.IncludesFolding,
-                    TotalAmount = quote.Total,
-                    CurrentStatus = StatusService.Queued,
-                    Remarks = remarks,
-                    ExpectedPickupAt = pickup,
-                    CreatedByUserId = userId,
-                };
-                jobId = JobOrderRepository.Insert(conn, tx, job);
+                    int customerId = existing != null
+                        ? existing.CustomerId
+                        : InsertCustomer(conn, tx, req.CustomerName, req.ContactNumber, req.CustomerEmail);
 
-                foreach (PriceLine line in quote.Lines)
-                    JobOrderRepository.InsertAddOn(conn, tx, jobId, line.AddOnId, line.Quantity, line.UnitPrice);
+                    var job = new JobOrder
+                    {
+                        ClaimNumber = ClaimNumberGenerator.Next(conn, tx, now),
+                        CustomerId = customerId,
+                        ServiceId = service.ServiceId,
+                        WeightKg = req.WeightKg,
+                        BillableKg = quote.BillableKg,
+                        // Frozen at creation: a later change on the Pricing page never alters this job.
+                        RatePerKgAtCreation = service.RatePerKg,
+                        MinimumChargeAtCreation = settings.MinimumCharge,
+                        RoundingIncrementKgAtCreation = settings.RoundingIncrementKg,
+                        LaundryCharge = quote.LaundryCharge,
+                        // The route, frozen the same way.
+                        IncludesWashing = service.IncludesWashing,
+                        IncludesDrying = service.IncludesDrying,
+                        IncludesFolding = service.IncludesFolding,
+                        TotalAmount = quote.Total,
+                        CurrentStatus = StatusService.Queued,
+                        Remarks = remarks,
+                        ExpectedPickupAt = pickup,
+                        CreatedByUserId = userId,
+                    };
+                    jobId = JobOrderRepository.Insert(conn, tx, job);
 
-                StatusHistoryRepository.Insert(conn, tx, jobId, null, StatusService.Queued, userId, null);
-                PaymentRepository.Insert(conn, tx, jobId, Payment.DropOff, quote.Total, req.Method, cashReceived, userId);
+                    foreach (PriceLine line in quote.Lines)
+                        JobOrderRepository.InsertAddOn(conn, tx, jobId, line.AddOnId, line.Quantity, line.UnitPrice);
 
-                tx.Commit();
+                    StatusHistoryRepository.Insert(conn, tx, jobId, null, StatusService.Queued, userId, null);
+                    if (amountNow > 0)   // nothing paid now (allowed only at a 0% minimum): no payment row
+                        PaymentRepository.Insert(conn, tx, jobId, Payment.DropOff, amountNow, req.Method, cashReceived, userId);
+
+                    tx.Commit();
+                }
             }
 
             EmailService.SendDropOff(jobId, userId, false);
@@ -225,8 +233,9 @@ namespace LABATRACK.Services
         /// Saves the owner's correction of a job that is not yet Claimed or Voided. The service can
         /// change only while the job is still Queued (another service can have another route);
         /// weight, add-ons, remarks and the customer's details can be corrected until it is claimed.
-        /// The difference in the total is settled in the same transaction. Throws
-        /// BusinessRuleException, and saves nothing, if a rule says no.
+        /// A new total only changes the balance, except that anything paid above the new total is
+        /// refunded in the same transaction. Throws BusinessRuleException, and saves nothing, if a
+        /// rule says no.
         /// </summary>
         public static void SaveEdit(EditRequest req, int ownerUserId)
         {
@@ -244,106 +253,126 @@ namespace LABATRACK.Services
             PricingService.CheckWeight(req.WeightKg, settings.MaxWeightKg);
             string remarks = CleanRemarks(req.Remarks);
 
-            using (var conn = Db.Open())
-            using (var tx = conn.BeginTransaction())
+            // What this save changes, in words, for the email to the customer. It is filled in below
+            // while the old values are still known, and sent only after everything is saved.
+            EditSummary summary = new EditSummary();
+
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
             {
-                // Lock the job, then check it is still where the owner saw it and still editable.
-                JobOrder job = JobOrderRepository.GetForUpdate(conn, tx, req.JobId);
-                if (job.CurrentStatus != req.ExpectedStatus)
-                    throw new BusinessRuleException(StatusService.AlreadyUpdated);
-                if (!StatusService.IsInShop(job.CurrentStatus))
-                    throw new BusinessRuleException("A " + job.CurrentStatus.ToLowerInvariant() + " job cannot be changed.");
-                bool serviceChanged = req.ServiceId != job.ServiceId;
-                if (serviceChanged && job.CurrentStatus != StatusService.Queued)
-                    throw new BusinessRuleException("The service can only be changed while the job is still Queued.");
-
-                List<JobAddOn> currentLines = JobOrderRepository.GetAddOns(conn, tx, job.JobId);
-                PriceQuote quote = QuoteEdit(job, currentLines, req.ServiceId, req.WeightKg, req.AddOnQuantities, addOns, services);
-
-                // The difference to settle: the new total minus what has been paid (vw_JobPayments).
-                JobPayments paid = PaymentRepository.GetJobTotals(conn, tx, job.JobId);
-                decimal difference = quote.Total - paid.AmountPaid;
-                if (req.ShownDifference != difference)
-                    throw new BusinessRuleException("The amount to settle is now " + SettleText(difference)
-                                                    + ". Check it with the customer, then save again.");
-                decimal? cashReceived = difference > 0
-                    ? CheckPayment(req.Method, req.CashReceived, difference, "the amount to collect")
-                    : null;
-                if (difference < 0 && req.Method != Payment.Cash && req.Method != Payment.Ewallet)
-                    throw new BusinessRuleException("Choose how the difference is refunded.");
-
-                // 1. The customer's details, when they changed.
-                if (req.CustomerName.Trim() != before.CustomerName || req.ContactNumber.Trim() != before.ContactNumber
-                    || (req.CustomerEmail ?? "").Trim() != (before.CustomerEmail ?? ""))
-                    UpdateCustomer(conn, tx, job.CustomerId, req.CustomerName, req.ContactNumber, req.CustomerEmail);
-
-                // 2. The job itself, guarded by the status the owner saw.
-                LaundryService newService = serviceChanged ? services.First(s => s.ServiceId == req.ServiceId) : null;
-                job.ServiceId = req.ServiceId;
-                job.WeightKg = req.WeightKg;
-                job.BillableKg = quote.BillableKg;
-                job.RatePerKgAtCreation = quote.RatePerKg;
-                job.LaundryCharge = quote.LaundryCharge;
-                if (newService != null)
+                conn.Open();
+                using (SqlTransaction tx = conn.BeginTransaction())
                 {
-                    job.IncludesWashing = newService.IncludesWashing;
-                    job.IncludesDrying = newService.IncludesDrying;
-                    job.IncludesFolding = newService.IncludesFolding;
+                    // Lock the job, then check it is still where the owner saw it and still editable.
+                    JobOrder job = JobOrderRepository.GetForUpdate(conn, tx, req.JobId);
+                    if (job.CurrentStatus != req.ExpectedStatus)
+                        throw new BusinessRuleException(StatusService.AlreadyUpdated);
+                    if (!StatusService.IsInShop(job.CurrentStatus))
+                        throw new BusinessRuleException("A " + job.CurrentStatus.ToLowerInvariant() + " job cannot be changed.");
+                    bool serviceChanged = req.ServiceId != job.ServiceId;
+                    if (serviceChanged && job.CurrentStatus != StatusService.Queued)
+                        throw new BusinessRuleException("The service can only be changed while the job is still Queued.");
+
+                    List<JobAddOn> currentLines = JobOrderRepository.GetAddOns(conn, tx, job.JobId);
+                    PriceQuote quote = QuoteEdit(job, currentLines, req.ServiceId, req.WeightKg, req.AddOnQuantities, addOns, services);
+
+                    // The new total minus what has been paid (vw_JobPayments): above 0 it is the balance,
+                    // still owed and paid before pick-up; below 0 the customer paid too much, and the
+                    // excess is refunded now. The page must have shown this same amount.
+                    JobPayments paid = PaymentRepository.GetJobTotals(conn, tx, job.JobId);
+                    decimal difference = quote.Total - paid.AmountPaid;
+                    if (req.ShownDifference != difference)
+                        throw new BusinessRuleException("After this correction the job would be " + SettleText(difference)
+                                                        + ". Check it with the customer, then save again.");
+                    if (difference < 0 && req.Method != Payment.Cash && req.Method != Payment.Ewallet)
+                        throw new BusinessRuleException("Choose how the excess is refunded.");
+
+                    // 1. The customer's details, when they changed.
+                    if (req.CustomerName.Trim() != before.CustomerName || req.ContactNumber.Trim() != before.ContactNumber
+                        || (req.CustomerEmail ?? "").Trim() != (before.CustomerEmail ?? ""))
+                        UpdateCustomer(conn, tx, job.CustomerId, req.CustomerName, req.ContactNumber, req.CustomerEmail);
+                    if (req.CustomerName.Trim() != before.CustomerName)
+                        summary.Changes.Add("Name: " + before.CustomerName + " → " + req.CustomerName.Trim());
+                    if (req.ContactNumber.Trim() != before.ContactNumber)
+                        summary.Changes.Add("Contact number: " + before.ContactNumber + " → " + req.ContactNumber.Trim());
+                    if ((req.CustomerEmail ?? "").Trim() != (before.CustomerEmail ?? ""))
+                        summary.Changes.Add("Email address updated");
+
+                    // 2. The job itself, guarded by the status the owner saw.
+                    LaundryService newService = serviceChanged ? services.First(s => s.ServiceId == req.ServiceId) : null;
+                    if (serviceChanged)
+                        summary.Changes.Add("Service: " + job.ServiceName + " → " + newService.Name);
+                    if (req.WeightKg != job.WeightKg)
+                        summary.Changes.Add("Weight: " + job.WeightKg.ToString("0.0#", CultureInfo.InvariantCulture) + " kg → "
+                                            + req.WeightKg.ToString("0.0#", CultureInfo.InvariantCulture) + " kg");
+                    job.ServiceId = req.ServiceId;
+                    job.WeightKg = req.WeightKg;
+                    job.BillableKg = quote.BillableKg;
+                    job.RatePerKgAtCreation = quote.RatePerKg;
+                    job.LaundryCharge = quote.LaundryCharge;
+                    if (newService != null)
+                    {
+                        job.IncludesWashing = newService.IncludesWashing;
+                        job.IncludesDrying = newService.IncludesDrying;
+                        job.IncludesFolding = newService.IncludesFolding;
+                    }
+                    decimal oldTotal = job.TotalAmount;
+                    job.TotalAmount = quote.Total;
+                    job.Remarks = remarks;
+                    if (!JobOrderRepository.Update(conn, tx, job, req.ExpectedStatus, ownerUserId))
+                        throw new BusinessRuleException(StatusService.AlreadyUpdated);
+
+                    // 3. The add-on lines: a changed quantity keeps its frozen price; a line taken off is
+                    //    marked removed (never deleted); a new one is added at today's price.
+                    foreach (JobAddOn line in currentLines)
+                    {
+                        PriceLine wanted = quote.Lines.FirstOrDefault(l => l.AddOnId == line.AddOnId);
+                        if (wanted == null)
+                        {
+                            JobOrderRepository.RemoveAddOn(conn, tx, line.JobAddOnId);
+                            summary.Changes.Add("Removed: " + line.Name);
+                        }
+                        else if (wanted.Quantity != line.Quantity)
+                        {
+                            JobOrderRepository.SetAddOnQuantity(conn, tx, line.JobAddOnId, wanted.Quantity);
+                            summary.Changes.Add(line.Name + ": × " + line.Quantity + " → × " + wanted.Quantity);
+                        }
+                    }
+                    foreach (PriceLine line in quote.Lines.Where(l => currentLines.All(c => c.AddOnId != l.AddOnId)))
+                    {
+                        JobOrderRepository.InsertAddOn(conn, tx, job.JobId, line.AddOnId, line.Quantity, line.UnitPrice);
+                        summary.Changes.Add("Added: " + line.Name + (line.IsProduct ? " × " + line.Quantity : ""));
+                    }
+                    if (quote.Total != oldTotal)
+                        summary.Changes.Add("Total: " + PaymentService.Peso(oldTotal) + " → " + PaymentService.Peso(quote.Total));
+
+                    // 4. Paid more than the new total: refund the excess now (a negative row). A higher
+                    //    total needs no row: it is simply a bigger balance, collected before pick-up.
+                    if (difference < 0)
+                    {
+                        PaymentRepository.Insert(conn, tx, job.JobId, Payment.Adjustment, difference, req.Method, null, ownerUserId);
+                        summary.RefundAmount = -difference;
+                        summary.RefundMethod = req.Method;
+                    }
+
+                    tx.Commit();
                 }
-                job.TotalAmount = quote.Total;
-                job.Remarks = remarks;
-                if (!JobOrderRepository.Update(conn, tx, job, req.ExpectedStatus, ownerUserId))
-                    throw new BusinessRuleException(StatusService.AlreadyUpdated);
-
-                // 3. The add-on lines: a changed quantity keeps its frozen price; a line taken off is
-                //    marked removed (never deleted); a new one is added at today's price.
-                foreach (JobAddOn line in currentLines)
-                {
-                    PriceLine wanted = quote.Lines.FirstOrDefault(l => l.AddOnId == line.AddOnId);
-                    if (wanted == null)
-                        JobOrderRepository.RemoveAddOn(conn, tx, line.JobAddOnId);
-                    else if (wanted.Quantity != line.Quantity)
-                        JobOrderRepository.SetAddOnQuantity(conn, tx, line.JobAddOnId, wanted.Quantity);
-                }
-                foreach (PriceLine line in quote.Lines.Where(l => currentLines.All(c => c.AddOnId != l.AddOnId)))
-                    JobOrderRepository.InsertAddOn(conn, tx, job.JobId, line.AddOnId, line.Quantity, line.UnitPrice);
-
-                // 4. Settle the difference: collected (+) or refunded (-). No row when it is the same.
-                if (difference != 0)
-                    PaymentRepository.Insert(conn, tx, job.JobId, Payment.Adjustment, difference, req.Method, cashReceived, ownerUserId);
-
-                tx.Commit();
             }
+
+            // Everything is saved. Tell the customer what changed (only if something they care about did;
+            // a corrected remark alone is the shop's own note). A failed email never undoes the save.
+            if (summary.Changes.Count > 0)
+                EmailService.SendModified(req.JobId, ownerUserId, summary);
         }
 
-        /// <summary>"collect ₱35.00", "refund ₱55.00" or "nothing (the total is the same)".</summary>
+        /// <summary>"₱35.00 short (the balance)", "overpaid by ₱55.00 (refunded now)" or "paid in full".</summary>
         public static string SettleText(decimal difference)
         {
-            if (difference > 0) return "collect ₱" + difference.ToString("N2", CultureInfo.InvariantCulture);
-            if (difference < 0) return "refund ₱" + (-difference).ToString("N2", CultureInfo.InvariantCulture);
-            return "nothing (the total is the same)";
+            if (difference > 0) return PaymentService.Peso(difference) + " short (the balance, paid before pick-up)";
+            if (difference < 0) return "overpaid by " + PaymentService.Peso(-difference) + " (refunded now)";
+            return "paid in full";
         }
 
         // ------------------------------------------------------------ Pieces
-
-        /// <summary>
-        /// The payment rule for money coming in. Cash must cover the amount (the change is
-        /// cash received - amount); e-wallet is recorded as exactly the amount, with no cash.
-        /// Returns the cash received to store, or null for e-wallet.
-        /// </summary>
-        private static decimal? CheckPayment(string method, decimal? cashReceived, decimal amount, string amountName)
-        {
-            if (method == Payment.Ewallet)
-                return null;
-            if (method != Payment.Cash)
-                throw new BusinessRuleException("Choose how the customer paid: Cash or E-wallet.");
-            if (!cashReceived.HasValue || cashReceived.Value < amount)
-                throw new BusinessRuleException("Cash received must be at least " + amountName + " of ₱"
-                                                + amount.ToString("N2", CultureInfo.InvariantCulture) + ".");
-            if (cashReceived.Value != Math.Round(cashReceived.Value, 2) || cashReceived.Value > 99999999m)
-                throw new BusinessRuleException("Enter the cash received in pesos, for example 500 or 500.00.");
-            return cashReceived.Value;
-        }
 
         /// <summary>A service add-on is charged once (quantity 1); a product is 1 to 99 pieces.</summary>
         private static void CheckQuantities(IEnumerable<PriceLine> lines, IDictionary<int, int> quantities, IList<AddOn> addOns)

@@ -103,10 +103,5 @@ namespace LABATRACK.Admin
         /// rbAdjEwallet control.
         /// </summary>
         protected global::System.Web.UI.WebControls.RadioButton rbAdjEwallet;
-
-        /// <summary>
-        /// txtAdjCashReceived control.
-        /// </summary>
-        protected global::System.Web.UI.WebControls.TextBox txtAdjCashReceived;
     }
 }

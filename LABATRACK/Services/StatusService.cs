@@ -14,7 +14,7 @@ namespace LABATRACK.Services
     ///   a work stage      -> the next work stage on the route, or Inspection after the last one
     ///   Inspection        -> Ready for pick-up (pass; sends the ready email)
     ///   Inspection        -> a work stage on the route (fail: rework, reason required)
-    ///   Ready for pick-up -> Claimed (already paid in full at drop-off)
+    ///   Ready for pick-up -> Claimed (only with nothing owed: Claim collects the balance first)
     ///   Claimed, Voided   -> nothing: they are final
     ///
     /// Each job has its own route, copied from its service when it was created: Queued, then the
@@ -111,28 +111,63 @@ namespace LABATRACK.Services
 
         /// <summary>
         /// One step forward: start the first work stage, move to the next one, pass inspection,
-        /// or hand the load over (Claimed). <paramref name="expectedStatus"/> is the status the
-        /// person saw on screen. Returns the new status. Passing inspection sends the ready email
-        /// after the move is saved; a failed email never undoes the move.
+        /// or hand over a load that is paid in full (Claimed; a load with a balance goes through
+        /// Claim instead). <paramref name="expectedStatus"/> is the status the person saw on
+        /// screen. Returns the new status. Passing inspection sends the ready email after the move
+        /// is saved; a failed email never undoes the move.
         /// </summary>
         public static string Advance(int jobId, string expectedStatus, int userId)
         {
             string to;
-            using (var conn = Db.Open())
-            using (var tx = conn.BeginTransaction())
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
             {
-                JobOrder job = LockJob(conn, tx, jobId, expectedStatus);
-                to = NextStage(job);
-                if (to == null)
-                    throw new BusinessRuleException("This job is " + job.CurrentStatus.ToLowerInvariant() + " and cannot move any more.");
+                conn.Open();
+                using (SqlTransaction tx = conn.BeginTransaction())
+                {
+                    JobOrder job = LockJob(conn, tx, jobId, expectedStatus);
+                    to = NextStage(job);
+                    if (to == null)
+                        throw new BusinessRuleException("This job is " + job.CurrentStatus.ToLowerInvariant() + " and cannot move any more.");
 
-                Move(conn, tx, job, to, null, userId);
-                tx.Commit();
+                    Move(conn, tx, job, to, null, userId);
+                    tx.Commit();
+                }
             }
 
             if (to == Ready)
                 EmailService.SendReady(jobId, userId, false);
             return to;
+        }
+
+        /// <summary>
+        /// Hands the load over (Ready for pick-up -> Claimed) and, in the same transaction, takes
+        /// whatever is still owed: the whole balance, in cash (at least the balance; the change is
+        /// worked out by PaymentService) or by e-wallet. A load never leaves the shop unpaid.
+        /// <paramref name="shownBalance"/> is the balance the page showed: if it changed in the
+        /// meantime, nothing is saved. With no balance it is the same as Advance.
+        /// </summary>
+        public static void Claim(int jobId, decimal shownBalance, string method, decimal? cashReceived, int userId)
+        {
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
+            {
+                conn.Open();
+                using (SqlTransaction tx = conn.BeginTransaction())
+                {
+                    JobOrder job = LockJob(conn, tx, jobId, Ready);
+                    decimal balance = PaymentService.BalanceOf(conn, tx, jobId);
+                    if (balance != shownBalance)
+                        throw new BusinessRuleException("The balance is now " + PaymentService.Peso(balance)
+                                                        + ". Check it with the customer, then try again.");
+                    if (balance > 0)
+                    {
+                        decimal? cash = PaymentService.CheckIncoming(method, cashReceived, balance);
+                        PaymentRepository.Insert(conn, tx, jobId, Payment.BalancePayment, balance, method, cash, userId);
+                    }
+
+                    Move(conn, tx, job, Claimed, null, userId);
+                    tx.Commit();
+                }
+            }
         }
 
         /// <summary>
@@ -142,15 +177,18 @@ namespace LABATRACK.Services
         public static void SendBack(int jobId, string toStage, string reason, int userId)
         {
             reason = CheckReason(reason, "Say why the load failed inspection.");
-            using (var conn = Db.Open())
-            using (var tx = conn.BeginTransaction())
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
             {
-                JobOrder job = LockJob(conn, tx, jobId, Inspection);
-                if (!ReworkChoices(job, SettingsRepository.Get()).Contains(toStage))
-                    throw new BusinessRuleException("This job's service does not include " + toStage + ".");
+                conn.Open();
+                using (SqlTransaction tx = conn.BeginTransaction())
+                {
+                    JobOrder job = LockJob(conn, tx, jobId, Inspection);
+                    if (!ReworkChoices(job, SettingsRepository.Get()).Contains(toStage))
+                        throw new BusinessRuleException("This job's service does not include " + toStage + ".");
 
-                Move(conn, tx, job, toStage, reason, userId);
-                tx.Commit();
+                    Move(conn, tx, job, toStage, reason, userId);
+                    tx.Commit();
+                }
             }
         }
 
@@ -163,21 +201,28 @@ namespace LABATRACK.Services
         public static void Void(int jobId, string reason, int userId)
         {
             reason = CheckReason(reason, "Enter the reason for voiding this job.");
-            using (var conn = Db.Open())
-            using (var tx = conn.BeginTransaction())
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
             {
-                JobOrder job = LockJob(conn, tx, jobId, Queued);
-                Move(conn, tx, job, Voided, reason, userId);
+                conn.Open();
+                using (SqlTransaction tx = conn.BeginTransaction())
+                {
+                    JobOrder job = LockJob(conn, tx, jobId, Queued);
+                    Move(conn, tx, job, Voided, reason, userId);
 
-                // What was paid, net of any earlier refund, read from vw_JobPayments.
-                JobPayments paid = PaymentRepository.GetJobTotals(conn, tx, jobId);
-                if (paid.CashPaid > 0)
-                    PaymentRepository.Insert(conn, tx, jobId, Payment.VoidRefund, -paid.CashPaid, Payment.Cash, null, userId);
-                if (paid.EwalletPaid > 0)
-                    PaymentRepository.Insert(conn, tx, jobId, Payment.VoidRefund, -paid.EwalletPaid, Payment.Ewallet, null, userId);
+                    // What was paid, net of any earlier refund, read from vw_JobPayments.
+                    JobPayments paid = PaymentRepository.GetJobTotals(conn, tx, jobId);
+                    if (paid.CashPaid > 0)
+                        PaymentRepository.Insert(conn, tx, jobId, Payment.VoidRefund, -paid.CashPaid, Payment.Cash, null, userId);
+                    if (paid.EwalletPaid > 0)
+                        PaymentRepository.Insert(conn, tx, jobId, Payment.VoidRefund, -paid.EwalletPaid, Payment.Ewallet, null, userId);
 
-                tx.Commit();
+                    tx.Commit();
+                }
             }
+
+            // The customer is told it was cancelled, with the reason and what to do next. The job is
+            // already voided and refunded; a failed email never undoes that.
+            EmailService.SendVoided(jobId, userId, false);
         }
 
         // ------------------------------------------------------------ Pieces
@@ -199,12 +244,19 @@ namespace LABATRACK.Services
         /// <summary>
         /// The move itself: the guarded UPDATE of CurrentStatus (0 rows = someone else moved the job
         /// first) and one new history row. Called inside the caller's transaction, so the two are
-        /// saved together or not at all.
+        /// saved together or not at all. A load with a balance is never marked Claimed.
         /// </summary>
         private static void Move(SqlConnection conn, SqlTransaction tx, JobOrder job, string to, string reason, int userId)
         {
             if (!IsAllowed(job, job.CurrentStatus, to, SettingsRepository.Get()))
                 throw new BusinessRuleException("A job cannot go from " + job.CurrentStatus + " to " + to + ".");
+            if (to == Claimed)
+            {
+                decimal balance = PaymentService.BalanceOf(conn, tx, job.JobId);
+                if (balance > 0)
+                    throw new BusinessRuleException("This load still has a " + PaymentService.Peso(balance)
+                                                    + " balance. Collect it on the job page before handing the load over.");
+            }
             if (!JobOrderRepository.UpdateStatus(conn, tx, job.JobId, job.CurrentStatus, to))
                 throw new BusinessRuleException(AlreadyUpdated);
             StatusHistoryRepository.Insert(conn, tx, job.JobId, job.CurrentStatus, to, userId, reason);

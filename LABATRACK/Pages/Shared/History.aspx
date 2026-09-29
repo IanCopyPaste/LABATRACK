@@ -81,7 +81,7 @@
                                         <th>Dropped off</th>
                                         <th>Status</th>
                                         <th class="right">Total</th>
-                                        <th>Paid via</th>
+                                        <th>Payment</th>
                                         <% if (IsOwner) { %><th>Staff</th><% } %>
                                         <th><span class="sr-only">Actions</span></th>
                                     </tr>
@@ -100,9 +100,9 @@
                                                 </td>
                                                 <td class="right num">
                                                     <span class="<%# (string)Eval("CurrentStatus") == "Voided" ? "struck" : "" %>"><%# Peso((decimal)Eval("TotalAmount")) %></span>
-                                                    <%# (string)Eval("CurrentStatus") == "Voided" ? "<div class=\"cell-sub\">refunded</div>" : "" %>
+                                                    <%# (string)Eval("CurrentStatus") == "Voided" ? "<div class=\"cell-sub\">voided</div>" : "" %>
                                                 </td>
-                                                <td><span class="pill pill-ok"><%#: Eval("PaymentMethod") %></span></td>
+                                                <td><%# LABATRACK.Helpers.PaymentBadge.Html((LABATRACK.Models.JobOrder)Container.DataItem) %></td>
                                                 <% if (IsOwner) { %>
                                                 <td class="small">
                                                     <div>Taken by <%#: Eval("CreatedByName") %></div>
@@ -139,6 +139,8 @@
             </main>
         </div>
     </form>
+
+    <script src="<%= AssetUrl.Get("~/Assets/js/Loading.js") %>"></script>
 
     <script src="<%= AssetUrl.Get("~/Assets/js/Sidebar.js") %>"></script>
 </body>

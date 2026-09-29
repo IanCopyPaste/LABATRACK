@@ -45,7 +45,7 @@
                         <div class="card kpi">
                             <div class="kpi-top">Active loads <span class="kpi-icon"><%= Icons.Get("washing-machine", "ico-sm") %></span></div>
                             <div class="kpi-value"><%= Data.Active.Count %></div>
-                            <div class="kpi-foot">Queued to Ready for pick-up</div>
+                            <div class="kpi-foot"><%= LoadsOwing == 0 ? "All paid in full" : Peso(BalancesDue) + " still to collect on " + LoadsOwing + (LoadsOwing == 1 ? " load" : " loads") %></div>
                         </div>
                         <div class="card kpi">
                             <div class="kpi-top">Needs attention <span class="kpi-icon" style="background:var(--warning-soft); color:var(--warning);"><%= Icons.Get("circle-alert", "ico-sm") %></span></div>
@@ -91,7 +91,7 @@
                                             <th>Dropped off</th>
                                             <th>Status</th>
                                             <th class="right">Total</th>
-                                            <th>Paid via</th>
+                                            <th>Payment</th>
                                             <th></th>
                                         </tr>
                                     </thead>
@@ -104,7 +104,7 @@
                                                     <td class="num"><%# ((DateTime)Eval("CreatedAt")).ToString("MMM d, h:mm tt") %></td>
                                                     <td><span class="pill <%# StageCss((string)Eval("CurrentStatus")) %>"><%#: Eval("CurrentStatus") %></span></td>
                                                     <td class="right num"><%# Peso((decimal)Eval("TotalAmount")) %></td>
-                                                    <td><span class="pill pill-ok"><%#: Eval("PaymentMethod") %></span></td>
+                                                    <td><%# PaymentBadgeFor((LABATRACK.Models.JobOrder)Container.DataItem) %></td>
                                                     <td class="right"><a class="btn btn-sm btn-ghost" href="EditJob.aspx?id=<%# Eval("JobId") %>"><%# Icons.Get("pencil", "ico-sm") %>Edit</a></td>
                                                 </tr>
                                             </ItemTemplate>
@@ -193,6 +193,8 @@
             </main>
         </div>
     </form>
+
+    <script src="<%= AssetUrl.Get("~/Assets/js/Loading.js") %>"></script>
 
     <script src="<%= AssetUrl.Get("~/Assets/js/Sidebar.js") %>"></script>
     <script src="<%= AssetUrl.Get("~/Assets/js/AdminDashboard.js") %>"></script>

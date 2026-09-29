@@ -11,22 +11,36 @@ namespace LABATRACK.DataAccess
     {
         public static Customer GetById(int customerId)
         {
-            using (var conn = Db.Open())
-            using (var cmd = Db.Proc(conn, null, "dbo.usp_Customers_GetById"))
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
+            using (SqlCommand cmd = new SqlCommand("dbo.usp_Customers_GetById", conn))
             {
-                Db.AddInt(cmd, "@CustomerId", customerId);
-                return ReadOne(cmd);
+                cmd.CommandType = CommandType.StoredProcedure;
+                cmd.Parameters.Add("@CustomerId", SqlDbType.Int).Value = customerId;
+
+                conn.Open();
+                using (SqlDataReader r = cmd.ExecuteReader())
+                {
+                    if (!r.Read()) return null;
+                    return Map(r);
+                }
             }
         }
 
         /// <summary>The customer with this contact number (digits only), or null.</summary>
         public static Customer GetByContactDigits(string digits)
         {
-            using (var conn = Db.Open())
-            using (var cmd = Db.Proc(conn, null, "dbo.usp_Customers_GetByContactDigits"))
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
+            using (SqlCommand cmd = new SqlCommand("dbo.usp_Customers_GetByContactDigits", conn))
             {
-                Db.AddText(cmd, "@ContactDigits", digits, 20);
-                return ReadOne(cmd);
+                cmd.CommandType = CommandType.StoredProcedure;
+                cmd.Parameters.Add("@ContactDigits", SqlDbType.NVarChar, 20).Value = digits;
+
+                conn.Open();
+                using (SqlDataReader r = cmd.ExecuteReader())
+                {
+                    if (!r.Read()) return null;
+                    return Map(r);
+                }
             }
         }
 
@@ -36,72 +50,78 @@ namespace LABATRACK.DataAccess
         /// </summary>
         public static List<Customer> Search(string text, string digits)
         {
-            using (var conn = Db.Open())
-            using (var cmd = Db.Proc(conn, null, "dbo.usp_Customers_Search"))
+            List<Customer> list = new List<Customer>();
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
+            using (SqlCommand cmd = new SqlCommand("dbo.usp_Customers_Search", conn))
             {
-                Db.AddText(cmd, "@Text", text, 100);
-                Db.AddText(cmd, "@Digits", digits, 20);
-                var list = new List<Customer>();
-                using (var r = cmd.ExecuteReader())
+                cmd.CommandType = CommandType.StoredProcedure;
+                cmd.Parameters.Add("@Text", SqlDbType.NVarChar, 100).Value = (object)text ?? DBNull.Value;
+                cmd.Parameters.Add("@Digits", SqlDbType.NVarChar, 20).Value = (object)digits ?? DBNull.Value;
+
+                conn.Open();
+                using (SqlDataReader r = cmd.ExecuteReader())
                 {
-                    while (r.Read()) list.Add(Map(r));
+                    while (r.Read())
+                    {
+                        list.Add(Map(r));
+                    }
                 }
-                return list;
             }
+            return list;
         }
 
         public static int Count()
         {
-            using (var conn = Db.Open())
-            using (var cmd = Db.Proc(conn, null, "dbo.usp_Customers_Count"))
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
+            using (SqlCommand cmd = new SqlCommand("dbo.usp_Customers_Count", conn))
             {
+                cmd.CommandType = CommandType.StoredProcedure;
+
+                conn.Open();
                 return Convert.ToInt32(cmd.ExecuteScalar());
             }
         }
 
+        /// <summary>Adds a customer as one step of a larger save (the connection and transaction come from the caller).</summary>
         public static int Insert(SqlConnection conn, SqlTransaction tx, string name, string contactNumber, string email)
         {
-            using (var cmd = Db.Proc(conn, tx, "dbo.usp_Customers_Insert"))
+            using (SqlCommand cmd = new SqlCommand("dbo.usp_Customers_Insert", conn, tx))
             {
-                Db.AddText(cmd, "@Name", name, 100);
-                Db.AddText(cmd, "@ContactNumber", contactNumber, 20);
-                Db.AddText(cmd, "@Email", email, 254);
-                return Convert.ToInt32(cmd.ExecuteScalar());
+                cmd.CommandType = CommandType.StoredProcedure;
+                cmd.Parameters.Add("@Name", SqlDbType.NVarChar, 100).Value = name;
+                cmd.Parameters.Add("@ContactNumber", SqlDbType.NVarChar, 20).Value = contactNumber;
+                cmd.Parameters.Add("@Email", SqlDbType.NVarChar, 254).Value = (object)email ?? DBNull.Value;
+
+                return Convert.ToInt32(cmd.ExecuteScalar());   // the new CustomerId
             }
         }
 
         public static void Update(SqlConnection conn, SqlTransaction tx, int customerId, string name, string contactNumber, string email)
         {
-            using (var cmd = Db.Proc(conn, tx, "dbo.usp_Customers_Update"))
+            using (SqlCommand cmd = new SqlCommand("dbo.usp_Customers_Update", conn, tx))
             {
-                Db.AddInt(cmd, "@CustomerId", customerId);
-                Db.AddText(cmd, "@Name", name, 100);
-                Db.AddText(cmd, "@ContactNumber", contactNumber, 20);
-                Db.AddText(cmd, "@Email", email, 254);
-                Db.RowsAffected(cmd);
+                cmd.CommandType = CommandType.StoredProcedure;
+                cmd.Parameters.Add("@CustomerId", SqlDbType.Int).Value = customerId;
+                cmd.Parameters.Add("@Name", SqlDbType.NVarChar, 100).Value = name;
+                cmd.Parameters.Add("@ContactNumber", SqlDbType.NVarChar, 20).Value = contactNumber;
+                cmd.Parameters.Add("@Email", SqlDbType.NVarChar, 254).Value = (object)email ?? DBNull.Value;
+
+                cmd.ExecuteScalar();
             }
         }
 
-        private static Customer ReadOne(SqlCommand cmd)
+        /// <summary>One row of the customer queries. JobCount and LastDropOff are counted by the procedure.</summary>
+        private static Customer Map(SqlDataReader r)
         {
-            using (var r = cmd.ExecuteReader())
-            {
-                return r.Read() ? Map(r) : null;
-            }
-        }
-
-        private static Customer Map(IDataRecord r)
-        {
-            return new Customer
-            {
-                CustomerId = Db.GetInt(r, "CustomerId"),
-                Name = Db.GetText(r, "Name"),
-                ContactNumber = Db.GetText(r, "ContactNumber"),
-                Email = Db.GetText(r, "Email"),
-                CreatedAt = Db.GetDateTime(r, "CreatedAt"),
-                JobCount = Db.GetInt(r, "JobCount"),
-                LastDropOff = Db.GetDateTimeOrNull(r, "LastDropOff"),
-            };
+            Customer customer = new Customer();
+            customer.CustomerId = (int)r["CustomerId"];
+            customer.Name = (string)r["Name"];
+            customer.ContactNumber = (string)r["ContactNumber"];
+            customer.Email = r["Email"] as string;
+            customer.CreatedAt = (DateTime)r["CreatedAt"];
+            customer.JobCount = Convert.ToInt32(r["JobCount"]);
+            customer.LastDropOff = r["LastDropOff"] as DateTime?;
+            return customer;
         }
     }
 }

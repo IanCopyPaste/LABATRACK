@@ -12,38 +12,56 @@ namespace LABATRACK.DataAccess
         /// <summary>Every service, active ones first, each with how many of its loads are still in the shop.</summary>
         public static List<LaundryService> GetAll()
         {
-            using (var conn = Db.Open())
-            using (var cmd = Db.Proc(conn, null, "dbo.usp_Services_GetAll"))
+            List<LaundryService> list = new List<LaundryService>();
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
+            using (SqlCommand cmd = new SqlCommand("dbo.usp_Services_GetAll", conn))
             {
-                var list = new List<LaundryService>();
-                using (var r = cmd.ExecuteReader())
+                cmd.CommandType = CommandType.StoredProcedure;
+
+                conn.Open();
+                using (SqlDataReader r = cmd.ExecuteReader())
                 {
-                    while (r.Read()) list.Add(Map(r));
+                    while (r.Read())
+                    {
+                        list.Add(Map(r));
+                    }
                 }
-                return list;
             }
+            return list;
         }
 
         public static LaundryService GetById(int serviceId)
         {
-            using (var conn = Db.Open())
-            using (var cmd = Db.Proc(conn, null, "dbo.usp_Services_GetById"))
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
+            using (SqlCommand cmd = new SqlCommand("dbo.usp_Services_GetById", conn))
             {
-                Db.AddInt(cmd, "@ServiceId", serviceId);
-                using (var r = cmd.ExecuteReader())
+                cmd.CommandType = CommandType.StoredProcedure;
+                cmd.Parameters.Add("@ServiceId", SqlDbType.Int).Value = serviceId;
+
+                conn.Open();
+                using (SqlDataReader r = cmd.ExecuteReader())
                 {
-                    return r.Read() ? Map(r) : null;
+                    if (!r.Read()) return null;
+                    return Map(r);
                 }
             }
         }
 
         public static int Insert(LaundryService s)
         {
-            using (var conn = Db.Open())
-            using (var cmd = Db.Proc(conn, null, "dbo.usp_Services_Insert"))
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
+            using (SqlCommand cmd = new SqlCommand("dbo.usp_Services_Insert", conn))
             {
-                AddFields(cmd, s);
-                return Convert.ToInt32(cmd.ExecuteScalar());
+                cmd.CommandType = CommandType.StoredProcedure;
+                cmd.Parameters.Add("@Name", SqlDbType.NVarChar, 60).Value = s.Name;
+                cmd.Parameters.Add(new SqlParameter("@RatePerKg", SqlDbType.Decimal) { Precision = 10, Scale = 2, Value = s.RatePerKg });
+                cmd.Parameters.Add("@IncludesWashing", SqlDbType.Bit).Value = s.IncludesWashing;
+                cmd.Parameters.Add("@IncludesDrying", SqlDbType.Bit).Value = s.IncludesDrying;
+                cmd.Parameters.Add("@IncludesFolding", SqlDbType.Bit).Value = s.IncludesFolding;
+                cmd.Parameters.Add("@IsActive", SqlDbType.Bit).Value = s.IsActive;
+
+                conn.Open();
+                return Convert.ToInt32(cmd.ExecuteScalar());   // the new ServiceId
             }
         }
 
@@ -53,38 +71,36 @@ namespace LABATRACK.DataAccess
         /// </summary>
         public static bool Update(LaundryService s)
         {
-            using (var conn = Db.Open())
-            using (var cmd = Db.Proc(conn, null, "dbo.usp_Services_Update"))
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
+            using (SqlCommand cmd = new SqlCommand("dbo.usp_Services_Update", conn))
             {
-                Db.AddInt(cmd, "@ServiceId", s.ServiceId);
-                AddFields(cmd, s);
-                return Db.RowsAffected(cmd) == 1;
+                cmd.CommandType = CommandType.StoredProcedure;
+                cmd.Parameters.Add("@ServiceId", SqlDbType.Int).Value = s.ServiceId;
+                cmd.Parameters.Add("@Name", SqlDbType.NVarChar, 60).Value = s.Name;
+                cmd.Parameters.Add(new SqlParameter("@RatePerKg", SqlDbType.Decimal) { Precision = 10, Scale = 2, Value = s.RatePerKg });
+                cmd.Parameters.Add("@IncludesWashing", SqlDbType.Bit).Value = s.IncludesWashing;
+                cmd.Parameters.Add("@IncludesDrying", SqlDbType.Bit).Value = s.IncludesDrying;
+                cmd.Parameters.Add("@IncludesFolding", SqlDbType.Bit).Value = s.IncludesFolding;
+                cmd.Parameters.Add("@IsActive", SqlDbType.Bit).Value = s.IsActive;
+
+                conn.Open();
+                int rowsAffected = Convert.ToInt32(cmd.ExecuteScalar());
+                return rowsAffected == 1;
             }
         }
 
-        private static void AddFields(SqlCommand cmd, LaundryService s)
+        private static LaundryService Map(SqlDataReader r)
         {
-            Db.AddText(cmd, "@Name", s.Name, 60);
-            Db.AddMoney(cmd, "@RatePerKg", s.RatePerKg);
-            Db.AddBit(cmd, "@IncludesWashing", s.IncludesWashing);
-            Db.AddBit(cmd, "@IncludesDrying", s.IncludesDrying);
-            Db.AddBit(cmd, "@IncludesFolding", s.IncludesFolding);
-            Db.AddBit(cmd, "@IsActive", s.IsActive);
-        }
-
-        private static LaundryService Map(IDataRecord r)
-        {
-            return new LaundryService
-            {
-                ServiceId = Db.GetInt(r, "ServiceId"),
-                Name = Db.GetText(r, "Name"),
-                RatePerKg = Db.GetDecimal(r, "RatePerKg"),
-                IncludesWashing = Db.GetBool(r, "IncludesWashing"),
-                IncludesDrying = Db.GetBool(r, "IncludesDrying"),
-                IncludesFolding = Db.GetBool(r, "IncludesFolding"),
-                IsActive = Db.GetBool(r, "IsActive"),
-                LoadsInShop = Db.GetInt(r, "LoadsInShop"),
-            };
+            LaundryService service = new LaundryService();
+            service.ServiceId = (int)r["ServiceId"];
+            service.Name = (string)r["Name"];
+            service.RatePerKg = (decimal)r["RatePerKg"];
+            service.IncludesWashing = (bool)r["IncludesWashing"];
+            service.IncludesDrying = (bool)r["IncludesDrying"];
+            service.IncludesFolding = (bool)r["IncludesFolding"];
+            service.IsActive = (bool)r["IsActive"];
+            service.LoadsInShop = Convert.ToInt32(r["LoadsInShop"]);
+            return service;
         }
     }
 }

@@ -156,6 +156,8 @@
         </div>
     </form>
 
+    <script src="<%= AssetUrl.Get("~/Assets/js/Loading.js") %>"></script>
+
     <script src="<%= AssetUrl.Get("~/Assets/js/ShowPassword.js") %>"></script>
 </body>
 </html>

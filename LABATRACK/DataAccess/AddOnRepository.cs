@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Data.SqlClient;
 using LABATRACK.Models;
 
 namespace LABATRACK.DataAccess
@@ -11,51 +12,60 @@ namespace LABATRACK.DataAccess
         /// <summary>Every add-on: service add-ons first, then products; active ones first in each.</summary>
         public static List<AddOn> GetAll()
         {
-            using (var conn = Db.Open())
-            using (var cmd = Db.Proc(conn, null, "dbo.usp_AddOns_GetAll"))
+            List<AddOn> list = new List<AddOn>();
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
+            using (SqlCommand cmd = new SqlCommand("dbo.usp_AddOns_GetAll", conn))
             {
-                var list = new List<AddOn>();
-                using (var r = cmd.ExecuteReader())
+                cmd.CommandType = CommandType.StoredProcedure;
+
+                conn.Open();
+                using (SqlDataReader r = cmd.ExecuteReader())
                 {
                     while (r.Read())
                     {
-                        list.Add(new AddOn
-                        {
-                            AddOnId = Db.GetInt(r, "AddOnId"),
-                            Name = Db.GetText(r, "Name"),
-                            Price = Db.GetDecimal(r, "Price"),
-                            Kind = Db.GetText(r, "Kind"),
-                            IsActive = Db.GetBool(r, "IsActive"),
-                        });
+                        AddOn addOn = new AddOn();
+                        addOn.AddOnId = (int)r["AddOnId"];
+                        addOn.Name = (string)r["Name"];
+                        addOn.Price = (decimal)r["Price"];
+                        addOn.Kind = (string)r["Kind"];
+                        addOn.IsActive = (bool)r["IsActive"];
+                        list.Add(addOn);
                     }
                 }
-                return list;
             }
+            return list;
         }
 
         public static int Insert(AddOn a)
         {
-            using (var conn = Db.Open())
-            using (var cmd = Db.Proc(conn, null, "dbo.usp_AddOns_Insert"))
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
+            using (SqlCommand cmd = new SqlCommand("dbo.usp_AddOns_Insert", conn))
             {
-                Db.AddText(cmd, "@Name", a.Name, 60);
-                Db.AddMoney(cmd, "@Price", a.Price);
-                Db.AddText(cmd, "@Kind", a.Kind, 10);
-                Db.AddBit(cmd, "@IsActive", a.IsActive);
-                return Convert.ToInt32(cmd.ExecuteScalar());
+                cmd.CommandType = CommandType.StoredProcedure;
+                cmd.Parameters.Add("@Name", SqlDbType.NVarChar, 60).Value = a.Name;
+                cmd.Parameters.Add(new SqlParameter("@Price", SqlDbType.Decimal) { Precision = 10, Scale = 2, Value = a.Price });
+                cmd.Parameters.Add("@Kind", SqlDbType.NVarChar, 10).Value = a.Kind;
+                cmd.Parameters.Add("@IsActive", SqlDbType.Bit).Value = a.IsActive;
+
+                conn.Open();
+                return Convert.ToInt32(cmd.ExecuteScalar());   // the new AddOnId
             }
         }
 
         public static bool Update(AddOn a)
         {
-            using (var conn = Db.Open())
-            using (var cmd = Db.Proc(conn, null, "dbo.usp_AddOns_Update"))
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
+            using (SqlCommand cmd = new SqlCommand("dbo.usp_AddOns_Update", conn))
             {
-                Db.AddInt(cmd, "@AddOnId", a.AddOnId);
-                Db.AddText(cmd, "@Name", a.Name, 60);
-                Db.AddMoney(cmd, "@Price", a.Price);
-                Db.AddBit(cmd, "@IsActive", a.IsActive);
-                return Db.RowsAffected(cmd) == 1;
+                cmd.CommandType = CommandType.StoredProcedure;
+                cmd.Parameters.Add("@AddOnId", SqlDbType.Int).Value = a.AddOnId;
+                cmd.Parameters.Add("@Name", SqlDbType.NVarChar, 60).Value = a.Name;
+                cmd.Parameters.Add(new SqlParameter("@Price", SqlDbType.Decimal) { Precision = 10, Scale = 2, Value = a.Price });
+                cmd.Parameters.Add("@IsActive", SqlDbType.Bit).Value = a.IsActive;
+
+                conn.Open();
+                int rowsAffected = Convert.ToInt32(cmd.ExecuteScalar());
+                return rowsAffected == 1;
             }
         }
     }

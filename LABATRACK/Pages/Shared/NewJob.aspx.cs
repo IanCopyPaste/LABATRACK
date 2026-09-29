@@ -38,6 +38,19 @@ namespace LABATRACK.Pages.Shared
         protected string MaxWeightData { get; private set; }
 
         protected int TurnaroundHours { get; private set; }
+
+        /// <summary>The least that may be paid at drop-off, as a percentage of the total (Pricing page).</summary>
+        protected int MinDownPercent { get; private set; }
+
+        protected string PaymentSub
+        {
+            get
+            {
+                if (MinDownPercent >= 100) return "Full payment is collected now.";
+                if (MinDownPercent == 0) return "Paid in full, in part, or at pick-up. The balance is collected before the load is handed over.";
+                return "Paid in full, or at least " + MinDownPercent + "% now. The balance is collected before the load is handed over.";
+            }
+        }
         protected bool CustomerFound { get; private set; }
         protected string FoundNote { get; private set; }
         protected string CancelUrl { get; private set; }
@@ -53,6 +66,7 @@ namespace LABATRACK.Pages.Shared
             addOns = AddOnRepository.GetAll().Where(a => a.IsActive).ToList();
 
             TurnaroundHours = settings.DefaultTurnaroundHours;
+            MinDownPercent = settings.MinimumDownPaymentPercent;
             CancelUrl = ResolveUrl(IsOwner ? "~/Admin/Dashboard.aspx" : "~/Pages/Shared/Dashboard.aspx");
             RatesData = string.Join(",", services.Select(s => s.ServiceId + ":" + s.RatePerKg.ToString("0.00", Inv)));
             RoutesData = string.Join(",", services.Select(s => s.ServiceId + ":" + s.StageCode));
@@ -185,14 +199,33 @@ namespace LABATRACK.Pages.Shared
                 return;
             }
 
-            // The cash box is read only for cash. The server checks it against the total it works
-            // out itself; the change the page showed is never used.
-            decimal? cash = null;
-            if (rbCash.Checked)
+            // Paid now: the full total (worked out on the server, so nothing is read), a down
+            // payment typed by the cashier, or nothing. Whatever was chosen is judged against the
+            // owner's minimum as it is now (PaymentService.CheckDropOff), even if the owner changed
+            // it after this page was drawn.
+            decimal? amountNow = null;
+            if (rbPayPart.Checked)
             {
                 decimal typed;
-                string text = txtCashReceived.Text.Replace(",", "").Replace("₱", "").Trim();
-                if (!decimal.TryParse(text, NumberStyles.Number, Inv, out typed))
+                if (!TryPesos(txtDownPayment.Text, out typed))
+                {
+                    ShowError("Enter the down payment in pesos, for example 150 or 150.00.");
+                    return;
+                }
+                amountNow = typed;
+            }
+            else if (rbPayLater.Checked)
+            {
+                amountNow = 0m;
+            }
+
+            // The cash box is read only for cash, and only when something is paid now. The server
+            // checks it against the amount it works out itself; the change the page showed is never used.
+            decimal? cash = null;
+            if (rbCash.Checked && amountNow != 0m)
+            {
+                decimal typed;
+                if (!TryPesos(txtCashReceived.Text, out typed))
                 {
                     ShowError("Enter the cash received from the customer.");
                     return;
@@ -225,6 +258,7 @@ namespace LABATRACK.Pages.Shared
                 WeightKg = weight,
                 Remarks = txtRemarks.Text,
                 ExpectedPickupAt = pickup,
+                AmountNow = amountNow,
                 Method = rbCash.Checked ? Payment.Cash : Payment.Ewallet,
                 CashReceived = cash,
             };
@@ -268,6 +302,13 @@ namespace LABATRACK.Pages.Shared
         }
 
         // ------------------------------------------------------------ Pieces
+
+        /// <summary>An amount in pesos as typed: "1,500", "₱150" and "150.00" all read as numbers.</summary>
+        private static bool TryPesos(string text, out decimal amount)
+        {
+            text = (text ?? "").Replace(",", "").Replace("₱", "").Trim();
+            return decimal.TryParse(text, NumberStyles.Number, Inv, out amount);
+        }
 
         private void ShowError(string text)
         {

@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data;
+using System.Data.SqlClient;
 using System.Linq;
 using LABATRACK.Models;
 
@@ -14,100 +16,114 @@ namespace LABATRACK.DataAccess
         /// <summary>When the first job was dropped off, or null if there are no jobs yet.</summary>
         public static DateTime? GetFirstJobDate()
         {
-            using (var conn = Db.Open())
-            using (var cmd = Db.Proc(conn, null, "dbo.usp_Reports_GetFirstJobDate"))
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
+            using (SqlCommand cmd = new SqlCommand("dbo.usp_Reports_GetFirstJobDate", conn))
             {
-                object v = cmd.ExecuteScalar();
-                return v == null || v == DBNull.Value ? (DateTime?)null : (DateTime)v;
+                cmd.CommandType = CommandType.StoredProcedure;
+
+                conn.Open();
+                object first = cmd.ExecuteScalar();
+                if (first == null || first == DBNull.Value) return null;
+                return (DateTime)first;
             }
         }
 
         /// <summary>Every payment and refund within [from, to), by payment date.</summary>
         public static List<ReportPayment> GetPaymentsBetween(DateTime from, DateTime to)
         {
-            using (var conn = Db.Open())
-            using (var cmd = Db.Proc(conn, null, "dbo.usp_Reports_GetPaymentsBetween"))
+            List<ReportPayment> list = new List<ReportPayment>();
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
+            using (SqlCommand cmd = new SqlCommand("dbo.usp_Reports_GetPaymentsBetween", conn))
             {
-                Db.AddDateTime(cmd, "@From", from);
-                Db.AddDateTime(cmd, "@To", to);
-                var list = new List<ReportPayment>();
-                using (var r = cmd.ExecuteReader())
+                cmd.CommandType = CommandType.StoredProcedure;
+                cmd.Parameters.Add("@From", SqlDbType.DateTime2).Value = from;
+                cmd.Parameters.Add("@To", SqlDbType.DateTime2).Value = to;
+
+                conn.Open();
+                using (SqlDataReader r = cmd.ExecuteReader())
                 {
                     while (r.Read())
                     {
-                        list.Add(new ReportPayment
-                        {
-                            PaidAt = Db.GetDateTime(r, "PaidAt"),
-                            Amount = Db.GetDecimal(r, "Amount"),
-                            Method = Db.GetText(r, "Method"),
-                            Kind = Db.GetText(r, "Kind"),
-                        });
+                        ReportPayment payment = new ReportPayment();
+                        payment.PaidAt = (DateTime)r["PaidAt"];
+                        payment.Amount = (decimal)r["Amount"];
+                        payment.Method = (string)r["Method"];
+                        payment.Kind = (string)r["Kind"];
+                        list.Add(payment);
                     }
                 }
-                return list;
             }
+            return list;
         }
 
         /// <summary>Every job dropped off within [from, to), with its add-on lines attached.</summary>
         public static List<ReportJob> GetJobsBetween(DateTime from, DateTime to)
         {
-            var jobs = new List<ReportJob>();
-            using (var conn = Db.Open())
+            List<ReportJob> jobs = new List<ReportJob>();
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
             {
-                using (var cmd = Db.Proc(conn, null, "dbo.usp_Reports_GetJobsBetween"))
+                conn.Open();
+
+                // 1. The jobs.
+                using (SqlCommand cmd = new SqlCommand("dbo.usp_Reports_GetJobsBetween", conn))
                 {
-                    Db.AddDateTime(cmd, "@From", from);
-                    Db.AddDateTime(cmd, "@To", to);
-                    using (var r = cmd.ExecuteReader())
+                    cmd.CommandType = CommandType.StoredProcedure;
+                    cmd.Parameters.Add("@From", SqlDbType.DateTime2).Value = from;
+                    cmd.Parameters.Add("@To", SqlDbType.DateTime2).Value = to;
+
+                    using (SqlDataReader r = cmd.ExecuteReader())
                     {
                         while (r.Read())
                         {
-                            jobs.Add(new ReportJob
-                            {
-                                JobId = Db.GetInt(r, "JobId"),
-                                ClaimNumber = Db.GetText(r, "ClaimNumber"),
-                                CreatedAt = Db.GetDateTime(r, "CreatedAt"),
-                                ServiceId = Db.GetInt(r, "ServiceId"),
-                                ServiceName = Db.GetText(r, "ServiceName"),
-                                WeightKg = Db.GetDecimal(r, "WeightKg"),
-                                BillableKg = Db.GetDecimal(r, "BillableKg"),
-                                RatePerKgAtCreation = Db.GetDecimal(r, "RatePerKgAtCreation"),
-                                MinimumChargeAtCreation = Db.GetDecimal(r, "MinimumChargeAtCreation"),
-                                LaundryCharge = Db.GetDecimal(r, "LaundryCharge"),
-                                TotalAmount = Db.GetDecimal(r, "TotalAmount"),
-                                CurrentStatus = Db.GetText(r, "CurrentStatus"),
-                                CustomerId = Db.GetInt(r, "CustomerId"),
-                                CustomerName = Db.GetText(r, "CustomerName"),
-                                CreatedByName = Db.GetText(r, "CreatedByName"),
-                                FirstReadyAt = Db.GetDateTimeOrNull(r, "FirstReadyAt"),
-                                IsReturning = Db.GetBool(r, "IsReturning"),
-                                CustomerFirstJobAt = Db.GetDateTimeOrNull(r, "CustomerFirstJobAt"),
-                                VoidReason = Db.GetText(r, "VoidReason"),
-                            });
+                            ReportJob job = new ReportJob();
+                            job.JobId = (int)r["JobId"];
+                            job.ClaimNumber = (string)r["ClaimNumber"];
+                            job.CreatedAt = (DateTime)r["CreatedAt"];
+                            job.ServiceId = (int)r["ServiceId"];
+                            job.ServiceName = (string)r["ServiceName"];
+                            job.WeightKg = (decimal)r["WeightKg"];
+                            job.BillableKg = (decimal)r["BillableKg"];
+                            job.RatePerKgAtCreation = (decimal)r["RatePerKgAtCreation"];
+                            job.MinimumChargeAtCreation = (decimal)r["MinimumChargeAtCreation"];
+                            job.LaundryCharge = (decimal)r["LaundryCharge"];
+                            job.TotalAmount = (decimal)r["TotalAmount"];
+                            job.CurrentStatus = (string)r["CurrentStatus"];
+                            job.CustomerId = (int)r["CustomerId"];
+                            job.CustomerName = (string)r["CustomerName"];
+                            job.CreatedByName = (string)r["CreatedByName"];
+                            job.FirstReadyAt = r["FirstReadyAt"] as DateTime?;
+                            job.IsReturning = Convert.ToBoolean(r["IsReturning"]);
+                            job.CustomerFirstJobAt = r["CustomerFirstJobAt"] as DateTime?;
+                            job.VoidReason = r["VoidReason"] as string;
+                            job.AmountRefunded = (decimal)r["AmountRefunded"];
+                            jobs.Add(job);
                         }
                     }
                 }
 
-                using (var cmd = Db.Proc(conn, null, "dbo.usp_Reports_GetAddOnLinesBetween"))
+                // 2. The add-on lines of those jobs, each attached to its job.
+                Dictionary<int, ReportJob> byJob = jobs.ToDictionary(j => j.JobId);
+                using (SqlCommand cmd = new SqlCommand("dbo.usp_Reports_GetAddOnLinesBetween", conn))
                 {
-                    Db.AddDateTime(cmd, "@From", from);
-                    Db.AddDateTime(cmd, "@To", to);
-                    var byJob = jobs.ToDictionary(j => j.JobId);
-                    using (var r = cmd.ExecuteReader())
+                    cmd.CommandType = CommandType.StoredProcedure;
+                    cmd.Parameters.Add("@From", SqlDbType.DateTime2).Value = from;
+                    cmd.Parameters.Add("@To", SqlDbType.DateTime2).Value = to;
+
+                    using (SqlDataReader r = cmd.ExecuteReader())
                     {
                         while (r.Read())
                         {
                             ReportJob job;
-                            if (!byJob.TryGetValue(Db.GetInt(r, "JobId"), out job)) continue;
-                            job.AddOns.Add(new ReportAddOnLine
-                            {
-                                JobId = job.JobId,
-                                AddOnId = Db.GetInt(r, "AddOnId"),
-                                Name = Db.GetText(r, "Name"),
-                                Kind = Db.GetText(r, "Kind"),
-                                Quantity = Db.GetInt(r, "Quantity"),
-                                PriceAtCreation = Db.GetDecimal(r, "PriceAtCreation"),
-                            });
+                            if (!byJob.TryGetValue((int)r["JobId"], out job)) continue;
+
+                            ReportAddOnLine line = new ReportAddOnLine();
+                            line.JobId = job.JobId;
+                            line.AddOnId = (int)r["AddOnId"];
+                            line.Name = (string)r["Name"];
+                            line.Kind = (string)r["Kind"];
+                            line.Quantity = (int)r["Quantity"];
+                            line.PriceAtCreation = (decimal)r["PriceAtCreation"];
+                            job.AddOns.Add(line);
                         }
                     }
                 }
@@ -118,24 +134,26 @@ namespace LABATRACK.DataAccess
         /// <summary>Sales and job orders for every year there is data.</summary>
         public static List<YearTotal> GetYearTotals()
         {
-            using (var conn = Db.Open())
-            using (var cmd = Db.Proc(conn, null, "dbo.usp_Reports_GetYearTotals"))
+            List<YearTotal> list = new List<YearTotal>();
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
+            using (SqlCommand cmd = new SqlCommand("dbo.usp_Reports_GetYearTotals", conn))
             {
-                var list = new List<YearTotal>();
-                using (var r = cmd.ExecuteReader())
+                cmd.CommandType = CommandType.StoredProcedure;
+
+                conn.Open();
+                using (SqlDataReader r = cmd.ExecuteReader())
                 {
                     while (r.Read())
                     {
-                        list.Add(new YearTotal
-                        {
-                            Year = Db.GetInt(r, "SalesYear"),
-                            Sales = Db.GetDecimal(r, "Sales"),
-                            Orders = Db.GetInt(r, "Orders"),
-                        });
+                        YearTotal total = new YearTotal();
+                        total.Year = Convert.ToInt32(r["SalesYear"]);
+                        total.Sales = Convert.ToDecimal(r["Sales"]);
+                        total.Orders = Convert.ToInt32(r["Orders"]);
+                        list.Add(total);
                     }
                 }
-                return list;
             }
+            return list;
         }
     }
 }

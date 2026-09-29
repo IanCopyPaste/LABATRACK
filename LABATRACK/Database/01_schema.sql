@@ -227,27 +227,33 @@ GO
 
 /* ------------------------------------------------------------------ Payments
    Every peso that changes hands, as one row each, with who took it and when:
-     Drop-off    - the full payment when the job is created (the shop takes full payment only)
-     Adjustment  - the difference when the owner corrects a job: positive = collected,
-                   negative = refunded to a customer who overpaid
+     Drop-off    - what the customer paid when the job was created: the full total, or at least
+                   the minimum down payment (a percentage the owner sets on Pricing). No row
+                   when nothing was paid (only possible when that percentage is 0).
+     Balance     - a later payment towards what is still owed, while the load is in the shop.
+                   The last one is taken when the load is claimed: a load never leaves unpaid.
+     Adjustment  - money refunded when the owner corrects a job to a total below what was
+                   already paid (negative). Older databases may also hold positive rows, from
+                   when a higher total was collected at once.
      Void refund - a negative row giving back what was paid on a voided job, same method
-   Amount is always what the shop keeps (the job total), never the cash handed over.
-   CashReceived is the cash the customer handed over, for cash only, so the slip can print
-   the change (CashReceived - Amount) again on a reprint. After every save, the payments on a
-   job add up to exactly its TotalAmount (or 0 once it is voided). */
+   Amount is always what the shop keeps, never the cash handed over. CashReceived is the cash
+   the customer handed over, for cash only, so the slip can print the change
+   (CashReceived - Amount) again on a reprint. The payments on a job never add up to more than
+   its TotalAmount; what is missing is the balance (TotalAmount - AmountPaid in vw_JobPayments).
+   A job is Paid, Partially paid or Unpaid by comparing the two: it is worked out, never stored. */
 IF OBJECT_ID(N'dbo.Payments', N'U') IS NULL
 BEGIN
     CREATE TABLE dbo.Payments
     (
         PaymentId        INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_Payments PRIMARY KEY,
         JobId            INT           NOT NULL CONSTRAINT FK_Payments_JobOrders REFERENCES dbo.JobOrders (JobId),
-        Kind             NVARCHAR(12)  NOT NULL CONSTRAINT CK_Payments_Kind CHECK (Kind IN (N'Drop-off', N'Adjustment', N'Void refund')),
+        Kind             NVARCHAR(12)  NOT NULL CONSTRAINT CK_Payments_Kind CHECK (Kind IN (N'Drop-off', N'Balance', N'Adjustment', N'Void refund')),
         Amount           DECIMAL(10,2) NOT NULL CONSTRAINT CK_Payments_Amount CHECK (Amount <> 0),
         Method           NVARCHAR(10)  NOT NULL CONSTRAINT CK_Payments_Method CHECK (Method IN (N'Cash', N'E-wallet')),
         CashReceived     DECIMAL(10,2) NULL,
         PaidAt           DATETIME2     NOT NULL CONSTRAINT DF_Payments_PaidAt DEFAULT (SYSDATETIME()),
         RecordedByUserId INT           NOT NULL CONSTRAINT FK_Payments_Users REFERENCES dbo.Users (UserId),
-        CONSTRAINT CK_Payments_KindSign CHECK ((Kind = N'Drop-off' AND Amount > 0)
+        CONSTRAINT CK_Payments_KindSign CHECK ((Kind IN (N'Drop-off', N'Balance') AND Amount > 0)
                                             OR (Kind = N'Void refund' AND Amount < 0)
                                             OR  Kind = N'Adjustment'),
         CONSTRAINT CK_Payments_CashReceived CHECK (CashReceived IS NULL
@@ -256,6 +262,22 @@ BEGIN
 
     CREATE INDEX IX_Payments_PaidAt ON dbo.Payments (PaidAt);
     CREATE INDEX IX_Payments_JobId ON dbo.Payments (JobId);
+END
+GO
+
+-- Added with part payments (the Balance kind). A database built before then has the older two
+-- checks, which refuse a Balance row; this replaces them. On a new database it does nothing.
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints
+               WHERE name = N'CK_Payments_Kind' AND definition LIKE N'%Balance%')
+BEGIN
+    ALTER TABLE dbo.Payments DROP CONSTRAINT CK_Payments_Kind;
+    ALTER TABLE dbo.Payments DROP CONSTRAINT CK_Payments_KindSign;
+    ALTER TABLE dbo.Payments ADD CONSTRAINT CK_Payments_Kind
+        CHECK (Kind IN (N'Drop-off', N'Balance', N'Adjustment', N'Void refund'));
+    ALTER TABLE dbo.Payments ADD CONSTRAINT CK_Payments_KindSign
+        CHECK ((Kind IN (N'Drop-off', N'Balance') AND Amount > 0)
+            OR (Kind = N'Void refund' AND Amount < 0)
+            OR  Kind = N'Adjustment');
 END
 GO
 
@@ -270,7 +292,7 @@ BEGIN
     (
         NotificationId    INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_NotificationLog PRIMARY KEY,
         JobId             INT           NOT NULL CONSTRAINT FK_NotificationLog_JobOrders REFERENCES dbo.JobOrders (JobId),
-        Kind              NVARCHAR(10)  NOT NULL CONSTRAINT CK_NotificationLog_Kind CHECK (Kind IN (N'Drop-off', N'Ready')),
+        Kind              NVARCHAR(10)  NOT NULL CONSTRAINT CK_NotificationLog_Kind CHECK (Kind IN (N'Drop-off', N'Ready', N'Modified', N'Voided')),
         Recipient         NVARCHAR(254) NULL,
         Status            NVARCHAR(10)  NOT NULL CONSTRAINT CK_NotificationLog_Status CHECK (Status IN (N'Sent', N'Failed', N'Skipped')),
         Detail            NVARCHAR(400) NULL,
@@ -280,6 +302,18 @@ BEGIN
     );
 
     CREATE INDEX IX_NotificationLog_JobId ON dbo.NotificationLog (JobId);
+END
+GO
+
+-- Added with the order-updated and order-cancelled emails (the Modified and Voided kinds). A
+-- database built before then has the older check, which refuses them; this replaces it. On a new
+-- database it does nothing.
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints
+               WHERE name = N'CK_NotificationLog_Kind' AND definition LIKE N'%Modified%')
+BEGIN
+    ALTER TABLE dbo.NotificationLog DROP CONSTRAINT CK_NotificationLog_Kind;
+    ALTER TABLE dbo.NotificationLog ADD CONSTRAINT CK_NotificationLog_Kind
+        CHECK (Kind IN (N'Drop-off', N'Ready', N'Modified', N'Voided'));
 END
 GO
 

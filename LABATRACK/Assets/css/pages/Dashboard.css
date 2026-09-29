@@ -62,6 +62,12 @@
 }
 .job-card-rework .ico { margin-top: 1px; }
 
+/* A load that still owes money (a down payment was taken): paid before it is claimed. */
+.job-card-balance {
+  display: flex; gap: 6px; align-items: center; margin-top: 8px; padding: 5px 8px;
+  border-radius: 6px; background: var(--warning-soft); color: #8a5a14; font-size: 12px; font-weight: 550;
+}
+
 /* Label left, value right, one line each: the values do not wrap, so "3:40 PM" never
    splits across two lines. The column minimum above is sized to fit the longest date. */
 .job-card-meta {

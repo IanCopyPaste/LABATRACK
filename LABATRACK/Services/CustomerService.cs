@@ -84,8 +84,9 @@ namespace LABATRACK.Services
         /// <summary>Adds a new customer and returns its id. Throws BusinessRuleException if a detail is wrong.</summary>
         public static int Add(string name, string contact, string email)
         {
-            using (var conn = Db.Open())
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
             {
+                conn.Open();
                 return Add(conn, null, name, contact, email);
             }
         }
@@ -109,8 +110,9 @@ namespace LABATRACK.Services
         /// <summary>The owner corrects a customer's details. The change shows on every past and future job.</summary>
         public static void Update(int customerId, string name, string contact, string email)
         {
-            using (var conn = Db.Open())
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
             {
+                conn.Open();
                 Update(conn, null, customerId, name, contact, email);
             }
         }

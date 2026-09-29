@@ -1,4 +1,4 @@
-# LabaTrack: Laundry Shop Job Order and Sales Management System
+﻿# LabaTrack: Laundry Shop Job Order and Sales Management System
 
 IPT102 project (Quezon City University, BSIT). One student is building this in about 2.5 weeks and must be able to explain every important part in a defense. This file is the working summary of the approved proposal. If a request conflicts with it, say so before building anything.
 
@@ -29,7 +29,7 @@ The application is built from `.aspx` pages (with their `.aspx.cs` code-behind),
   - `Assets/css/Site.css`: shared styles for every page, including the `@font-face` rule.
   - `Assets/css/pages/<PageName>.css`: rules only one page needs, named after the page (for example `JobDetail.css`). A page picks its file by overriding `PageStyleSheet` in its code-behind. Rules used by two or more pages go in `Site.css` instead.
   - Stylesheets are loaded by `BasePage` through `Helpers/SiteStyle.cs`, which writes `@import` lines inside one `<style>` tag. This keeps the no-`<link>` rule.
-  - `Assets/js/<PageName>.js`: a page's script, loaded with `<script src="<%= AssetUrl.Get("~/Assets/js/<PageName>.js") %>"></script>` just before `</body>`. Shared behaviour gets its own file (for example `Print.js` for print buttons marked `data-print`, `Confirm.js` for buttons that ask first, `ShowPassword.js` for password boxes, and `Sidebar.js` for the collapsible menu; see Screens).
+  - `Assets/js/<PageName>.js`: a page's script, loaded with `<script src="<%= AssetUrl.Get("~/Assets/js/<PageName>.js") %>"></script>` just before `</body>`. Shared behaviour gets its own file (for example `Print.js` for print buttons marked `data-print`, `Confirm.js` for buttons that ask first, `ShowPassword.js` for password boxes, `Sidebar.js` for the collapsible menu, `Loading.js` for the spinner and top bar while the server works, and `NumericInput.js` for number boxes; see Screens).
   - Always reference `.js` and `.css` through `AssetUrl.Get` (stylesheets already go through it in `SiteStyle.cs`). It appends `?v=<file time>`, so a browser never runs a cached old script against new markup. A plain `src="../Assets/js/..."` once left an edited page reading a `data-` attribute that no longer existed, which showed ₱NaN and disabled the save button.
   - Values a script needs from the server (such as the total for the change calculator) go in `data-` attributes on the page, and the script reads them. Never hard-code them in the `.js` file.
   - Scripts only improve the display. Every rule (prices, change, validation) is checked again on the server in `.cs`.
@@ -97,7 +97,7 @@ The route is copied onto the job when it is created (see Pricing rules, freeze a
 | a work stage | the next work stage on the route, or Inspection after the last one | |
 | Inspection | Ready for pick-up | Pass. Triggers the ready email. |
 | Inspection | a work stage on the job's route | Fail. Rework. Reason required. A stage the job does not have is never offered. |
-| Ready for pick-up | Claimed | Already paid in full at drop-off (see Payments). |
+| Ready for pick-up | Claimed | Only with nothing owed: the balance is collected in the same save (see Payment rules). |
 | Queued | Voided | Reason required. Only from Queued. |
 
 //use smtp setup for a while for email sending
@@ -114,6 +114,7 @@ Claimed and Voided are final.
 - Total = laundry charge + sum of add-on lines, where a line is `Quantity * PriceAtCreation`.
 - Laundry charge = billable kilos x the service's rate per kilo, then raised to the minimum charge if lower. Add-ons are added after.
 - Billable kilos = weight rounded up to the next multiple of `RoundingIncrementKg` (default 1, so 3.2 kg bills as 4 kg).
+- **Minimum down payment.** The owner sets it on the Pricing page too, as a percentage of the total (see Payment rules).
 - **Maximum weight per job.** The owner sets it on the Pricing page (stored in `Settings`, draft default 100 kg). A weight above it is refused when a job is created and when the owner edits a job, on screen and again in `PricingService`. A bigger load is split into two or more jobs.
 - Freeze the price at creation. Copy the service rate into `JobOrders.RatePerKgAtCreation` and each add-on price into `JobAddOns.PriceAtCreation`. Compute `TotalAmount` once and store it. Never recompute an old job from today's prices, or historical sales silently change when the owner edits a rate. The service's route (its work stages) is copied onto the job the same way.
 - **A service in use cannot be changed.** While any job with that service is still in the shop (anything not Claimed or Voided), the owner cannot edit the service at all: not its name, rate, stages, or Active status. The Pricing page shows it as in use, with how many loads, and its Edit button is off. It opens up again once the last of those loads is claimed or voided. The owner can always add a new service, so a change that cannot wait is made as a new service. Add-ons are not locked this way; their prices are frozen onto each job.
@@ -123,20 +124,23 @@ Claimed and Voided are final.
 
 ## Payment rules
 
-- **Full payment only, collected at drop-off.** The shop does not accept partial payments, balances, or pay-at-pick-up. A job is saved only together with one payment for exactly its `TotalAmount`. There is no Partial or Unpaid state.
-- The payment is a row in `Payments` (job, amount, method Cash or E-wallet, timestamp, staff). `Amount` is always the job total, never the cash the customer handed over, so the drawer totals stay correct.
-- **Cash and change.** For cash, staff type the cash received. The page shows the change while they type, with a script (`Assets/js/NewJob.js`) that only displays it. On save, the server checks that cash received is at least the total and works out change = cash received − total itself; it never trusts the browser's number. Cash received is stored on the payment (`Payments.CashReceived`, nullable, cash only), so the slip can print "Cash received" and "Change" and reprints stay correct.
-- E-wallet is only a declared method that staff selects. No gateway, no webhooks, no verification. The amount is the exact total, and there is no change.
-- Claiming needs no payment step, because every job was paid in full at drop-off. Ready for pick-up to Claimed is only a status change.
-- Creating a job saves the job, its add-ons, the first history row (Queued), and its payment in one `SqlTransaction`. All of it or none of it.
-- Voiding a job inserts an offsetting negative `Payments` row (a refund of everything paid on the job, same method) in the same transaction, so totals and the cash drawer stay correct.
-- **Owner edits that change the total** (for example a corrected weight). Allowed only while the job is not Claimed or Voided. The service itself can be changed only while the job is still Queued, because a different service can have a different route and a load already in, say, Folding may not have that stage on the new one. Weight, add-on, and customer corrections stay allowed until the job is claimed. The job update and one adjustment row in `Payments` for the difference are saved in one `SqlTransaction`:
-  - New total higher: a positive row, the extra amount collected from the customer.
-  - New total lower (the customer overpaid): a negative row, the difference refunded to the customer. The screen tells the owner exactly how much to give back.
-  - When the extra amount is collected in cash, the same cash received and change rules as a new job apply.
-  - Same total: no payment row.
-  - The owner picks Cash or E-wallet for the adjustment; it defaults to the job's original method.
-  - Rule that keeps this simple to defend: after every save, the payments on a job always add up to exactly its `TotalAmount`. There is still never a balance.
+The proposal (scope, payment recording) says the system records whether a job order is **paid, partially paid, or unpaid**. The shop's rules that follow from it are decided and live in `PaymentService`.
+
+- **At drop-off the customer pays in full, or at least a minimum down payment.** The minimum is a percentage of the total that the owner sets on the Pricing page (`Settings.MinimumDownPaymentPercent`, default 50). Every choice from that minimum up to the whole total is allowed. 100 means full payment only; 0 also allows paying nothing now (pay at pick-up). The minimum is rounded up to the centavo (50% of ₱135.00 is ₱67.50).
+- **Payment status is worked out, never stored.** Paid when `AmountPaid` from `vw_JobPayments` is at least the total, Partially paid when something was paid but not all, Unpaid when nothing is paid (`PaymentService.StatusOf`). The balance is total − paid. So the status can never go stale, and a voided job (paid and refunded) owes nothing.
+- The payment is a row in `Payments` (job, kind, amount, method Cash or E-wallet, timestamp, staff). `Amount` is always what the shop keeps, never the cash the customer handed over, so the drawer totals stay correct. Kinds: `Drop-off` (paid when the job was created), `Balance` (paid later), `Adjustment` (an owner's correction that refunds an overpayment), `Void refund`. A job paid nothing at drop-off has no drop-off row.
+- **Cash and change.** For cash, staff type the amount paid now and the cash received (`Assets/js/NewJob.js`, and `Assets/js/JobDetail.js` for later payments). The page shows the change while they type, but only displays it. On save, the server checks that the cash covers the amount being paid and works out change = cash received − amount itself; it never trusts the browser's number. Cash received is stored on the payment (`Payments.CashReceived`, nullable, cash only), so the slip and job page can show "Cash received" and "Change" again.
+- E-wallet is only a declared method that staff selects. No gateway, no webhooks, no verification. The amount is exactly what is being paid, and there is no change.
+- **The balance can be paid any time while the load is in the shop**, in one or more payments, on the job page ("Take a payment", `PaymentService.Collect`). A payment cannot be more than the balance, and the page's shown balance is sent back and checked, so two staff cannot take the same money twice.
+- **A load is never claimed with a balance.** At Ready for pick-up, "Collect ₱X and mark claimed" (`StatusService.Claim`) takes the whole balance and marks the job Claimed in one `SqlTransaction`. A plain move to Claimed is refused while anything is owed, in `StatusService` itself, not only on the page. A fully paid load is claimed as before, with no payment step. The job board shows a Collect link instead of Mark claimed for a Ready load that still owes money.
+- Creating a job saves the job, its add-ons, the first history row (Queued), and what was paid now in one `SqlTransaction`. All of it or none of it.
+- Voiding a job inserts an offsetting negative `Payments` row for each method it was paid with (a refund of everything paid on the job, same method) in the same transaction, so totals and the cash drawer stay correct. A job with nothing paid needs no refund row.
+- **Owner edits that change the total** (for example a corrected weight). Allowed only while the job is not Claimed or Voided. The service itself can be changed only while the job is still Queued, because a different service can have a different route and a load already in, say, Folding may not have that stage on the new one. Weight, add-on, and customer corrections stay allowed until the job is claimed. The job update and any refund row are saved in one `SqlTransaction`. A correction never takes money on the spot:
+  - New total higher than what was paid: the difference is simply a bigger balance, collected before pick-up like any balance. No payment row.
+  - New total below what was already paid (the customer overpaid): a negative `Adjustment` row refunds the excess, and the screen tells the owner exactly how much to give back. The owner picks Cash or E-wallet for it; it defaults to the job's original method.
+  - The page sends back the amount it showed (new total − paid), and the save is refused if it is no longer the same.
+  - Rule that keeps this simple to defend: the payments on a job never add up to more than its `TotalAmount`, and what is missing is the balance.
+- Daily sales stay money received per day, counted on `Payments.PaidAt`: a balance counts on the day it was collected, and a down payment on the day it was taken. Nothing in the reports counts money that has not been collected.
 - Recomputing an edited total uses the frozen prices: the job's `RatePerKgAtCreation` and each existing add-on's `PriceAtCreation`. Only something newly chosen in the edit (a different service or a newly ticked add-on) uses today's price, which is then frozen onto the job like any other.
 
 ## Data rules
@@ -157,9 +161,9 @@ Tables, as built in `01_schema.sql` (the student asked for the backend to be bui
 - `JobAddOns` (job, add-on, quantity, price at creation) — `quantity` is always 1 for a service and 1 or more for a product, never 0; a line amount is `Quantity * PriceAtCreation`. Added: `AddedAt` and `RemovedAt`: an add-on the owner takes off a job is marked removed, never deleted (a filtered unique index allows one current line per add-on)
 - `JobStatusHistory` (job, from, to, changed at, changed by, reason)
 - `Payments` (job, amount, method, cash received, paid at, recorded by) — added: `Kind` (`Drop-off`, `Adjustment`, `Void refund`), so each row says what it was
-- `NotificationLog` (job, kind `Drop-off` or `Ready`, recipient, status `Sent`/`Failed`/`Skipped`, detail, resend flag, attempted at and by)
-- `Settings` (key/value: minimum charge, rounding increment, maximum weight per job, unclaimed threshold in days, default turnaround hours, shop name, slip header, and the rework stages allowed after a failed inspection)
-- Views: `vw_JobPayments` (the amount paid per job, net of refunds, also split by method) and `vw_JobList` (a job with its customer, service, latest status change and add-ons, the one shape every job screen reads)
+- `NotificationLog` (job, kind `Drop-off`, `Ready`, `Modified` or `Voided`, recipient, status `Sent`/`Failed`/`Skipped`, detail, resend flag, attempted at and by)
+- `Settings` (key/value: minimum charge, rounding increment, maximum weight per job, minimum down payment percent, unclaimed threshold in days, default turnaround hours, shop name, slip header, and the rework stages allowed after a failed inspection)
+- Views: `vw_JobPayments` (the amount paid per job, net of refunds, also split by method; the balance is the total minus it) and `vw_JobList` (a job with its customer, service, latest status change and add-ons, the one shape every job screen reads)
 
 ## T-SQL conventions
 
@@ -179,6 +183,7 @@ Tables, as built in `01_schema.sql` (the student asked for the backend to be bui
 Every query the application runs goes through a stored procedure: reads, inserts, updates, lookups, and report queries alike. The backend is built this way: `Database/04_procedures.sql` holds every procedure (`usp_<Table>_<Action>`), and the repositories in `DataAccess/` are the only code that calls them. A new query means a new procedure there, never SQL text in C#.
 
 - C# never sends SQL text. Repositories in `DataAccess/` call a procedure by name with `CommandType.StoredProcedure` and pass every value as a `SqlParameter`. No `CommandType.Text` and no SQL strings in `.cs` files, even for a one-line lookup.
+- **Write each call out in full, in plain ADO.NET, inside the repository method** (the student's choice, so every query can be read and explained top to bottom, with no helper functions in between): a `SqlConnection` from `Db.ConnectionString`, a `SqlCommand` with `CommandType.StoredProcedure`, one `cmd.Parameters.Add("@Name", SqlDbType.NVarChar, 50).Value = name;` line per parameter (a value that can be null is `(object)value ?? DBNull.Value`; a decimal states its precision and scale), `conn.Open()`, then read the row with `reader["Column"]` one column per line (`(int)`, `(string)`, `(decimal)` for a column that cannot be empty; `as string`, `as DateTime?` for one that can). Each repository keeps one private `Map` method that turns a row into an object. `Db.cs` holds only the connection string and is the one place that reads `LABATRACK_conn`; there are no `Db.AddText`-style wrappers. A save that spans several tables opens its own `SqlConnection` and `SqlTransaction` in the service and passes them to the repositories' `(conn, tx, ...)` methods.
 - The procedures live in `Database/04_procedures.sql`, which runs after `01_schema.sql`. Like the other scripts it starts with `USE labatrack;` and `GO`, and it can be re-run: each procedure is `CREATE OR ALTER PROCEDURE`, one per batch.
 - Name procedures `dbo.usp_<Table>_<Action>`, for example `usp_JobOrders_Insert`, `usp_JobOrders_AdvanceStatus`, `usp_Payments_GetDailyTotal`.
 - Each procedure starts with `SET NOCOUNT ON;` and declares its parameters with the column types (`DECIMAL(10,2)` for money, `NVARCHAR` for names, `DATETIME2` for timestamps).
@@ -197,7 +202,9 @@ Every query the application runs goes through a stored procedure: reads, inserts
 ## Notifications
 
 - Email only, sent through `EmailService`, with the message bodies built in `EmailTemplates.cs`.
-- Two emails to customers: at drop-off (includes the claim number) and when the job becomes Ready for pick-up.
+- Four emails to customers: at drop-off (includes the claim number and, for a down payment, the balance due); **when the owner corrects the order** (what changed, the order as it now stands, any balance or refund, and what to do: ask for an updated slip, pay the balance before pick-up); **when the order is voided** (the reason, the refund, and what to do next: the claim number is no longer valid, how to get the refund, collect any laundry still at the shop, contact the shop with questions); and when the job becomes Ready for pick-up (with any balance still to pay).
+  - The update email is sent by `JobOrderService.SaveEdit` after the correction is saved, only when something the customer cares about changed (name, contact number, email address, service, weight, an add-on, or the total). A corrected remark alone is the shop's own note and sends nothing. The list of changes is built at the moment of the save (`EditSummary`), while the old values are still known.
+  - The void email is sent by `StatusService.Void` after the void and its refund are saved. Because the reason and the refunds are read from the job's own rows, a resend says the same as the first email, so the voided job's page has a "Resend cancellation email" button.
 - One email to the owner: the password reset link (see Security rules). It is not about a job, so it is not logged in `NotificationLog`, and its body is built in `EmailTemplates.cs` like the others.
 - A failed send must never block or roll back the job. Log every attempt in `NotificationLog` (Sent, Failed, or Skipped), and give staff a resend button on `JobDetail`.
 - SMTP credentials never go in source control.
@@ -208,11 +215,15 @@ Every query the application runs goes through a stored procedure: reads, inserts
 
 The job board (`Pages/Shared/Dashboard.aspx`) keeps the oldest first in each column, because that is the order loads are worked. The owner's "Active job orders" table (`Admin/Dashboard.aspx`) lists the same jobs newest drop-off first, so a job just taken in is at the top, with a Stage filter (`Assets/js/AdminDashboard.js`) that only hides rows; each choice shows its count.
 
-**Confirmation windows.** A button that changes something for good asks first: creating a job (with the order summary, total, cash and change), every stage move on the board and on JobDetail (pass inspection, mark claimed), rework, void, and deleting a staff account. The button carries `data-confirm-title` (and optionally `data-confirm-text`, `data-confirm-ok`, `data-confirm-danger`), and `Assets/js/Confirm.js` shows the window; Continue presses the button for real. The words of the stage-move question come from `Helpers/MoveConfirm.cs`, so the board and JobDetail ask the same thing. Display only: the server checks every rule again.
+Every list of jobs shows how a job stands on payment (Paid in full, Partial with the amount due, or Unpaid) from `Helpers/PaymentBadge.cs`, so the owner sees who still owes money at a glance; the owner's dashboard also shows the total still to collect. A job card on the board says how much is still to pay, and a Ready load that owes money links to its job page instead of offering Mark claimed. The slip prints each payment, the balance due, and a PAID IN FULL, PARTIALLY PAID or UNPAID stamp.
+
+**Confirmation windows.** A button that changes something for good asks first: creating a job (with the order summary, total, cash and change), every stage move on the board and on JobDetail (pass inspection, collect the balance and mark claimed), taking a payment, rework, void, and deleting a staff account. The button carries `data-confirm-title` (and optionally `data-confirm-text`, `data-confirm-ok`, `data-confirm-danger`), and `Assets/js/Confirm.js` shows the window; Continue presses the button for real. The words of the stage-move question come from `Helpers/MoveConfirm.cs`, so the board and JobDetail ask the same thing. Display only: the server checks every rule again.
+
+**Number boxes and loading feedback.** A box that takes a number keeps letters out (`Assets/js/NumericInput.js`): it reads the box's `inputmode`, so every existing and future box with `inputmode="decimal"` (digits and one dot: weight, pesos, cash), `"numeric"` (digits only: quantities, percentages) or `"tel"` (digits, space, `+ - ( )`: contact numbers) is covered without extra markup; a wrong key is not typed and pasted text is cleaned. Any new number box must therefore carry the right `inputmode`. `Assets/js/Loading.js` (on every page with buttons or links) puts a spinner on the button that was pressed, slides a thin bar along the top of the window, and ignores a second press while the first is being sent, so a payment or a job cannot be sent twice by a double click. It does not disable the button, because a disabled button is left out of the posted form and the server reads which button was pressed. The spinner is a background picture (`Assets/icons/spinner-light.svg` and `spinner-dark.svg`) so that it also works on `<input type="submit">`. Both are display only: the server checks every number and every rule again.
 
 **Menu and password boxes.** The menu collapses to its icons on wide screens (`Assets/js/Sidebar.js`); the choice is kept in the `lt-sidebar` cookie, which `NavBar.cs` reads, so the next page is drawn the same way without a flicker. Every password box has a show/hide button (`Assets/js/ShowPassword.js`, buttons marked `data-reveal`); boxes go back to hidden when the form is sent.
 
-**JobDetail.** Show job ID and customer info once in a header. Below it, a stage stepper that shows only the stages on that job's route: completed stages show time and staff, the current stage is highlighted, future stages are greyed. The "advance" button appears only on the current stage. Voided is its own red state, not a step in the bar. Use a vertical timeline on narrow screens.
+**JobDetail.** Show job ID and customer info once in a header. Below it, a stage stepper that shows only the stages on that job's route: completed stages show time and staff, the current stage is highlighted, future stages are greyed. The "advance" button appears only on the current stage. Voided is its own red state, not a step in the bar. Use a vertical timeline on narrow screens. The Payment card lists every payment with its cash and change, then what is paid so far and the balance due; while something is owed it offers "Take a payment" (part or all of the balance), and at Ready for pick-up the release card collects the balance and marks the job claimed in one save. The card's status pill says Paid in full, Partially paid or Unpaid.
 
 **Owner reports.** Daily and monthly sales, cash vs e-wallet split, most-availed services, average turnaround (first Queued to first Ready), unclaimed loads, and a comparison with the previous period. Daily sales and the cash split come from `Payments.PaidAt`, which is what the drawer check needs. Service popularity comes from the job's created date. Do not mix the two.
 
@@ -267,7 +278,8 @@ LabaTrack/
 │   ├── PricingService.cs     *
 │   ├── StatusService.cs      *
 │   ├── AuthService.cs        *
-│   ├── JobOrderService.cs    creating a job and the owner's corrections (payment rules)
+│   ├── JobOrderService.cs    creating a job and the owner's corrections
+│   ├── PaymentService.cs     *  the payment rules: down payment, balance, change, paid / partial / unpaid
 │   ├── CustomerService.cs    customer checks (one customer per contact number)
 │   ├── ClaimNumberGenerator.cs
 │   ├── EmailService.cs
@@ -283,6 +295,7 @@ LabaTrack/
 │   ├── SiteStyle.cs          writes the <style> @import lines for Site.css and the page's stylesheet
 │   ├── Icons.cs              inlines SVG icons from Assets/icons
 │   ├── MoveConfirm.cs        the words of the "move this job?" confirmation window
+│   ├── PaymentBadge.cs       the Paid / Partial / Unpaid label on the job lists
 │   └── EmailTemplates.cs     email subjects and bodies
 ├── Database/
 │   ├── 01_schema.sql         *
@@ -330,5 +343,6 @@ Ask the student before hard-coding any of these. Store them in `Settings`, not i
 3. Days before an unclaimed load is flagged.
 4. Default turnaround hours used for the expected pick-up date on the slip.
 5. Whether rework may return to Drying or Folding, or only to Washing (default: any of the three).
-6. Whether the refund-on-void rule above matches what the student wants to demonstrate.
+6. Whether the refund-on-void rule above matches what the student wants to demonstrate (decided: a void refunds everything paid, which after a down payment can be less than the total).
 7. Maximum weight per job (draft default 100 kg), set on the Pricing page.
+8. Minimum down payment (decided: an owner-set percentage of the total, default 50%), set on the Pricing page. The student first wrote "full payment only" here, then found that the proposal records paid, partially paid and unpaid, and changed the rule.

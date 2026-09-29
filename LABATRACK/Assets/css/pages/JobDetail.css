@@ -25,6 +25,14 @@
 .voided-banner { border-color: #f1c3c0; background: var(--danger-soft); }
 .rework td { background: #fffaf2; }
 .row-between { display: flex; justify-content: space-between; width: 100%; }
+
+/* What is still owed, and the forms that take it (JobDetail.js shows the change). */
+.pay-totals { display: flex; flex-direction: column; gap: 4px; border-top: 1px solid var(--border); }
+.pay-totals .balance-due { color: var(--warning); }
+.pay-form { display: flex; flex-direction: column; gap: 12px; border-top: 1px solid var(--border); }
+.pay-form .btn[data-pay-submit] { align-self: flex-end; }
+/* In the narrow payment column the button takes the full width. */
+#pay .pay-form .btn[data-pay-submit] { align-self: stretch; justify-content: center; }
 @media (max-width: 860px) {
   .stepper { grid-auto-flow: row; grid-template-columns: minmax(0, 1fr); gap: 0; padding: 16px 20px; }
   .step { display: grid; grid-template-columns: 32px 1fr; column-gap: 14px; text-align: left; padding: 0 0 18px; }

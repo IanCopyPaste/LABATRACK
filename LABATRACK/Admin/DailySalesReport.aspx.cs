@@ -36,7 +36,8 @@ namespace LABATRACK.Admin
         protected string PrevDayLink { get; private set; }
         protected string NextDayLink { get; private set; }
 
-        // One line in the ledger: a payment at drop-off, a correction, or a refund.
+        // One line in the ledger: a payment at drop-off (in full or a down payment), a balance
+        // paid later, a correction, or a refund.
         protected class Line
         {
             public DateTime At;
@@ -106,8 +107,10 @@ namespace LABATRACK.Admin
                 what = "Refund on void" + (string.IsNullOrEmpty(p.Reason) ? "" : " · " + p.Reason);
             else if (p.Kind == Payment.Adjustment)
                 what = (p.Amount > 0 ? "Correction, collected" : "Correction, refunded") + " · " + p.ServiceName;
+            else if (p.Kind == Payment.BalancePayment)
+                what = "Balance paid · " + p.ServiceName;
             else
-                what = p.ServiceName + " · " + p.WeightKg.ToString("0.0#", Inv) + " kg";
+                what = (p.Amount < p.JobTotal ? "Down payment · " : "") + p.ServiceName + " · " + p.WeightKg.ToString("0.0#", Inv) + " kg";
             return new Line
             {
                 At = p.PaidAt, Claim = p.ClaimNumber, Customer = p.CustomerName, What = what,

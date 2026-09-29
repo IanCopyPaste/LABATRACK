@@ -105,6 +105,15 @@ namespace LABATRACK.Pages.Shared
             }
         }
 
+        /// <summary>
+        /// A load that is ready but still owes money: its card links to the job page, where the
+        /// balance is taken and the load claimed in one save (StatusService.Claim).
+        /// </summary>
+        protected static bool CollectFirst(JobOrder job)
+        {
+            return job.CurrentStatus == StatusService.Ready && job.Balance > 0;
+        }
+
         /// <summary>On a card whose service skips stages, says which, so nobody looks for it in Folding.</summary>
         protected static string RouteNote(JobOrder job)
         {
@@ -135,13 +144,14 @@ namespace LABATRACK.Pages.Shared
         protected string UnclaimedNote(JobOrder job)
         {
             int days = ReportService.DaysWaiting(job.StatusSince, Data.Now);
-            return "Ready since " + job.StatusSince.ToString("MMM d", Inv) + " · " + days + (days == 1 ? " day" : " days") + " unclaimed · paid";
+            return "Ready since " + job.StatusSince.ToString("MMM d", Inv) + " · " + days + (days == 1 ? " day" : " days") + " unclaimed · "
+                 + (job.Balance > 0 ? Peso(job.Balance) + " still to pay" : "paid");
         }
 
         protected static string VoidNote(JobOrder job)
         {
             return "Voided " + job.StatusSince.ToString("h:mm tt", Inv) + " by " + job.StatusBy
-                 + " · “" + job.StatusReason + "” · " + Peso(job.TotalAmount) + " refunded";
+                 + " · “" + job.StatusReason + "” · " + (job.PaymentMethod == null ? "nothing was paid" : "payment refunded");
         }
 
         protected static string StageCss(string stage)

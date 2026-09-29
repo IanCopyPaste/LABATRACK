@@ -120,6 +120,8 @@
         </div>
     </form>
 
+    <script src="<%= AssetUrl.Get("~/Assets/js/Loading.js") %>"></script>
+
     <script src="<%= AssetUrl.Get("~/Assets/js/Sidebar.js") %>"></script>
     <script src="<%= AssetUrl.Get("~/Assets/js/Charts.js") %>"></script>
 </body>

@@ -25,8 +25,8 @@ namespace LABATRACK.Pages.Shared
         protected global::System.Web.UI.WebControls.Repeater rptAddOns;
 
         /// <summary>
-        /// rptLaterPayments control.
+        /// rptPayments control.
         /// </summary>
-        protected global::System.Web.UI.WebControls.Repeater rptLaterPayments;
+        protected global::System.Web.UI.WebControls.Repeater rptPayments;
     }
 }

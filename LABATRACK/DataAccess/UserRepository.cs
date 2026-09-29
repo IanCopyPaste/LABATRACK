@@ -6,83 +6,119 @@ using LABATRACK.Models;
 
 namespace LABATRACK.DataAccess
 {
-    /// <summary>The Users table, through its stored procedures. The rules are in AuthService.</summary>
+    /// <summary>
+    /// The Users table, through its stored procedures. The rules are in AuthService.
+    /// Each method writes its own connection, command, parameters and reader out in full.
+    /// </summary>
     public static class UserRepository
     {
         public static UserAccount GetByUsername(string username)
         {
-            using (var conn = Db.Open())
-            using (var cmd = Db.Proc(conn, null, "dbo.usp_Users_GetByUsername"))
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
+            using (SqlCommand cmd = new SqlCommand("dbo.usp_Users_GetByUsername", conn))
             {
-                Db.AddText(cmd, "@Username", username, 50);
-                return ReadOne(cmd);
+                cmd.CommandType = CommandType.StoredProcedure;
+                cmd.Parameters.Add("@Username", SqlDbType.NVarChar, 50).Value = username;
+
+                conn.Open();
+                using (SqlDataReader r = cmd.ExecuteReader())
+                {
+                    if (!r.Read()) return null;
+                    return Map(r);
+                }
             }
         }
 
         public static UserAccount GetById(int userId)
         {
-            using (var conn = Db.Open())
-            using (var cmd = Db.Proc(conn, null, "dbo.usp_Users_GetById"))
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
+            using (SqlCommand cmd = new SqlCommand("dbo.usp_Users_GetById", conn))
             {
-                Db.AddInt(cmd, "@UserId", userId);
-                return ReadOne(cmd);
+                cmd.CommandType = CommandType.StoredProcedure;
+                cmd.Parameters.Add("@UserId", SqlDbType.Int).Value = userId;
+
+                conn.Open();
+                using (SqlDataReader r = cmd.ExecuteReader())
+                {
+                    if (!r.Read()) return null;
+                    return Map(r);
+                }
             }
         }
 
         /// <summary>Every account, the owner first, each with HasHistory filled in.</summary>
         public static List<UserAccount> GetAll()
         {
-            using (var conn = Db.Open())
-            using (var cmd = Db.Proc(conn, null, "dbo.usp_Users_GetAll"))
+            List<UserAccount> list = new List<UserAccount>();
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
+            using (SqlCommand cmd = new SqlCommand("dbo.usp_Users_GetAll", conn))
             {
-                var list = new List<UserAccount>();
-                using (var r = cmd.ExecuteReader())
+                cmd.CommandType = CommandType.StoredProcedure;
+
+                conn.Open();
+                using (SqlDataReader r = cmd.ExecuteReader())
                 {
                     while (r.Read())
                     {
                         UserAccount user = Map(r);
-                        user.HasHistory = Db.GetBool(r, "HasHistory");
+                        user.HasHistory = Convert.ToBoolean(r["HasHistory"]);
                         list.Add(user);
                     }
                 }
-                return list;
             }
+            return list;
         }
 
         public static UserAccount GetByResetTokenHash(byte[] tokenHash)
         {
-            using (var conn = Db.Open())
-            using (var cmd = Db.Proc(conn, null, "dbo.usp_Users_GetByResetTokenHash"))
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
+            using (SqlCommand cmd = new SqlCommand("dbo.usp_Users_GetByResetTokenHash", conn))
             {
-                Db.AddBinary(cmd, "@ResetTokenHash", tokenHash, 32);
-                return ReadOne(cmd);
+                cmd.CommandType = CommandType.StoredProcedure;
+                cmd.Parameters.Add("@ResetTokenHash", SqlDbType.VarBinary, 32).Value = tokenHash;
+
+                conn.Open();
+                using (SqlDataReader r = cmd.ExecuteReader())
+                {
+                    if (!r.Read()) return null;
+                    return Map(r);
+                }
             }
         }
 
         public static int Insert(string username, byte[] hash, byte[] salt, string role, bool isActive)
         {
-            using (var conn = Db.Open())
-            using (var cmd = Db.Proc(conn, null, "dbo.usp_Users_Insert"))
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
+            using (SqlCommand cmd = new SqlCommand("dbo.usp_Users_Insert", conn))
             {
-                Db.AddText(cmd, "@Username", username, 50);
-                Db.AddBinary(cmd, "@PasswordHash", hash, 32);
-                Db.AddBinary(cmd, "@PasswordSalt", salt, 16);
-                Db.AddText(cmd, "@Role", role, 10);
-                Db.AddBit(cmd, "@IsActive", isActive);
-                return Convert.ToInt32(cmd.ExecuteScalar());
+                cmd.CommandType = CommandType.StoredProcedure;
+                cmd.Parameters.Add("@Username", SqlDbType.NVarChar, 50).Value = username;
+                cmd.Parameters.Add("@PasswordHash", SqlDbType.VarBinary, 32).Value = hash;
+                cmd.Parameters.Add("@PasswordSalt", SqlDbType.VarBinary, 16).Value = salt;
+                cmd.Parameters.Add("@Role", SqlDbType.NVarChar, 10).Value = role;
+                cmd.Parameters.Add("@IsActive", SqlDbType.Bit).Value = isActive;
+
+                conn.Open();
+                return Convert.ToInt32(cmd.ExecuteScalar());   // the new UserId
             }
         }
 
         /// <summary>Saves a staff account's username and Active flag. Returns false if it is not a staff account.</summary>
         public static bool UpdateStaff(int userId, string username, bool isActive)
         {
-            using (var conn = Db.Open())
-            using (var cmd = Db.Proc(conn, null, "dbo.usp_Users_UpdateStaff"))
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
+            using (SqlCommand cmd = new SqlCommand("dbo.usp_Users_UpdateStaff", conn))
             {
-                Db.AddInt(cmd, "@UserId", userId);
-                Db.AddText(cmd, "@Username", username, 50);
-                Db.AddBit(cmd, "@IsActive", isActive);
-                return Db.RowsAffected(cmd) == 1;
+                cmd.CommandType = CommandType.StoredProcedure;
+                cmd.Parameters.Add("@UserId", SqlDbType.Int).Value = userId;
+                cmd.Parameters.Add("@Username", SqlDbType.NVarChar, 50).Value = username;
+                cmd.Parameters.Add("@IsActive", SqlDbType.Bit).Value = isActive;
+
+                conn.Open();
+                // The procedure ends with SELECT @@ROWCOUNT, read with ExecuteScalar (ExecuteNonQuery
+                // returns -1 under SET NOCOUNT ON).
+                int rowsAffected = Convert.ToInt32(cmd.ExecuteScalar());
+                return rowsAffected == 1;
             }
         }
 
@@ -92,87 +128,95 @@ namespace LABATRACK.DataAccess
         /// </summary>
         public static bool DeleteUnused(int userId)
         {
-            using (var conn = Db.Open())
-            using (var cmd = Db.Proc(conn, null, "dbo.usp_Users_DeleteUnused"))
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
+            using (SqlCommand cmd = new SqlCommand("dbo.usp_Users_DeleteUnused", conn))
             {
-                Db.AddInt(cmd, "@UserId", userId);
-                return Db.RowsAffected(cmd) == 1;
+                cmd.CommandType = CommandType.StoredProcedure;
+                cmd.Parameters.Add("@UserId", SqlDbType.Int).Value = userId;
+
+                conn.Open();
+                int rowsAffected = Convert.ToInt32(cmd.ExecuteScalar());
+                return rowsAffected == 1;
             }
         }
 
         /// <summary>Saves a new hash and salt, and clears failed tries, any lock and any reset link.</summary>
         public static void SetPassword(int userId, byte[] hash, byte[] salt)
         {
-            using (var conn = Db.Open())
-            using (var cmd = Db.Proc(conn, null, "dbo.usp_Users_SetPassword"))
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
+            using (SqlCommand cmd = new SqlCommand("dbo.usp_Users_SetPassword", conn))
             {
-                Db.AddInt(cmd, "@UserId", userId);
-                Db.AddBinary(cmd, "@PasswordHash", hash, 32);
-                Db.AddBinary(cmd, "@PasswordSalt", salt, 16);
-                Db.RowsAffected(cmd);
+                cmd.CommandType = CommandType.StoredProcedure;
+                cmd.Parameters.Add("@UserId", SqlDbType.Int).Value = userId;
+                cmd.Parameters.Add("@PasswordHash", SqlDbType.VarBinary, 32).Value = hash;
+                cmd.Parameters.Add("@PasswordSalt", SqlDbType.VarBinary, 16).Value = salt;
+
+                conn.Open();
+                cmd.ExecuteScalar();
             }
         }
 
         public static void SetLoginState(int userId, int failedLoginCount, DateTime? lockedUntil)
         {
-            using (var conn = Db.Open())
-            using (var cmd = Db.Proc(conn, null, "dbo.usp_Users_SetLoginState"))
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
+            using (SqlCommand cmd = new SqlCommand("dbo.usp_Users_SetLoginState", conn))
             {
-                Db.AddInt(cmd, "@UserId", userId);
-                Db.AddInt(cmd, "@FailedLoginCount", failedLoginCount);
-                Db.AddDateTime(cmd, "@LockedUntil", lockedUntil);
+                cmd.CommandType = CommandType.StoredProcedure;
+                cmd.Parameters.Add("@UserId", SqlDbType.Int).Value = userId;
+                cmd.Parameters.Add("@FailedLoginCount", SqlDbType.Int).Value = failedLoginCount;
+                cmd.Parameters.Add("@LockedUntil", SqlDbType.DateTime2).Value = (object)lockedUntil ?? DBNull.Value;
+
+                conn.Open();
                 cmd.ExecuteNonQuery();
             }
         }
 
         public static void SetRecoveryEmail(int userId, string email)
         {
-            using (var conn = Db.Open())
-            using (var cmd = Db.Proc(conn, null, "dbo.usp_Users_SetRecoveryEmail"))
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
+            using (SqlCommand cmd = new SqlCommand("dbo.usp_Users_SetRecoveryEmail", conn))
             {
-                Db.AddInt(cmd, "@UserId", userId);
-                Db.AddText(cmd, "@RecoveryEmail", email, 254);
+                cmd.CommandType = CommandType.StoredProcedure;
+                cmd.Parameters.Add("@UserId", SqlDbType.Int).Value = userId;
+                cmd.Parameters.Add("@RecoveryEmail", SqlDbType.NVarChar, 254).Value = (object)email ?? DBNull.Value;
+
+                conn.Open();
                 cmd.ExecuteNonQuery();
             }
         }
 
         public static void SetResetToken(int userId, byte[] tokenHash, DateTime expiresAt)
         {
-            using (var conn = Db.Open())
-            using (var cmd = Db.Proc(conn, null, "dbo.usp_Users_SetResetToken"))
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
+            using (SqlCommand cmd = new SqlCommand("dbo.usp_Users_SetResetToken", conn))
             {
-                Db.AddInt(cmd, "@UserId", userId);
-                Db.AddBinary(cmd, "@ResetTokenHash", tokenHash, 32);
-                Db.AddDateTime(cmd, "@ResetTokenExpiresAt", expiresAt);
+                cmd.CommandType = CommandType.StoredProcedure;
+                cmd.Parameters.Add("@UserId", SqlDbType.Int).Value = userId;
+                cmd.Parameters.Add("@ResetTokenHash", SqlDbType.VarBinary, 32).Value = tokenHash;
+                cmd.Parameters.Add("@ResetTokenExpiresAt", SqlDbType.DateTime2).Value = expiresAt;
+
+                conn.Open();
                 cmd.ExecuteNonQuery();
             }
         }
 
-        private static UserAccount ReadOne(SqlCommand cmd)
+        /// <summary>One row of the Users table. A column that can be empty in SQL is read with "as".</summary>
+        private static UserAccount Map(SqlDataReader r)
         {
-            using (var r = cmd.ExecuteReader())
-            {
-                return r.Read() ? Map(r) : null;
-            }
-        }
-
-        private static UserAccount Map(IDataRecord r)
-        {
-            return new UserAccount
-            {
-                UserId = Db.GetInt(r, "UserId"),
-                Username = Db.GetText(r, "Username"),
-                PasswordHash = Db.GetBytes(r, "PasswordHash"),
-                PasswordSalt = Db.GetBytes(r, "PasswordSalt"),
-                Role = Db.GetText(r, "Role"),
-                IsActive = Db.GetBool(r, "IsActive"),
-                FailedLoginCount = Db.GetInt(r, "FailedLoginCount"),
-                LockedUntil = Db.GetDateTimeOrNull(r, "LockedUntil"),
-                RecoveryEmail = Db.GetText(r, "RecoveryEmail"),
-                ResetTokenHash = Db.GetBytes(r, "ResetTokenHash"),
-                ResetTokenExpiresAt = Db.GetDateTimeOrNull(r, "ResetTokenExpiresAt"),
-                CreatedAt = Db.GetDateTime(r, "CreatedAt"),
-            };
+            UserAccount user = new UserAccount();
+            user.UserId = (int)r["UserId"];
+            user.Username = (string)r["Username"];
+            user.PasswordHash = (byte[])r["PasswordHash"];
+            user.PasswordSalt = (byte[])r["PasswordSalt"];
+            user.Role = (string)r["Role"];
+            user.IsActive = (bool)r["IsActive"];
+            user.FailedLoginCount = (int)r["FailedLoginCount"];
+            user.LockedUntil = r["LockedUntil"] as DateTime?;
+            user.RecoveryEmail = r["RecoveryEmail"] as string;
+            user.ResetTokenHash = r["ResetTokenHash"] as byte[];
+            user.ResetTokenExpiresAt = r["ResetTokenExpiresAt"] as DateTime?;
+            user.CreatedAt = (DateTime)r["CreatedAt"];
+            return user;
         }
     }
 }

@@ -30,8 +30,7 @@ namespace LABATRACK.Pages.Shared
         protected string NextStage { get; private set; }
         protected bool MinimumApplied { get; private set; }
         protected bool ReadyReached { get; private set; }
-        protected decimal? CashReceived { get; private set; }
-        protected decimal Change { get; private set; }
+        protected bool NothingPaid { get; private set; }
         protected string RefundNote { get; private set; }
         protected string BackUrl { get; private set; }
         protected string BackText { get; private set; }
@@ -43,9 +42,41 @@ namespace LABATRACK.Pages.Shared
         {
             get
             {
-                return Job.CustomerName + " · " + Job.ServiceName + "\n\nThe job is cancelled and the "
-                     + Peso(Job.AmountPaid) + " paid is refunded (" + (Job.PaymentMethod == Payment.Cash ? "in cash" : "by e-wallet")
-                     + "). A voided job can't be undone; it stays in history with the reason.";
+                return Job.CustomerName + " · " + Job.ServiceName + "\n\n"
+                     + (Job.AmountPaid > 0
+                        ? "The job is cancelled and the " + Peso(Job.AmountPaid) + " paid is refunded, by the same method it was paid."
+                        : "The job is cancelled. Nothing was paid, so nothing is refunded.")
+                     + " A voided job can't be undone; it stays in history with the reason.";
+            }
+        }
+
+        // ---- Payment ----
+
+        /// <summary>Something is still owed on a job that is still in the shop.</summary>
+        protected bool HasBalance { get { return InShop && Job.Balance > 0; } }
+
+        /// <summary>
+        /// The "take a payment" form: while something is owed, before the load is ready. At Ready
+        /// for pick-up the release card takes the whole balance instead, together with the claim.
+        /// </summary>
+        protected bool CanCollect { get { return HasBalance && Job.CurrentStatus != StatusService.Ready; } }
+
+        protected string PaymentPill
+        {
+            get
+            {
+                if (IsVoided) return "pill-danger";
+                if (Job.PaymentStatus == PaymentService.Paid) return "pill-ok";
+                return Job.PaymentStatus == PaymentService.PartiallyPaid ? "pill-warn" : "pill-danger";
+            }
+        }
+
+        protected string PaymentPillText
+        {
+            get
+            {
+                if (IsVoided) return "Refunded";
+                return Job.PaymentStatus == PaymentService.Paid ? "Paid in full" : Job.PaymentStatus;
             }
         }
 
@@ -92,6 +123,17 @@ namespace LABATRACK.Pages.Shared
                         StatusService.Void(jobId, txtVoidReason.Text, userId);
                         Done("voided");
                         break;
+                    case "pay":
+                        PaymentService.Collect(jobId, PostedPesos("payAmount"), Request.Form["payMethod"],
+                                               PostedCash("payMethod", "payCash"), ShownBalance(), userId);
+                        Done("paid");
+                        break;
+                    case "claim":
+                        // Takes the whole balance and hands the load over, in one save.
+                        StatusService.Claim(jobId, ShownBalance(), Request.Form["claimMethod"],
+                                            PostedCash("claimMethod", "claimCashReceived"), userId);
+                        Done("moved");
+                        break;
                     case "resend-dropoff":
                         CheckStillInShop();
                         EmailService.SendDropOff(jobId, userId, true);
@@ -102,12 +144,48 @@ namespace LABATRACK.Pages.Shared
                         EmailService.SendReady(jobId, userId, true);
                         Done("resent");
                         break;
+                    case "resend-voided":
+                        if (JobOrderRepository.GetById(jobId).CurrentStatus != StatusService.Voided)
+                            throw new BusinessRuleException("Only a voided job has a cancellation email.");
+                        EmailService.SendVoided(jobId, userId, true);
+                        Done("resent");
+                        break;
                 }
             }
             catch (BusinessRuleException ex)
             {
                 ShowNotice("warn", ex.Message);
             }
+        }
+
+        /// <summary>The balance the page showed (hfShownBalance), or -1 if it is missing, which no balance matches.</summary>
+        private decimal ShownBalance()
+        {
+            decimal shown;
+            return decimal.TryParse(hfShownBalance.Value, NumberStyles.Number, Inv, out shown) ? shown : -1m;
+        }
+
+        /// <summary>An amount typed in a plain form box: "1,500", "₱150" and "150.00" all read as numbers.</summary>
+        private decimal PostedPesos(string name)
+        {
+            decimal amount;
+            if (!TryPesos(Request.Form[name], out amount))
+                throw new BusinessRuleException("Enter the amount paid in pesos, for example 100 or 100.00.");
+            return amount;
+        }
+
+        /// <summary>The cash handed over, read only when Cash was chosen. Unreadable counts as none, which PaymentService refuses.</summary>
+        private decimal? PostedCash(string methodName, string cashName)
+        {
+            decimal cash;
+            if (Request.Form[methodName] != Payment.Cash) return null;
+            return TryPesos(Request.Form[cashName], out cash) ? cash : (decimal?)null;
+        }
+
+        private static bool TryPesos(string text, out decimal amount)
+        {
+            text = (text ?? "").Replace(",", "").Replace("₱", "").Trim();
+            return decimal.TryParse(text, NumberStyles.Number, Inv, out amount);
         }
 
         // Emails are resent only while the load is still in the shop; after that there is nothing to tell.
@@ -134,6 +212,7 @@ namespace LABATRACK.Pages.Shared
             MinimumApplied = PricingService.Quote(Job.WeightKg, Job.RatePerKgAtCreation, Job.MinimumChargeAtCreation,
                                                   Job.RoundingIncrementKgAtCreation, null).MinimumApplied;
             hfShownStatus.Value = Job.CurrentStatus;
+            hfShownBalance.Value = Money(Job.Balance);
             Title = "Job " + Job.ClaimNumber + " · LabaTrack";
             BackUrl = ResolveUrl(IsOwner ? "~/Admin/Dashboard.aspx" : "~/Pages/Shared/Dashboard.aspx");
             BackText = IsOwner ? "Back to dashboard" : "Back to job board";
@@ -151,12 +230,7 @@ namespace LABATRACK.Pages.Shared
             List<Payment> payments = PaymentRepository.GetByJob(jobId);
             rptPayments.DataSource = payments;
             rptPayments.DataBind();
-            Payment dropOff = payments.FirstOrDefault(p => p.Kind == Payment.DropOff);
-            if (dropOff != null && dropOff.CashReceived.HasValue)
-            {
-                CashReceived = dropOff.CashReceived;
-                Change = dropOff.CashReceived.Value - dropOff.Amount;   // change = cash received - total
-            }
+            NothingPaid = payments.Count == 0;
             RefundNote = BuildRefundNote(payments);
 
             rptEmails.DataSource = NotificationRepository.GetByJob(jobId);
@@ -233,14 +307,24 @@ namespace LABATRACK.Pages.Shared
                     if (job.CurrentStatus == StatusService.Ready)
                         text = "Passed inspection: ready for pick-up. The ready email is listed under Notifications.";
                     else if (job.CurrentStatus == StatusService.Claimed)
-                        text = "Marked as claimed. The load was handed over.";
+                        text = "Marked as claimed: paid in full and handed over.";
                     else
                         text = "Moved to " + job.CurrentStatus + ".";
                     break;
+                case "paid":
+                    text = job.Balance > 0
+                        ? "Payment recorded. " + Peso(job.Balance) + " is still owed, collected when the load is claimed."
+                        : "Payment recorded. The job is now paid in full.";
+                    break;
                 case "rework": text = "Sent back to " + job.CurrentStatus + " to be redone."; break;
-                case "voided": text = "Voided. " + BuildRefundNote(PaymentRepository.GetByJob(jobId)); break;
+                case "voided": text = "Voided. " + BuildRefundNote(PaymentRepository.GetByJob(jobId)) + " The cancellation email is listed under Notifications."; break;
                 case "resent": text = "Email tried again. The result is listed under Notifications."; break;
-                case "edited": text = "Correction saved. Any change in the total was settled and is listed under Payment."; break;
+                case "edited":
+                    text = "Correction saved. " + (job.Balance > 0
+                        ? "The balance is now " + Peso(job.Balance) + ", collected before pick-up."
+                        : "Nothing is owed on this job. A refund, if one was due, is listed under Payment.")
+                        + " The customer's update email is listed under Notifications.";
+                    break;
                 default: return;
             }
             ShowNotice("info", text);
@@ -278,8 +362,33 @@ namespace LABATRACK.Pages.Shared
         protected static string PaymentLabel(Payment p)
         {
             if (p.Kind == Payment.DropOff) return "Paid at drop-off · " + p.Method;
+            if (p.Kind == Payment.BalancePayment) return "Balance payment · " + p.Method;
             if (p.Kind == Payment.VoidRefund) return "Refund on void · " + p.Method;
             return (p.Amount > 0 ? "Collected on correction · " : "Refunded on correction · ") + p.Method;
+        }
+
+        /// <summary>" · cash ₱500.00, change ₱210.00" for a cash payment; empty otherwise.</summary>
+        protected static string CashNote(Payment p)
+        {
+            return p.CashReceived.HasValue ? " · cash " + Peso(p.CashReceived.Value) + ", change " + Peso(p.Change) : "";
+        }
+
+        /// <summary>A value typed in a plain form box, kept after a refused post; else the fallback.</summary>
+        protected string Posted(string name, string fallback)
+        {
+            return IsPostBack && Request.Form[name] != null ? Request.Form[name] : fallback;
+        }
+
+        /// <summary>True if the refused post chose this value (for keeping a radio button's choice).</summary>
+        protected bool IsPosted(string name, string value)
+        {
+            return IsPostBack && Request.Form[name] == value;
+        }
+
+        /// <summary>Money for a data- attribute or hidden field: dot decimal point, no grouping.</summary>
+        protected static string Money(decimal amount)
+        {
+            return amount.ToString("0.00", Inv);
         }
 
         protected static string EmailDetail(NotificationLogEntry n)
