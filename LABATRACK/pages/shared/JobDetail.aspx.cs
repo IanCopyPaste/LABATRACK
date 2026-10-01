@@ -67,7 +67,7 @@ namespace LABATRACK.pages.shared
 
         protected bool VoidNowChecked
         {
-            get { return !(IsPostBack && Request.Form["action"] == "void") || Request.Form["voidNow"] == "1"; }
+            get { return IsPostBack && Request.Form["action"] == "void" && Request.Form["voidNow"] == "1"; }
         }
 
         protected bool HasRefund { get { return IsVoided && Job.RefundStatus != null; } }
