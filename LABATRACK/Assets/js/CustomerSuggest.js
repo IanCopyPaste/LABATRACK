@@ -1,11 +1,4 @@
-﻿// Pages/Shared/NewJob.aspx
-// The dropdown of saved contact numbers under the contact box, so a returning customer is one click
-// away. The page writes every saved customer into the list (most recent first) as <li data-number
-// data-digits data-name>; this only filters and shows it. It matches the digits typed anywhere in a
-// number, numbers that start with them first. Clicking a number (or pressing Enter on the highlighted
-// one) fills the box and presses Find, which fills in the customer. Arrow keys move, Esc closes.
-// Display only: Find, and the save, check the number on the server.
-(function () {
+﻿(function () {
     var box = document.querySelector('[data-suggest]');
     if (!box) return;
     var list = document.getElementById(box.getAttribute('data-suggest'));
@@ -13,7 +6,7 @@
     var items = Array.prototype.slice.call(list.querySelectorAll('li[data-number]'));
     var emptyRow = list.querySelector('.suggest-empty');
     var findBtn = document.querySelector('button[name="action"][value="find"]');
-    var active = -1;      // the highlighted row among the ones shown
+    var active = -1;
     var shown = [];
     var MAX = 8;
 
@@ -24,7 +17,6 @@
 
     function digitsOf(text) { return text.replace(/\D/g, ''); }
 
-    // The rows that match what is typed: numbers starting with it first, then numbers containing it.
     function matches() {
         var typed = digitsOf(box.value);
         if (typed === '') return items.slice(0, MAX);
@@ -55,10 +47,8 @@
     function render() {
         shown = matches();
         var typed = digitsOf(box.value);
-        // A number typed in full that is already the only match needs no list.
         if (shown.length === 1 && typed !== '' && shown[0].getAttribute('data-digits') === typed) { close(); return; }
         items.forEach(function (li) { li.hidden = shown.indexOf(li) < 0; });
-        // The rows are shown in match order, not page order.
         shown.forEach(function (li) { list.insertBefore(li, emptyRow); });
         emptyRow.hidden = shown.length > 0 || items.length === 0;
         if (shown.length === 0 && items.length === 0) { close(); return; }
@@ -71,7 +61,7 @@
         box.value = li.getAttribute('data-number');
         box.dispatchEvent(new Event('input', { bubbles: true }));
         close();
-        if (findBtn) findBtn.click();   // Find fills in the customer, with the spinner from Loading.js
+        if (findBtn) findBtn.click();
     }
 
     box.addEventListener('focus', render);
@@ -86,7 +76,6 @@
         else if (e.key === 'Escape') { close(); e.preventDefault(); }
         else if (e.key === 'Enter' && active >= 0) { e.preventDefault(); e.stopPropagation(); choose(shown[active]); }
     }, true);
-    // mousedown, not click: the box loses focus on mousedown, which would close the list before a click lands.
     list.addEventListener('mousedown', function (e) {
         var li = e.target.closest('li[data-number]');
         if (li) { e.preventDefault(); choose(li); }

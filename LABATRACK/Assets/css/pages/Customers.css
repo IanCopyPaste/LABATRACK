@@ -1,7 +1,4 @@
-﻿/* Pages/Shared/Customers.aspx */
-
-.customer-search { justify-content: flex-start; gap: 8px; }
+﻿.customer-search { justify-content: flex-start; gap: 8px; }
 .list-caption { padding: 10px 20px; border-bottom: 1px solid var(--border); }
 
-/* The row just saved is picked out so the eye lands on it. */
 .table tr.is-saved td { background: var(--success-soft); }

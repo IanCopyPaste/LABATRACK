@@ -2,6 +2,8 @@
 
 Target: a working demo about 15 working days after planning starts. Rules live in `CLAUDE.md`. This file covers order of work, what "done" means for each phase, what to cut if time runs short, and how to test.
 
+Note: after the revision in `REVISION.md` there are no `Services` or repository classes. Where a phase below names `PricingService`, `StatusService`, `PaymentService` or similar, the same rule now lives in the page that uses it.
+
 ## The core (never cut)
 
 - Login with owner and staff roles, enforced on the server
@@ -37,13 +39,12 @@ Done when:
 
 ### Phase 2: Login, roles, pricing settings (Days 3 to 4)
 
-Build `Login.aspx`, `Admin/Login.aspx`, `AuthService`, `PasswordHasher`, `BasePage`, `AdminBasePage`, `NavBar.cs`, the `Web.config` rules, `Admin/Staff.aspx`, `Admin/Pricing.aspx`, and the change-password card on `Admin/Settings.aspx`.
+Build `Login.aspx`, `admin/Login.aspx`, `PasswordHasher`, `BasePage`, `AdminBasePage`, `NavBar.cs`, the `Web.config` rules, `admin/Staff.aspx`, `admin/Pricing.aspx`, and the change-password card on `admin/Settings.aspx`.
 
 Done when:
 
-- A staff account that types `/Admin/Pricing.aspx` directly ends up at the admin login.
+- A staff account that types `/admin/Pricing.aspx` directly ends up at the admin login.
 - A staff account using the admin login gets the same "Invalid username or password" error as a wrong password.
-- Five wrong passwords lock the account for a few minutes.
 - The owner can create a staff account, and can change a service's rate and stages only while no load using that service is in the shop.
 - The owner can change their own password on Settings only by typing the current one first. Afterwards the old password no longer signs in and the new one does.
 
@@ -80,9 +81,9 @@ Done when:
 
 ### Phase 5: Reports and email (Days 12 to 13)
 
-Build `ReportService`, `Admin/Reports.aspx`, `DailySalesReport.aspx`, and the staff "today's total" box. Then `EmailService`, the two job email bodies and the owner's password reset email in `EmailTemplates.cs`, `NotificationLog`, the resend button, and the owner's "Forgot password?" flow on `Admin/Login.aspx` with the recovery email on `Admin/Settings.aspx`.
+Build `ReportService`, `admin/Reports.aspx`, `DailySalesReport.aspx`, and the staff "today's total" box. Then `EmailService`, the two job email bodies and the owner's password reset email in `EmailTemplates.cs`, `NotificationLog`, the resend button, and the owner's "Forgot password?" flow on `admin/Login.aspx` with the recovery email on `admin/Settings.aspx`.
 
-Done when the daily total on screen equals `SELECT SUM(Amount) FROM Payments` for that day, checked by hand, and both emails arrive. Also done when the owner's reset link arrives, works once, and no longer works after 30 minutes, and when a staff username on the reset form gets the same message but no email.
+Done when the daily total on screen equals `SELECT SUM(Amount) FROM Payments` for that day, checked by hand, and both emails arrive. Also done when the owner can reset a forgotten password with the username and recovery email (test 13).
 
 ### Phase 6: Demo data and rehearsal (Days 14 to 15)
 
@@ -117,7 +118,7 @@ Run this at the end of each phase that touches it, and once more before the demo
 10. As the owner, correct a paid job's weight upward, then another one downward. The upward one must add no payment row and only raise the balance; the downward one must add one negative adjustment row that refunds exactly the excess, and its payments must then add up to its new total. Try to save a correction after another window changed what the customer paid: it must be refused.
 11. Give a service only Washing and Drying, create a job with it, and advance it. Confirm it goes Drying → Inspection with no Folding step, that a failed inspection offers only Washing or Drying, and that the owner cannot change its service once it has left Queued.
 12. Set the maximum weight per job on Pricing to 50 kg, then try to create a job at 50.5 kg. It must be refused with the limit shown, and 50 kg must be accepted.
-13. On the owner login, use "Forgot password?" with the owner username, open the emailed link, and set a new password. Confirm the old password no longer works, the new one does, and the same link cannot be used a second time. Then try a staff username: the page must say the same thing, and no email may arrive.
+13. On the owner login, use "Forgot password?", type the owner username, the recovery email from Settings and a new password twice. Confirm the old password no longer works and the new one does. Then try a wrong email, and then a staff username: both must be refused with "Username or recovery email is wrong".
 14. Part payments. With the minimum at 50%, create a 240 job with a down payment of 150 (cash 200): the slip must show change 50, balance due 90 and a PARTIALLY PAID stamp, and the job lists must show "Partial · ₱90.00 due". Take a 50 payment on the job page, then try to take 100 (refused: the balance is only 40). Move the load to Ready and try to claim it: the release card must collect the remaining 40, and only then does the job become Claimed. Check that no claimed job appears in the `vw_JobPayments` query in the README.
 15. On Pricing set the minimum down payment to 100: New Job must offer only "Pay in full". Set it to 0: New Job must also offer "Pay at pick-up", and a job created that way is Unpaid, has no payment row, and can be voided with nothing refunded. Set it back to 50. Values above 100 or below 0 must be refused.
 16. Emails, for a customer whose email is yours (or with `Smtp.PickupDirectory` in `Secrets.config` to save them as files instead). Correct a job''s weight as the owner: an "order was updated" email must arrive listing the old and new weight and the new total, the balance due if there is one, and the slip-reprint instruction; correcting only the remarks must send nothing; a correction that lowers the total below what was paid must say how much is given back. Void a Queued job with a reason: a "your order was cancelled" email must arrive with that reason, the refund (only what was paid) and the instructions, and "Resend cancellation email" on the voided job must send the same again. For a customer with no email, the job's Notifications card must show these as Skipped.
@@ -138,8 +139,8 @@ Each of these maps to a starred file. The student should be able to answer them 
 - How is a staff member kept out of the admin pages, even by typing the URL? (`AdminBasePage`, `Web.config`)
 - Why void instead of delete? (schema, `StatusService`)
 - How is a total computed, including rounding, the minimum charge, and add-ons? (`PricingService`)
-- How does the system protect passwords and repeated login attempts? (`AuthService`)
-- How does the owner get back in after forgetting the password, and why can the reset form not be used to find out which usernames exist? (`AuthService`)
+- How does the system protect passwords? (PBKDF2 with a salt in `PasswordHasher`, checked in each login page)
+- How does the owner get back in after forgetting the password? (`admin/Login.aspx.cs`, `btnReset_Click`: username plus the recovery email from Settings)
 - Why does each service have its own route, and why can the owner not change a service while a load using it is still in the shop? (`StatusService`, schema)
 
 ## Prompt template for Claude Code

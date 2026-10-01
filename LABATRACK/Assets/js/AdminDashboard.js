@@ -1,9 +1,4 @@
-﻿// Admin/Dashboard.aspx
-// The Stage filter above "Active job orders": shows only the loads at the chosen stage (the server
-// writes each row's stage in data-stage-row, and each choice's count). The choice is remembered for
-// this browser tab, so it stays after a refresh. Display only: every row is on the page, the filter
-// just hides the others.
-(function () {
+﻿(function () {
     var select = document.querySelector('[data-stage-filter]');
     var rows = document.querySelectorAll('[data-stage-row]');
     var table = document.getElementById('activeTable');
@@ -25,13 +20,13 @@
         caption.textContent = stage === ''
             ? allCaption
             : shown + (shown === 1 ? ' load' : ' loads') + ' at ' + stage + ', newest drop-off first';
-        try { sessionStorage.setItem('lt-stage-filter', stage); } catch (e) { /* storage off: fine */ }
+        try { sessionStorage.setItem('lt-stage-filter', stage); } catch (e) {  }
     }
 
     try {
         var saved = sessionStorage.getItem('lt-stage-filter');
         if (saved !== null && select.querySelector('option[value="' + saved + '"]')) select.value = saved;
-    } catch (e) { /* storage off: start with All stages */ }
+    } catch (e) {  }
 
     select.addEventListener('change', apply);
     apply();

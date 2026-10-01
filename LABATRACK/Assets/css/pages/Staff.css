@@ -1,8 +1,4 @@
-﻿/* Admin/Staff.aspx */
-
-/* Active / inactive, as a sliding switch. The real checkbox stays in the page (and is what the form
-   sends); it is only moved out of sight, so the keyboard and screen readers still use it. */
-.switch { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; width: max-content; }
+﻿.switch { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; width: max-content; }
 .switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
 .switch .track {
   position: relative; width: 40px; height: 22px; flex-shrink: 0; border-radius: 999px;
@@ -17,8 +13,6 @@
 .switch input:focus-visible + .track { outline: 2px solid var(--primary); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .switch .track, .switch .track::after { transition: none; } }
 
-/* Delete sits on the left of the window's buttons, away from Save, in red text (a quiet button,
-   so it never looks like the main action). Switched off, it is grey like any disabled button. */
 .modal-f .delete-user { margin-right: auto; color: var(--danger); }
 .modal-f .delete-user:hover { background: var(--danger-soft); }
 .modal-f .delete-user:disabled { color: var(--muted); background: transparent; }

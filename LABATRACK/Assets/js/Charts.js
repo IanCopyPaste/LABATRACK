@@ -1,9 +1,4 @@
-﻿// Tooltips for the charts drawn by Helpers/SvgChart.cs (Admin/Reports.aspx).
-// Every mark that can show a tooltip carries data-tip-title and data-tip-rows (JSON rows of
-// [name, value, colour]). The same tooltip appears on hover and on keyboard focus, and it
-// only repeats what the table under each chart already shows. Names are put in with
-// textContent, never as HTML, so a customer's name can never turn into markup.
-(function () {
+﻿(function () {
     var tip = document.createElement('div');
     tip.className = 'chart-tip';
     tip.setAttribute('role', 'tooltip');
@@ -26,7 +21,6 @@
             var row = document.createElement('div');
             row.className = 'tip-row';
             if (r[2]) {
-                // A short stroke of the series colour identifies the row; the text stays in ink.
                 var key = document.createElement('i');
                 key.className = 'key-line';
                 key.style.background = r[2];
@@ -51,7 +45,6 @@
         tip.style.top = Math.max(8, top) + 'px';
     }
 
-    // Line charts: move the hairline to the point being read.
     function crosshair(el, on) {
         var svg = el.closest('svg');
         var line = svg && svg.querySelector('.crosshair');

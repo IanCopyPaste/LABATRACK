@@ -9,8 +9,6 @@
 </head>
 <body>
     <form id="form1" runat="server" defaultbutton="btnSignIn">
-        <%-- Staff sign-in, in the counter blue. The owner's page (Admin/Login.aspx) is dark slate,
-             so the two can't be mistaken for each other; the switch at the top moves between them. --%>
         <div class="auth auth-staff">
             <div class="auth-brand">
                 <div class="brand-mark"><%= Icons.Get("washing-machine") %></div>
@@ -23,7 +21,7 @@
             <main class="auth-card">
                 <nav class="auth-switch" aria-label="Sign in as">
                     <a href="Login.aspx" class="is-active" aria-current="page"><%= Icons.Get("user-round", "ico-sm") %>Staff</a>
-                    <a href="Admin/Login.aspx"><%= Icons.Get("shield-check", "ico-sm") %>Owner</a>
+                    <a href="admin/Login.aspx"><%= Icons.Get("shield-check", "ico-sm") %>Owner</a>
                 </nav>
 
                 <div class="auth-role">
@@ -59,8 +57,8 @@
         </div>
     </form>
 
-    <script src="<%= AssetUrl.Get("~/Assets/js/Loading.js") %>"></script>
+    <script src="<%= AssetUrl.Get("~/assets/js/Loading.js") %>"></script>
 
-    <script src="<%= AssetUrl.Get("~/Assets/js/ShowPassword.js") %>"></script>
+    <script src="<%= AssetUrl.Get("~/assets/js/ShowPassword.js") %>"></script>
 </body>
 </html>

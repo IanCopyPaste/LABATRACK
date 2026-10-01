@@ -1,7 +1,4 @@
-﻿/* Admin/Reports.aspx. The charts themselves are SVG drawn by Helpers/SvgChart.cs. */
-
-/* ---------- Period filter: one row above everything it scopes ---------- */
-.report-filters { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+﻿.report-filters { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .seg { display: inline-flex; padding: 3px; gap: 2px; background: var(--surface); border: 1px solid var(--border); border-radius: 9px; }
 .seg a { padding: 6px 16px; border-radius: 6px; color: var(--text-2); font-weight: 550; font-size: 13px; }
 .seg a:hover { background: var(--surface-2); text-decoration: none; }
@@ -10,18 +7,15 @@
 .period-pick .input, .period-pick select { width: auto; height: 32px; }
 .period-pick .is-off { opacity: .35; cursor: default; }
 
-/* ---------- Six headline figures ---------- */
 .kpis.kpis-6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 .kpis-6 .kpi-value { font-size: 21px; font-variant-numeric: normal; }
 .kpis-6 .kpi-foot { font-size: 12px; line-height: 1.4; margin-top: 4px; }
 .kpis-6 .kpi-foot .ico { width: 13px; height: 13px; vertical-align: -2px; }
 
-/* ---------- Chart cards ---------- */
 .chart-card .card-b { padding: 16px 20px 18px; }
 .chart-card.flush .card-b { padding: 0; }
 .chart-card.flush .mini-stats { padding: 16px 20px; border-bottom: 1px solid var(--border); }
 
-/* ---------- Busiest-times heatmap ---------- */
 .heatmap { display: grid; gap: 2px; }
 .heat-col { font-size: 10.5px; color: #7b8796; text-align: center; padding-bottom: 4px; }
 .heat-row { font-size: 12px; color: var(--text-2); display: flex; align-items: center; }
@@ -32,12 +26,9 @@
 .heat-scale span:first-child { margin-right: 4px; }
 .heat-scale span:nth-last-child(2) { margin-left: 4px; }
 
-/* ---------- Small figures inside a card ---------- */
 .mini-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
 .mini-value { font-size: 18px; font-weight: 650; margin-top: 2px; }
 
-
-/* ---------- Narrower screens ---------- */
 @media (max-width: 1300px) {
   .kpis.kpis-6 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
@@ -51,7 +42,6 @@
   .hbar-track { grid-column: 1 / -1; grid-row: 2; }
 }
 
-/* ---------- Paper ---------- */
 @media print {
   .sidebar, .report-filters, .page-actions, .chart-table summary { display: none; }
   .card { break-inside: avoid; box-shadow: none; }

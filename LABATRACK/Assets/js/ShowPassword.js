@@ -1,8 +1,4 @@
-﻿// Shared: every password box with a show/hide button (the two login pages, Settings, Staff accounts).
-// The eye button (data-reveal="<id of the box>") switches the box between dots and plain text, so a
-// password can be checked before it is used. Display only: the password is sent the same way
-// either way, and every box goes back to dots when the form is sent.
-(function () {
+﻿(function () {
     function setShown(box, button, shown) {
         box.type = shown ? 'text' : 'password';
         button.setAttribute('aria-pressed', shown ? 'true' : 'false');

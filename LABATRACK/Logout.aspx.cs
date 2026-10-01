@@ -1,7 +1,5 @@
 ﻿using System;
 using System.Web.UI;
-using LABATRACK.Models;
-using LABATRACK.Services;
 
 namespace LABATRACK
 {
@@ -9,11 +7,13 @@ namespace LABATRACK
     {
         protected void Page_Load(object sender, EventArgs e)
         {
-            // Back to the login page the account came from: the owner's for the owner.
-            UserAccount user = AuthService.CurrentUser;
-            AuthService.SignOut();
+            string role = Session["Role"] as string;
             Session.Abandon();
-            Response.Redirect(user != null && user.IsOwner ? "~/Admin/Login.aspx" : "~/Login.aspx");
+
+            if (role == "Owner")
+                Response.Redirect("~/admin/Login.aspx");
+            else
+                Response.Redirect("~/Login.aspx");
         }
     }
 }

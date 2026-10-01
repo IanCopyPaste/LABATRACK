@@ -1,23 +1,13 @@
 ﻿using System.Security.Cryptography;
 
-namespace LABATRACK.Security
+namespace LABATRACK.security
 {
-    /// <summary>
-    /// Turns a password into a hash that can be stored, and checks a typed password against it.
-    /// The password itself is never stored or logged.
-    ///
-    /// PBKDF2 (Rfc2898DeriveBytes) with SHA-256 runs the password and a salt through 100,000
-    /// rounds of hashing, so guessing passwords from a stolen hash is slow. The salt is 16 random
-    /// bytes made for each user, so two people with the same password get different hashes.
-    /// 02_seed_settings.sql uses these same settings for the demo owner account.
-    /// </summary>
     public static class PasswordHasher
     {
         public const int SaltBytes = 16;
         public const int HashBytes = 32;
         public const int Iterations = 100000;
 
-        /// <summary>A new random salt, for a new password.</summary>
         public static byte[] NewSalt()
         {
             var salt = new byte[SaltBytes];
@@ -36,15 +26,12 @@ namespace LABATRACK.Security
             }
         }
 
-        /// <summary>True if <paramref name="password"/> is the password that produced <paramref name="storedHash"/>.</summary>
         public static bool Verify(string password, byte[] salt, byte[] storedHash)
         {
             if (password == null || salt == null || storedHash == null) return false;
             return SameBytes(Hash(password, salt), storedHash);
         }
 
-        // Compares every byte even after a difference is found, so the time taken does not
-        // give away how much of a guess was right.
         private static bool SameBytes(byte[] a, byte[] b)
         {
             int diff = a.Length ^ b.Length;

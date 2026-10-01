@@ -28,7 +28,7 @@ script are in `docs/BUILD_PROCESS.md`.
    Authentication, then right-click *Databases* > *New Database...* and name it `labatrack`
    (or run `CREATE DATABASE labatrack;`).
 
-3. **Build the tables and data.** Open each script in `Database/` in SSMS and run it (F5),
+3. **Build the tables and data.** Open each script in `database/` in SSMS and run it (F5),
    in this order:
 
    | Script | What it does |
@@ -53,7 +53,7 @@ script are in `docs/BUILD_PROCESS.md`.
 
 | Role | Sign in at | Username | Password |
 |---|---|---|---|
-| Owner | `/Admin/Login.aspx` | `owner` | `LabaTrack@2026` |
+| Owner | `/admin/Login.aspx` | `owner` | `LabaTrack@2026` |
 | Staff | `/Login.aspx` | `jcruz` | `Staff@2026` |
 | Staff | `/Login.aspx` | `arivera` | `Staff@2026` |
 | Staff (disabled) | | `kmorales` | `Staff@2026` |
@@ -62,8 +62,7 @@ The owner account comes from `02_seed_settings.sql`; the staff accounts come fro
 `03_seed_demo_jobs.sql`. The owner can change the owner password on *Settings*. On *Staff accounts*, the
 owner adds staff accounts and uses each row's **Manage** button to rename it, set a new password, or
 switch it between Active and Inactive; an account with no jobs, payments or history can also be
-deleted there. After five wrong passwords an account is locked for five minutes (a new password
-from the owner unlocks it at once).
+deleted there.
 
 ## Refunds
 
@@ -93,8 +92,9 @@ with `<appSettings file="Secrets.config" />`.
 3. Stop and start the site in Visual Studio.
 
 The *Email notifications* card on *Settings* then says **Configured**. To try it, put your own
-address as the *Recovery email* on *Settings* and use *Forgot password?* on the owner login, or
-create a job for a customer whose email is yours.
+address as the *Recovery email* on *Settings* and create a job for a customer whose email is yours.
+*Forgot password?* on the owner login does not send an email: the owner types the username and the recovery
+email from *Settings* with a new password.
 
 If `Secrets.config` is missing (for example on a fresh copy of the project), create it with this
 content:
@@ -128,15 +128,14 @@ the demo:
 
 | Folder | What is in it |
 |---|---|
-| `Admin/` | owner-only pages (dashboard, staff, pricing, settings, reports, daily sales report, edit job) |
-| `Pages/Shared/` | counter pages for staff and owner (job board, new job, job page, slip, history, customers) |
-| `Services/` | the shop's rules: `PricingService`, `StatusService`, `AuthService`, `JobOrderService`, `PaymentService`, ... |
-| `DataAccess/` | `Db.cs` and the repositories, the only code that calls the database |
-| `Models/` | plain classes for the table rows |
-| `Security/` | `BasePage`, `AdminBasePage`, `PasswordHasher`, the role provider for `Web.config` |
-| `Helpers/` | the menu, icons, stylesheets, charts and email bodies |
-| `Database/` | the four SQL scripts |
-| `Assets/` | CSS, scripts, the Inter font and the Lucide icons (all local, nothing from the internet) |
+| `admin/` | owner-only pages (dashboard, staff, pricing, settings, reports, daily sales report, edit job) |
+| `pages/shared/` | counter pages for staff and owner (job board, new job, job page, slip, history, customers) |
+| `db_conn/` | `Db.cs` only: the one place that reads the connection string |
+| `models/` | plain classes for the table rows (`JobOrder.FromRow` turns a job row into an object) |
+| `security/` | `BasePage`, `AdminBasePage`, `PasswordHasher` |
+| `tools/` | the menu, icons, stylesheets, charts, `Email` (sending and logging) and email bodies |
+| `database/` | the four SQL scripts |
+| `assets/` | CSS, scripts, the Inter font and the Lucide icons (all local, nothing from the internet) |
 
 ## Checking it works
 

@@ -1,22 +1,17 @@
-﻿// Pages/Shared/NewJob.aspx
-// Keeps the order summary, the amount paid now, the balance and the change in step with what
-// the cashier ticks and types. Display only: on save the server recomputes the total from the
-// stored prices, checks the down payment against the owner's minimum and the cash again, and
-// those are the values that are stored.
-(function () {
+﻿(function () {
     var loadCard = document.getElementById('loadCard');
     var serviceBox = document.getElementById('ddlService');
-    if (!loadCard || !serviceBox || serviceBox.options.length === 0) return;   // no service to price yet
+    if (!loadCard || !serviceBox || serviceBox.options.length === 0) return;
     var weightBox = document.getElementById('txtWeight');
-    var minimum = parseFloat(loadCard.getAttribute('data-minimum'));     // written by the page
+    var minimum = parseFloat(loadCard.getAttribute('data-minimum'));
     var rounding = parseFloat(loadCard.getAttribute('data-rounding'));
-    var maxWeight = parseFloat(loadCard.getAttribute('data-max-weight'));  // set on the Pricing page
-    var rates = {};                                                       // service value -> rate per kg
+    var maxWeight = parseFloat(loadCard.getAttribute('data-max-weight'));
+    var rates = {};
     loadCard.getAttribute('data-rates').split(',').forEach(function (pair) {
         var p = pair.split(':');
         rates[p[0]] = parseFloat(p[1]);
     });
-    var routes = {};                                                      // service value -> work stages, e.g. "WD"
+    var routes = {};
     loadCard.getAttribute('data-routes').split(',').forEach(function (pair) {
         var p = pair.split(':');
         routes[p[0]] = p[1];
@@ -24,8 +19,6 @@
     var cash = document.getElementById('txtCashReceived');
     var rbCash = document.getElementById('rbCash');
     var rbEwallet = document.getElementById('rbEwallet');
-    // How much is paid now. The down payment and pay-at-pick-up choices are only on the page
-    // when the owner's minimum allows them (Pricing), so either may be missing.
     var rbPayFull = document.getElementById('rbPayFull');
     var rbPayPart = document.getElementById('rbPayPart');
     var rbPayLater = document.getElementById('rbPayLater');
@@ -37,8 +30,6 @@
     var services = document.querySelectorAll('[data-service]');
     var products = document.querySelectorAll('[data-product]');
 
-    // The parts of the page the price breakdown writes to, looked up once: the breakdown
-    // runs on every keystroke in the weight box.
     var breakdown = {};
     ['weightError', 'weightHint', 'serviceRoute', 'sumService', 'sumRate', 'sumWeight', 'sumBillable',
      'sumLaundry', 'sumMinLabel', 'sumMin'].forEach(function (id) {
@@ -54,15 +45,12 @@
         return row.querySelector('[data-qty]');
     }
 
-    // A blank or junk quantity counts as none rather than breaking the total.
     function qtyOf(row) {
         var n = parseInt(qtyBox(row).value, 10);
         if (isNaN(n) || n < 0) { n = 0; }
         return n;
     }
 
-    // Services are charged once; products are quantity x unit price. Returns the
-    // add-on lines in the order they appear on the form so the summary reads top to bottom.
     function addOnLines() {
         var lines = [];
         Array.prototype.forEach.call(services, function (box) {
@@ -80,9 +68,6 @@
         return lines;
     }
 
-    // Each product row shows its own line total. A row in play is highlighted and one at
-    // zero is dimmed, so the cashier can read off what is on the order at a glance while
-    // still seeing everything the shop sells.
     function paintProducts() {
         Array.prototype.forEach.call(products, function (row) {
             var qty = qtyOf(row);
@@ -93,7 +78,6 @@
         });
     }
 
-    // The server renders these rows too, so the summary is already right before this runs.
     function paintSummary(lines) {
         Array.prototype.forEach.call(sumLines.querySelectorAll('.addon-line'), function (el) {
             sumLines.removeChild(el);
@@ -110,8 +94,6 @@
         });
     }
 
-    // "WD" -> "Washing → Drying → Inspection". The route is copied onto the job when it is
-    // saved, so the cashier sees here which stages this load will go through.
     function routeText(code) {
         var names = { W: 'Washing', D: 'Drying', F: 'Folding' };
         var steps = (code || '').split('').map(function (c) { return names[c]; });
@@ -119,12 +101,9 @@
     }
 
     function kg(n) {
-        return (Math.round(n * 100) / 100).toString() + ' kg';   // up to two decimals: 5.15 kg shows as 5.15
+        return (Math.round(n * 100) / 100).toString() + ' kg';
     }
 
-    // The laundry charge, the way PricingService will work it out: round the weight up to the
-    // next rounding step, times the service's rate, then raised to the minimum if lower.
-    // Returns NaN when the weight is not a usable number.
     function laundryCharge() {
         var text = weightBox.value.trim().replace(',', '.');
         var weight = /^\d{1,3}(\.\d{1,2})?$/.test(text) ? parseFloat(text) : NaN;
@@ -148,13 +127,9 @@
             return NaN;
         }
 
-        // Worked in hundredths of a kilo, as whole numbers, so a 0.1 kg step never leaves a float
-        // remainder (3 x 0.1 is 0.30000000000000004 as a fraction, but exactly 30 as hundredths).
         var stepC = Math.round(rounding * 100);
         var billableC = Math.ceil(Math.round(weight * 100) / stepC) * stepC;
         var billable = billableC / 100;
-        // The charge in whole centavos, from whole numbers only: hundredths of a kilo x centavos per kilo,
-        // rounded half up, exactly as the server rounds (Math.Round(..., 2, AwayFromZero)).
         var chargeC = Math.floor((billableC * Math.round(rate * 100) + 50) / 100);
         var charge = chargeC / 100;
         var raised = charge < minimum;
@@ -169,7 +144,6 @@
         return Math.max(charge, minimum);
     }
 
-    // Money is worked in centavos so 500.00 - 289.99 never comes out as 210.00999...
     function cents(n) { return Math.round(n * 100); }
 
     function pesosTyped(box) {
@@ -177,8 +151,6 @@
         return typed === '' ? NaN : parseFloat(typed);
     }
 
-    // The least the customer may pay now: the owner's percentage of the total, rounded up to the
-    // centavo, the same as PaymentService.MinimumDownPayment.
     function minimumDown(total) {
         return Math.ceil(Math.round(total * 100) * minPercent / 100) / 100;
     }
@@ -193,7 +165,6 @@
         var total = lines.reduce(function (sum, line) { return sum + line.amount; }, laundry);
         document.getElementById('sumTotal').textContent = peso(total);
 
-        // What is paid now: everything, a down payment, or nothing (pay at pick-up).
         var plan = rbPayPart && rbPayPart.checked ? 'part' : rbPayLater && rbPayLater.checked ? 'later' : 'full';
         var minimum = isFinite(total) ? minimumDown(total) : NaN;
         var down = pesosTyped(downBox);
@@ -228,15 +199,13 @@
         var amountOk = isFinite(total) && isFinite(paidNow) && downProblem === '';
         document.getElementById('ewalletTotal').textContent = amountOk ? peso(paidNow) : '—';
         exactBtn.setAttribute('data-cash', amountOk ? paidNow.toFixed(2) : '');
-        exactBtn.disabled = !amountOk;   // no exact amount until there is one to pay
+        exactBtn.disabled = !amountOk;
 
         var pill = document.getElementById('sumMethod');
         pill.className = 'pill ' + (plan === 'full' ? 'pill-ok' : plan === 'part' ? 'pill-warn' : 'pill-danger');
         pill.textContent = plan === 'later' ? 'Unpaid · pay at pick-up'
             : (plan === 'full' ? 'Paid in full · ' : 'Down payment · ') + (isCash ? 'Cash' : 'E-wallet');
 
-        // No total without a weight: say what is missing rather than print NaN, and hold the
-        // save until there is a price to collect.
         if (!isFinite(total)) {
             paintChange('idle', 'Change', 'Enter the weight first');
             document.getElementById('sumReceived').textContent = '—';
@@ -269,8 +238,6 @@
         paintConfirm(lines, total, plan, paidNow, balance, isCash, received, change);
     }
 
-    // The question Confirm.js asks before the job is saved: the whole order in a few lines, so the
-    // cashier can read it back to the customer before pressing Continue.
     function paintConfirm(lines, total, plan, paidNow, balance, isCash, received, change) {
         var name = document.getElementById('txtCustomerName').value.trim() || 'New customer';
         var contact = document.getElementById('txtSearchContact').value.trim();
@@ -332,8 +299,6 @@
         });
     });
 
-    // Enter in the contact number box presses Find (the form's first button). Anywhere else it
-    // would do the same, which is never what the cashier meant, so there it does nothing.
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Enter' && e.target.tagName === 'INPUT' && !e.target.hasAttribute('data-find-box')) {
             e.preventDefault();

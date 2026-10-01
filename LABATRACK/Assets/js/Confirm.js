@@ -1,11 +1,4 @@
-﻿// Shared: asks before a button that changes something for good (create a job, move a load to
-// another stage, void, delete an account).
-// Such a button carries data-confirm-title, and may carry data-confirm-text (what will happen),
-// data-confirm-ok (the label of the button that goes ahead) and data-confirm-danger (a red one).
-// The first press opens a small window with that text. Continue presses the button for real;
-// Cancel, Esc or a click outside the window does nothing. Display only: the server checks every
-// rule again, whatever is pressed.
-(function () {
+﻿(function () {
     var dialog = null, titleEl, textEl, okButton, cancelButton, pending = null;
 
     function build() {
@@ -35,7 +28,6 @@
                 button.click();
             }
         });
-        // A click on the dimmed backdrop (outside the window) is the same as Cancel.
         dialog.addEventListener('click', function (e) {
             if (e.target === dialog) dialog.close();
         });
@@ -52,16 +44,14 @@
         var danger = button.hasAttribute('data-confirm-danger');
         okButton.className = 'btn ' + (danger ? 'btn-danger-solid' : 'btn-primary');
         dialog.showModal();
-        // For something that cannot be undone, Enter should not go ahead by accident.
         (danger ? cancelButton : okButton).focus();
     }
 
-    // Caught on the way down (capture), so the question comes before anything else the button does.
     document.addEventListener('click', function (e) {
         var button = e.target.closest('[data-confirm-title]');
         if (!button || button.disabled) return;
         if (button.getAttribute('data-confirmed') === 'yes') {
-            button.removeAttribute('data-confirmed');   // the real press, after Continue
+            button.removeAttribute('data-confirmed');
             return;
         }
         e.preventDefault();

@@ -1,23 +1,16 @@
-﻿// Admin/EditJob.aspx
-// Reprices the corrected job as the owner types, with the prices frozen on the job (the page puts
-// them in data- attributes), and shows what the new total means: a balance still owed (collected
-// before pick-up), an overpayment to refund now, or nothing.
-// Display only: on save the server prices the job again (JobOrderService.QuoteEdit) and refuses the
-// save if the amount is not the one shown here (hfShownDifference), so the owner never refunds a
-// wrong amount.
-(function () {
+﻿(function () {
     var card = document.getElementById('loadCard');
     if (!card) return;
 
-    var rates = {};                                                      // service id -> rate per kg
+    var rates = {};
     card.getAttribute('data-rates').split(',').forEach(function (pair) {
         var p = pair.split(':');
         rates[p[0]] = parseFloat(p[1]);
     });
-    var minimum = parseFloat(card.getAttribute('data-minimum'));        // frozen on the job
-    var rounding = parseFloat(card.getAttribute('data-rounding'));      // frozen on the job
-    var maxWeight = parseFloat(card.getAttribute('data-max-weight'));   // from Pricing
-    var paid = parseFloat(card.getAttribute('data-paid'));              // net of refunds
+    var minimum = parseFloat(card.getAttribute('data-minimum'));
+    var rounding = parseFloat(card.getAttribute('data-rounding'));
+    var maxWeight = parseFloat(card.getAttribute('data-max-weight'));
+    var paid = parseFloat(card.getAttribute('data-paid'));
 
     var serviceBox = document.getElementById('ddlService');
     var weightBox = document.getElementById('txtWeight');
@@ -35,7 +28,6 @@
         return '₱' + n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
-    // Money is worked in centavos so 500.00 - 289.99 never comes out as 210.00999...
     function cents(n) { return Math.round(n * 100); }
 
     function kg(n) {
@@ -47,7 +39,6 @@
         return isNaN(n) || n < 0 ? 0 : n;
     }
 
-    // Each product row keeps its own line total; one at zero is dimmed.
     function paintProducts() {
         Array.prototype.forEach.call(products, function (row) {
             var qty = qtyOf(row);
@@ -57,8 +48,6 @@
         });
     }
 
-    // The same sum as PricingService: weight rounded up to the step, times the rate, raised to the
-    // minimum, then the add-on lines. Returns null while the weight is not a usable number.
     function quote() {
         var text = weightBox.value.trim().replace(',', '.');
         var weight = /^\d{1,3}(\.\d{1,2})?$/.test(text) ? parseFloat(text) : NaN;
@@ -71,12 +60,9 @@
         if (!ok) { return null; }
 
         var rate = rates[serviceBox.value];
-        // Worked in hundredths of a kilo, as whole numbers, so a 0.1 kg step never leaves a float
-        // remainder (3 x 0.1 is 0.30000000000000004 as a fraction, but exactly 30 as hundredths).
         var stepC = Math.round(rounding * 100);
         var billableC = Math.ceil(Math.round(weight * 100) / stepC) * stepC;
         var billable = billableC / 100;
-        // The charge in whole centavos, from whole numbers only, rounded half up like the server (AwayFromZero).
         var chargeC = Math.floor((billableC * Math.round(rate * 100) + 50) / 100);
         var charge = chargeC / 100;
         var laundry = Math.max(charge, minimum);
@@ -120,8 +106,6 @@
         });
     }
 
-    // Higher total than paid: a balance, collected before pick-up (nothing is taken now). Lower: the
-    // customer overpaid, so the excess is refunded now. Same: paid in full.
     function paintSettle(q) {
         var diff = q ? (cents(q.total) - cents(paid)) / 100 : 0;
         var state = !q || diff === 0 ? 'none' : diff > 0 ? 'balance' : 'refund';
@@ -174,8 +158,6 @@
         });
     });
 
-    // Enter would save the whole correction (the form's only submit button). A save that changes
-    // what a customer owes should be a deliberate click, so Enter in a box does nothing here.
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Enter' && e.target.tagName === 'INPUT') { e.preventDefault(); }
     });
