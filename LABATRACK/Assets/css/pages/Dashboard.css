@@ -4,7 +4,7 @@
 .board-search input { width: 100%; padding-left: 36px; }
 
 .board {
-  display: grid; grid-template-columns: repeat(6, minmax(188px, 1fr)); gap: 12px;
+  display: grid; grid-template-columns: repeat(7, minmax(188px, 1fr)); gap: 12px;
   overflow-x: auto; padding-bottom: 6px; align-items: start;
 }
 .board-col {

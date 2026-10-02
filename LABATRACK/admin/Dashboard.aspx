@@ -55,6 +55,7 @@
                     <section class="card">
                         <div class="pipeline">
                             <div class="pipe"><span class="pill st-queued">Queued</span><div class="count"><%= Data.CountAt("Queued") %></div></div>
+                            <div class="pipe"><span class="pill st-intake">Intake inspection</span><div class="count"><%= Data.CountAt("Intake inspection") %></div></div>
                             <div class="pipe"><span class="pill st-washing">Washing</span><div class="count"><%= Data.CountAt("Washing") %></div></div>
                             <div class="pipe"><span class="pill st-drying">Drying</span><div class="count"><%= Data.CountAt("Drying") %></div></div>
                             <div class="pipe"><span class="pill st-folding">Folding</span><div class="count"><%= Data.CountAt("Folding") %></div></div>

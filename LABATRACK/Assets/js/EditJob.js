@@ -8,7 +8,6 @@
         rates[p[0]] = parseFloat(p[1]);
     });
     var minimum = parseFloat(card.getAttribute('data-minimum'));
-    var rounding = parseFloat(card.getAttribute('data-rounding'));
     var maxWeight = parseFloat(card.getAttribute('data-max-weight'));
     var paid = parseFloat(card.getAttribute('data-paid'));
 
@@ -60,10 +59,8 @@
         if (!ok) { return null; }
 
         var rate = rates[serviceBox.value];
-        var stepC = Math.round(rounding * 100);
-        var billableC = Math.ceil(Math.round(weight * 100) / stepC) * stepC;
-        var billable = billableC / 100;
-        var chargeC = Math.floor((billableC * Math.round(rate * 100) + 50) / 100);
+        var weightC = Math.round(weight * 100);
+        var chargeC = Math.floor((weightC * Math.round(rate * 100) + 50) / 100);
         var charge = chargeC / 100;
         var laundry = Math.max(charge, minimum);
 
@@ -80,13 +77,12 @@
             }
         });
         var total = lines.reduce(function (sum, line) { return sum + cents(line.amount); }, cents(laundry)) / 100;
-        return { rate: rate, weight: weight, billable: billable, charge: charge, laundry: laundry, lines: lines, total: total };
+        return { rate: rate, weight: weight, charge: charge, laundry: laundry, lines: lines, total: total };
     }
 
     function paintSummary(q) {
         $('sumRate').textContent = q ? peso(q.rate) + ' / kg' : '—';
-        $('sumWeight').textContent = q ? kg(q.weight) + ' → billable' : 'Weight → billable';
-        $('sumBillable').textContent = q ? kg(q.billable) : '—';
+        $('sumWeight').textContent = q ? kg(q.weight) : '—';
         $('sumLaundryLabel').textContent = q && q.laundry > q.charge ? 'Raised to minimum' : 'Laundry charge';
         $('sumLaundry').textContent = q ? peso(q.laundry) : '—';
         $('sumTotal').textContent = q ? peso(q.total) : '—';

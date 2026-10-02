@@ -56,7 +56,6 @@
                             </section>
 
                             <section class="card" id="loadCard" data-rates="<%: RatesData %>" data-minimum="<%: Money(Job.MinimumChargeAtCreation) %>"
-                                     data-rounding="<%: Job.RoundingIncrementKgAtCreation.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) %>"
                                      data-max-weight="<%: MaxWeightData %>" data-paid="<%: Money(AmountPaid) %>">
                                 <div class="card-h"><h2>Load</h2></div>
                                 <div class="card-b form">
@@ -64,7 +63,7 @@
                                         <div class="field">
                                             <label for="ddlService">Service</label>
                                             <asp:DropDownList ID="ddlService" runat="server" />
-                                            <% if (!ServiceChangeAllowed) { %><span class="hint">Locked: the load has left Queued, so the service (and its stages) can no longer change.</span><% } %>
+                                            <% if (!ServiceChangeAllowed) { %><span class="hint">Locked: the load has started its work stages, so the service (and its stages) can no longer change.</span><% } %>
                                         </div>
                                         <div class="field">
                                             <label for="txtWeight">Weight (kg)</label>
@@ -125,7 +124,7 @@
                                 <div class="card-b">
                                     <dl class="dl" id="sumLines">
                                         <dt>Rate</dt><dd id="sumRate"><%: Quote != null ? Peso(Quote.RatePerKg) + " / kg" : "—" %></dd>
-                                        <dt id="sumWeight"><%: Quote != null ? Kg(Quote.WeightKg) + " kg → billable" : "Weight → billable" %></dt><dd id="sumBillable"><%: Quote != null ? Kg(Quote.BillableKg) + " kg" : "—" %></dd>
+                                        <dt>Weight</dt><dd id="sumWeight"><%: Quote != null ? Kg(Quote.WeightKg) + " kg" : "—" %></dd>
                                         <dt id="sumLaundryLabel"><%: Quote != null && Quote.MinimumApplied ? "Raised to minimum" : "Laundry charge" %></dt><dd id="sumLaundry"><%: Quote != null ? Peso(Quote.LaundryCharge) : "—" %></dd>
                                         <% if (Quote != null) { foreach (var line in Quote.Lines) { %>
                                         <dt class="addon-line"><%: line.Label %></dt><dd class="addon-line"><%: Peso(line.Amount) %></dd>

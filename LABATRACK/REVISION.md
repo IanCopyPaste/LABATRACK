@@ -83,6 +83,18 @@ the reset depend on the username alone, which anyone who knows the owner's usern
 | `admin/Pricing.aspx` | services, add-ons, settings, add / edit each |
 | `admin/Reports.aspx`, `admin/DailySalesReport.aspx` | first job date, jobs and add-on lines for a period, payments for a period, day totals, ledger, year totals, unclaimed |
 
+## Exact price and Intake inspection
+
+- The laundry charge is weight x rate per kilo (to the centavo), raised to the minimum charge when lower.
+  The round-up step, "billable kilos", `JobOrders.BillableKg`, `JobOrders.RoundingIncrementKgAtCreation` and the
+  `RoundingIncrementKg` setting are gone. Each page that shows or works out a price (`NewJob`, `EditJob`,
+  `JobDetail`, `JobSlip`, `Pricing`, `Reports`) does the one multiplication itself.
+- A new stage, **Intake inspection**, sits between Queued and the first work stage. A job can be voided from
+  Queued or Intake inspection (`JobDetail.aspx.cs`, `Void`), and the owner can change its service in either.
+  The existing Inspection after the work stages is unchanged.
+- `01_schema.sql` carries the migration for an existing database (drop the two columns, widen the status
+  checks); run it and `04_procedures.sql` again.
+
 ## Left behind on purpose (say so if you want them gone)
 
 - The unused procedures `usp_Users_SetLoginState`, `usp_Users_SetResetToken` and

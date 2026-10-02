@@ -24,7 +24,6 @@ namespace LABATRACK.models
         public int ServiceId { get; set; }
         public string ServiceName { get; set; }
         public decimal WeightKg { get; set; }
-        public decimal BillableKg { get; set; }
         public decimal RatePerKgAtCreation { get; set; }
         public decimal MinimumChargeAtCreation { get; set; }
         public decimal LaundryCharge { get; set; }

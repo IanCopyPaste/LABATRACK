@@ -74,7 +74,7 @@
                                 </div>
                             </section>
 
-                            <section class="card" id="loadCard" data-rates="<%: RatesData %>" data-routes="<%: RoutesData %>" data-minimum="<%: MinimumData %>" data-rounding="<%: RoundingData %>" data-max-weight="<%: MaxWeightData %>">
+                            <section class="card" id="loadCard" data-rates="<%: RatesData %>" data-routes="<%: RoutesData %>" data-minimum="<%: MinimumData %>" data-max-weight="<%: MaxWeightData %>">
                                 <div class="card-h"><div class="title"><span class="step-no">2</span><div><h2>Load</h2><div class="sub">Weigh the laundry and choose the service</div></div></div></div>
                                 <div class="card-b form">
                                     <div class="form-row">
@@ -199,7 +199,7 @@
                                 <div class="card-b">
                                     <dl class="dl" id="sumLines">
                                         <dt id="sumService">—</dt><dd id="sumRate">—</dd>
-                                        <dt id="sumWeight">Weight &rarr; billable</dt><dd id="sumBillable">—</dd>
+                                        <dt>Weight</dt><dd id="sumWeight">—</dd>
                                         <dt>Laundry charge</dt><dd id="sumLaundry">—</dd>
                                         <dt class="small" id="sumMinLabel">Minimum</dt><dd class="small muted" id="sumMin">—</dd>
                                     </dl>

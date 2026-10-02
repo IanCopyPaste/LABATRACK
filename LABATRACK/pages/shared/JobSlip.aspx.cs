@@ -94,8 +94,7 @@ namespace LABATRACK.pages.shared
 
             IsVoided = Job.CurrentStatus == JobStatus.Voided;
 
-            decimal billable = Math.Ceiling(Job.WeightKg / Job.RoundingIncrementKgAtCreation) * Job.RoundingIncrementKgAtCreation;
-            decimal chargeBeforeMinimum = Math.Round(billable * Job.RatePerKgAtCreation, 2, MidpointRounding.AwayFromZero);
+            decimal chargeBeforeMinimum = Math.Round(Job.WeightKg * Job.RatePerKgAtCreation, 2, MidpointRounding.AwayFromZero);
             MinimumApplied = chargeBeforeMinimum < Job.MinimumChargeAtCreation;
 
             List<Payment> payments = new List<Payment>();

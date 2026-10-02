@@ -30,7 +30,6 @@ namespace LABATRACK.pages.shared
         protected string RatesData { get; private set; }
         protected string RoutesData { get; private set; }
         protected string MinimumData { get; private set; }
-        protected string RoundingData { get; private set; }
         protected string MaxWeightData { get; private set; }
 
         protected int TurnaroundHours { get; private set; }
@@ -67,7 +66,6 @@ namespace LABATRACK.pages.shared
             RatesData = string.Join(",", services.Select(s => s.ServiceId + ":" + s.RatePerKg.ToString("0.00", Inv)));
             RoutesData = string.Join(",", services.Select(s => s.ServiceId + ":" + s.StageCode));
             MinimumData = settings.MinimumCharge.ToString("0.00", Inv);
-            RoundingData = settings.RoundingIncrementKg.ToString("0.##", Inv);
             MaxWeightData = settings.MaxWeightKg.ToString("0.##", Inv);
 
             if (!IsPostBack)
@@ -364,8 +362,7 @@ namespace LABATRACK.pages.shared
                     return "Enter at most 99 of " + line.Name + ".";
             }
 
-            decimal billableKg = Math.Ceiling(weight / settings.RoundingIncrementKg) * settings.RoundingIncrementKg;
-            decimal chargeBeforeMinimum = Math.Round(billableKg * service.RatePerKg, 2, MidpointRounding.AwayFromZero);
+            decimal chargeBeforeMinimum = Math.Round(weight * service.RatePerKg, 2, MidpointRounding.AwayFromZero);
             decimal laundryCharge;
             if (chargeBeforeMinimum < settings.MinimumCharge)
                 laundryCharge = settings.MinimumCharge;
@@ -482,10 +479,8 @@ namespace LABATRACK.pages.shared
                         cmd.Parameters.Add("@CustomerId", SqlDbType.Int).Value = customerIdToUse;
                         cmd.Parameters.Add("@ServiceId", SqlDbType.Int).Value = service.ServiceId;
                         cmd.Parameters.Add(new SqlParameter("@WeightKg", SqlDbType.Decimal) { Precision = 6, Scale = 2, Value = weight });
-                        cmd.Parameters.Add(new SqlParameter("@BillableKg", SqlDbType.Decimal) { Precision = 6, Scale = 2, Value = billableKg });
                         cmd.Parameters.Add(new SqlParameter("@RatePerKgAtCreation", SqlDbType.Decimal) { Precision = 10, Scale = 2, Value = service.RatePerKg });
                         cmd.Parameters.Add(new SqlParameter("@MinimumChargeAtCreation", SqlDbType.Decimal) { Precision = 10, Scale = 2, Value = settings.MinimumCharge });
-                        cmd.Parameters.Add(new SqlParameter("@RoundingIncrementKgAtCreation", SqlDbType.Decimal) { Precision = 4, Scale = 2, Value = settings.RoundingIncrementKg });
                         cmd.Parameters.Add(new SqlParameter("@LaundryCharge", SqlDbType.Decimal) { Precision = 10, Scale = 2, Value = laundryCharge });
                         cmd.Parameters.Add("@IncludesWashing", SqlDbType.Bit).Value = service.IncludesWashing;
                         cmd.Parameters.Add("@IncludesDrying", SqlDbType.Bit).Value = service.IncludesDrying;
@@ -619,8 +614,6 @@ namespace LABATRACK.pages.shared
                         int number;
                         if (key == ShopSettings.MinimumChargeKey && decimal.TryParse(value, NumberStyles.Number, Inv, out money))
                             settings.MinimumCharge = money;
-                        else if (key == ShopSettings.RoundingIncrementKgKey && decimal.TryParse(value, NumberStyles.Number, Inv, out money))
-                            settings.RoundingIncrementKg = money;
                         else if (key == ShopSettings.MaxWeightKgKey && decimal.TryParse(value, NumberStyles.Number, Inv, out money))
                             settings.MaxWeightKg = money;
                         else if (key == ShopSettings.MinimumDownPaymentPercentKey && int.TryParse(value, NumberStyles.Integer, Inv, out number))

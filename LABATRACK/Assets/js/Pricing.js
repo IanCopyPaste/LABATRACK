@@ -18,7 +18,7 @@
     var kinds = {
         'service': {
             noun: 'service', priceLabel: 'Rate per kg',
-            hint: 'Charged per kilo, after the weight is rounded up.'
+            hint: 'Charged per kilo of the weighed load.'
         },
         'service-addon': {
             noun: 'service add-on', priceLabel: 'Price',
@@ -66,7 +66,7 @@
             .map(function (box) { return box.getAttribute('data-stage'); });
         routeHint.textContent = work.length === 0
             ? ''
-            : 'Route: ' + ['Queued'].concat(work, ['Inspection', 'Ready for pick-up']).join(' → ');
+            : 'Route: ' + ['Queued', 'Intake inspection'].concat(work, ['Inspection', 'Ready for pick-up']).join(' → ');
     }
 
     function open(k, tr) {

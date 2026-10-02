@@ -31,10 +31,8 @@ namespace LABATRACK.models
         }
 
         public decimal WeightKg { get; set; }
-        public decimal BillableKg { get; set; }
         public decimal RatePerKg { get; set; }
         public decimal MinimumCharge { get; set; }
-        public decimal RoundingIncrementKg { get; set; }
         public decimal ChargeBeforeMinimum { get; set; }
         public decimal LaundryCharge { get; set; }
         public List<PriceLine> Lines { get; private set; }

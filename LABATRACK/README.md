@@ -40,6 +40,12 @@ script are in `docs/BUILD_PROCESS.md`.
 
    Each script can be run again safely. `03` does nothing if there are already jobs.
 
+   **Updating a database built before the exact-price rule and the Intake inspection stage:** run
+   `01_schema.sql` and then `04_procedures.sql` again. `01` drops the billable kilos and rounding
+   columns and the rounding setting, and lets the new Intake inspection status be saved; `04`
+   replaces the procedures that used them. Jobs already in the database keep the amounts they were
+   charged. To get the new demo data instead, start from an empty `labatrack` database.
+
 4. **Email (optional for a first run).** Fill in `Secrets.config` (see *Email setup* below).
    Without it the app still works; emails are just logged as Failed.
 

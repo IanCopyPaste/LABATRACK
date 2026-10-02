@@ -41,7 +41,7 @@
                             <div>
                                 <div class="label muted">Load</div>
                                 <div class="strong" style="font-size:16px; margin-top:4px;"><%: Job.ServiceName %> &middot; <%: Kg(Job.WeightKg) %> kg</div>
-                                <div class="muted small">Billed as <%: Kg(Job.BillableKg) %> kg at <%: Peso(Job.RatePerKgAtCreation) %>/kg<%: string.IsNullOrEmpty(Job.AddOnSummary) ? "" : " · " + Job.AddOnSummary %></div>
+                                <div class="muted small"><%: Peso(Job.RatePerKgAtCreation) %> per kilo<%: string.IsNullOrEmpty(Job.AddOnSummary) ? "" : " · " + Job.AddOnSummary %></div>
                             </div>
                             <div>
                                 <div class="label muted">Remarks (intake check)</div>
@@ -78,14 +78,14 @@
                     <div class="grid grid-main-side">
                         <div class="stack">
                             <asp:Panel ID="pnlQueued" runat="server" CssClass="card" Visible="false">
-                                <div class="card-h"><div><h2>Queued</h2><div class="sub">Waiting for a free machine</div></div></div>
+                                <div class="card-h"><div><h2><%: EarlyTitle %></h2><div class="sub"><%: EarlySub %></div></div></div>
                                 <div class="card-b" style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
-                                    <span>Put the load in <%: NextStage == "Washing" ? "a washer" : "for " + (NextStage ?? "").ToLowerInvariant() %>, then record it here.</span>
+                                    <span><%: EarlyText %></span>
                                     <button type="submit" name="action" value="advance" class="btn btn-primary" data-confirm-title="<%: MoveTitle %>" data-confirm-text="<%: MoveText %>" data-confirm-ok="Move to <%: NextStage %>"><%= Icons.Get("arrow-right", "ico-sm") %>Move to <%: NextStage %></button>
                                 </div>
                                 <div class="card-f" style="justify-content:space-between; flex-wrap:wrap; align-items:flex-end;" data-enter-scope="true">
                                     <div class="field" style="flex:1; min-width:220px;">
-                                        <label for="txtVoidReason">Void this job (only while Queued). <%: Job.AmountPaid > 0 ? "The " + Peso(Job.AmountPaid) + " paid is refunded." : "Nothing was paid, so nothing is refunded." %></label>
+                                        <label for="txtVoidReason">Void this job (only before the work starts).<%: Job.AmountPaid > 0 ? "The " + Peso(Job.AmountPaid) + " paid is refunded." : "Nothing was paid, so nothing is refunded." %></label>
                                         <asp:TextBox ID="txtVoidReason" runat="server" placeholder="Reason (required)" MaxLength="200" />
                                         <% if (Job.AmountPaid > 0) { %>
                                         <label class="check" style="margin-top:8px;"><input type="checkbox" id="chkRefundNow" name="voidNow" value="1"<%= VoidNowChecked ? " checked=\"checked\"" : "" %> />The customer is here: give the <%: Peso(Job.AmountPaid) %> refund back now</label>
@@ -258,7 +258,7 @@
                                 </div>
                                 <div class="card-b">
                                     <dl class="dl">
-                                        <dt><%: Kg(Job.BillableKg) %> kg &times; <%: Peso(Job.RatePerKgAtCreation) %><%: MinimumApplied ? " (raised to minimum)" : "" %></dt><dd><%: Peso(Job.LaundryCharge) %></dd>
+                                        <dt><%: Kg(Job.WeightKg) %> kg &times; <%: Peso(Job.RatePerKgAtCreation) %><%: MinimumApplied ? " (raised to minimum)" : "" %></dt><dd><%: Peso(Job.LaundryCharge) %></dd>
                                         <asp:Repeater ID="rptLines" runat="server">
                                             <ItemTemplate>
                                                 <dt><%#: Eval("Name") %><%# (bool)Eval("IsProduct") ? " &times; " + Eval("Quantity") : "" %></dt><dd><%# Peso(LineAmount((LABATRACK.models.JobAddOn)Container.DataItem)) %></dd>

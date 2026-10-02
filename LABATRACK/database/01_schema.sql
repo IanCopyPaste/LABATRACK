@@ -74,8 +74,9 @@ GO
 
 /* ------------------------------------------------------------------ Services
    The main services, charged per kilo. Each one has its own route: the owner picks which of
-   the three work stages it includes (at least one). Inspection is always on the route, so it
-   has no column. A service is never deleted; one that is no longer offered is made inactive. */
+   the three work stages it includes (at least one). Intake inspection (before the work stages)
+   and Inspection (after them) are always on the route, so they have no column. A service is
+   never deleted; one that is no longer offered is made inactive. */
 IF OBJECT_ID(N'dbo.Services', N'U') IS NULL
 BEGIN
     CREATE TABLE dbo.Services
@@ -114,8 +115,8 @@ END
 GO
 
 /* ------------------------------------------------------------------ Settings
-   The owner's shop rules as key/value pairs (minimum charge, rounding increment, maximum
-   weight per job, unclaimed threshold, turnaround hours, shop name, slip header, rework stages).
+   The owner's shop rules as key/value pairs (minimum charge, maximum weight per job, unclaimed
+   threshold, turnaround hours, shop name, slip header, rework stages).
    02_seed_settings.sql adds the starting values. */
 IF OBJECT_ID(N'dbo.Settings', N'U') IS NULL
 BEGIN
@@ -144,10 +145,8 @@ BEGIN
         CustomerId                    INT           NOT NULL CONSTRAINT FK_JobOrders_Customers REFERENCES dbo.Customers (CustomerId),
         ServiceId                     INT           NOT NULL CONSTRAINT FK_JobOrders_Services REFERENCES dbo.Services (ServiceId),
         WeightKg                      DECIMAL(6,2)  NOT NULL CONSTRAINT CK_JobOrders_WeightKg CHECK (WeightKg > 0),
-        BillableKg                    DECIMAL(6,2)  NOT NULL,
         RatePerKgAtCreation           DECIMAL(10,2) NOT NULL CONSTRAINT CK_JobOrders_Rate CHECK (RatePerKgAtCreation > 0),
         MinimumChargeAtCreation       DECIMAL(10,2) NOT NULL CONSTRAINT CK_JobOrders_Minimum CHECK (MinimumChargeAtCreation >= 0),
-        RoundingIncrementKgAtCreation DECIMAL(4,2)  NOT NULL CONSTRAINT CK_JobOrders_Rounding CHECK (RoundingIncrementKgAtCreation > 0),
         LaundryCharge                 DECIMAL(10,2) NOT NULL CONSTRAINT CK_JobOrders_LaundryCharge CHECK (LaundryCharge > 0),
         IncludesWashing               BIT           NOT NULL,
         IncludesDrying                BIT           NOT NULL,
@@ -160,11 +159,10 @@ BEGIN
         CreatedByUserId               INT           NOT NULL CONSTRAINT FK_JobOrders_CreatedBy REFERENCES dbo.Users (UserId),
         LastEditedAt                  DATETIME2     NULL,
         LastEditedByUserId            INT           NULL CONSTRAINT FK_JobOrders_LastEditedBy REFERENCES dbo.Users (UserId),
-        CONSTRAINT CK_JobOrders_Billable CHECK (BillableKg >= WeightKg),
         CONSTRAINT CK_JobOrders_Total CHECK (TotalAmount >= LaundryCharge),
         CONSTRAINT CK_JobOrders_AtLeastOneStage CHECK (IncludesWashing = 1 OR IncludesDrying = 1 OR IncludesFolding = 1),
         CONSTRAINT CK_JobOrders_CurrentStatus CHECK (CurrentStatus IN
-            (N'Queued', N'Washing', N'Drying', N'Folding', N'Inspection', N'Ready for pick-up', N'Claimed', N'Voided'))
+            (N'Queued', N'Intake inspection', N'Washing', N'Drying', N'Folding', N'Inspection', N'Ready for pick-up', N'Claimed', N'Voided'))
     );
 
     CREATE INDEX IX_JobOrders_CurrentStatus ON dbo.JobOrders (CurrentStatus);
@@ -172,6 +170,21 @@ BEGIN
     CREATE INDEX IX_JobOrders_ServiceId ON dbo.JobOrders (ServiceId);
     CREATE INDEX IX_JobOrders_CreatedAt ON dbo.JobOrders (CreatedAt);
 END
+GO
+
+-- Removed with the exact-price rule (laundry charge = weight x rate per kilo, no rounding up). A
+-- database built before then still has the billable kilos and rounding step columns, the checks
+-- that used them, and the rounding setting; this drops them. On a new database it does nothing.
+IF COL_LENGTH(N'dbo.JobOrders', N'BillableKg') IS NOT NULL
+BEGIN
+    ALTER TABLE dbo.JobOrders DROP CONSTRAINT CK_JobOrders_Billable;
+    ALTER TABLE dbo.JobOrders DROP CONSTRAINT CK_JobOrders_Rounding;
+    ALTER TABLE dbo.JobOrders DROP COLUMN BillableKg;
+    ALTER TABLE dbo.JobOrders DROP COLUMN RoundingIncrementKgAtCreation;
+END
+GO
+
+DELETE FROM dbo.Settings WHERE SettingKey = N'RoundingIncrementKg';
 GO
 
 /* ------------------------------------------------------------------ JobAddOns
@@ -215,13 +228,43 @@ BEGIN
         ChangedByUserId INT           NOT NULL CONSTRAINT FK_JobStatusHistory_Users REFERENCES dbo.Users (UserId),
         Reason          NVARCHAR(200) NULL,
         CONSTRAINT CK_JobStatusHistory_FromStatus CHECK (FromStatus IS NULL OR FromStatus IN
-            (N'Queued', N'Washing', N'Drying', N'Folding', N'Inspection', N'Ready for pick-up', N'Claimed', N'Voided')),
+            (N'Queued', N'Intake inspection', N'Washing', N'Drying', N'Folding', N'Inspection', N'Ready for pick-up', N'Claimed', N'Voided')),
         CONSTRAINT CK_JobStatusHistory_ToStatus CHECK (ToStatus IN
-            (N'Queued', N'Washing', N'Drying', N'Folding', N'Inspection', N'Ready for pick-up', N'Claimed', N'Voided'))
+            (N'Queued', N'Intake inspection', N'Washing', N'Drying', N'Folding', N'Inspection', N'Ready for pick-up', N'Claimed', N'Voided'))
     );
 
     CREATE INDEX IX_JobStatusHistory_JobId ON dbo.JobStatusHistory (JobId, HistoryId);
     CREATE INDEX IX_JobStatusHistory_ToStatus ON dbo.JobStatusHistory (ToStatus, ChangedAt);
+END
+GO
+
+-- Added with the Intake inspection stage (between Queued and the first work stage). A database
+-- built before then has status checks that refuse it; this replaces them. On a new database it
+-- does nothing.
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints
+               WHERE name = N'CK_JobOrders_CurrentStatus' AND definition LIKE N'%Intake inspection%')
+BEGIN
+    ALTER TABLE dbo.JobOrders DROP CONSTRAINT CK_JobOrders_CurrentStatus;
+    ALTER TABLE dbo.JobOrders ADD CONSTRAINT CK_JobOrders_CurrentStatus CHECK (CurrentStatus IN
+        (N'Queued', N'Intake inspection', N'Washing', N'Drying', N'Folding', N'Inspection', N'Ready for pick-up', N'Claimed', N'Voided'));
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints
+               WHERE name = N'CK_JobStatusHistory_FromStatus' AND definition LIKE N'%Intake inspection%')
+BEGIN
+    ALTER TABLE dbo.JobStatusHistory DROP CONSTRAINT CK_JobStatusHistory_FromStatus;
+    ALTER TABLE dbo.JobStatusHistory ADD CONSTRAINT CK_JobStatusHistory_FromStatus CHECK (FromStatus IS NULL OR FromStatus IN
+        (N'Queued', N'Intake inspection', N'Washing', N'Drying', N'Folding', N'Inspection', N'Ready for pick-up', N'Claimed', N'Voided'));
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints
+               WHERE name = N'CK_JobStatusHistory_ToStatus' AND definition LIKE N'%Intake inspection%')
+BEGIN
+    ALTER TABLE dbo.JobStatusHistory DROP CONSTRAINT CK_JobStatusHistory_ToStatus;
+    ALTER TABLE dbo.JobStatusHistory ADD CONSTRAINT CK_JobStatusHistory_ToStatus CHECK (ToStatus IN
+        (N'Queued', N'Intake inspection', N'Washing', N'Drying', N'Folding', N'Inspection', N'Ready for pick-up', N'Claimed', N'Voided'));
 END
 GO
 
@@ -410,10 +453,8 @@ SELECT
     j.ServiceId,
     s.Name            AS ServiceName,
     j.WeightKg,
-    j.BillableKg,
     j.RatePerKgAtCreation,
     j.MinimumChargeAtCreation,
-    j.RoundingIncrementKgAtCreation,
     j.LaundryCharge,
     j.TotalAmount,
     j.IncludesWashing,

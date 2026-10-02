@@ -25,7 +25,7 @@ Done when every screen has a sketch and the student can say what data each one r
 
 ### Phase 1: Schema (Day 2)
 
-Write `01_schema.sql` and `02_seed_settings.sql` (services, add-ons, minimum charge, rounding increment, one demo owner account).
+Write `01_schema.sql` and `02_seed_settings.sql` (services, add-ons, minimum charge, one demo owner account).
 
 Claude Code proposes the tables, the student reviews and approves, then it writes the script. Do not skip the review. A wrong table costs days later.
 
@@ -52,18 +52,19 @@ Done when:
 
 This is the heart of the system and it takes longer than expected. Build customer lookup by contact number, `NewJob.aspx` (service add-on checkboxes, product add-on quantity steppers, and the payment fields live in the page itself), `PricingService`, `ClaimNumberGenerator`, the single-transaction save, and `JobSlip.aspx` with its own `@media print` block.
 
-Done when the totals below match by hand. These are example numbers (rate 40 per kg, minimum charge 120, rounding increment 1 kg). Replace them with the owner's real rates.
+Done when the totals below match by hand. These are example numbers (rate 40 per kg, minimum charge 120). The laundry charge is the weight exactly as weighed times the rate, with no rounding up of the weight. Replace them with the owner's real rates.
 
-| Weight | Billable kg | Laundry charge | Add-ons | Total |
-|---|---|---|---|---|
-| 2.0 kg | 2 | 80, raised to minimum 120 | none | 120 |
-| 2.3 kg | 3 | 120 | Fabric conditioner x1 (15) | 135 |
-| 5.1 kg | 6 | 240 | none | 240 |
-| 5.1 kg | 6 | 240 | Extra rinse (20), Fabric conditioner x2 (30) | 290 |
+| Weight | Laundry charge | Add-ons | Total |
+|---|---|---|---|
+| 2.0 kg | 80, raised to minimum 120 | none | 120 |
+| 2.3 kg | 92, raised to minimum 120 | Fabric conditioner x1 (15) | 135 |
+| 5.1 kg | 204 | none | 204 |
+| 5.1 kg | 204 | Extra rinse (20), Fabric conditioner x2 (30) | 254 |
+| 6.25 kg | 250 | none | 250 |
 
 Also done when a job created at one rate keeps its total after the owner changes that rate, and when a weight above the maximum set on the Pricing page is refused by the server, not only by the page.
 
-Payment, by hand, with the 5.1 kg job above at 240 and the minimum down payment at 50% (so at least 120): a down payment of 100 is refused; 150 paid in cash with 200 handed over saves, prints change 50, and leaves a balance of 90; paying everything (240) saves as paid in full; a down payment above 240 is refused, and so is cash below the amount paid now.
+Payment, by hand, with the 5.1 kg job above at 204 and the minimum down payment at 50% (so at least 102): a down payment of 100 is refused; 150 paid in cash with 200 handed over saves, prints change 50, and leaves a balance of 54; paying everything (204) saves as paid in full; a down payment above 204 is refused, and so is cash below the amount paid now.
 
 ### Phase 4: Status board and job detail (Days 9 to 11)
 
@@ -74,7 +75,7 @@ Done when:
 - An illegal transition (for example Queued straight to Folding) is rejected.
 - Failing inspection sends a job back to Washing and the timeline shows both passes.
 - A job on a service without Folding goes from its last work stage straight to Inspection, and neither its stepper nor its rework choices show Folding.
-- Voiding a Queued job creates a refund row for everything that was paid on it (all of it, or only the down payment) and the day's total is correct.
+- Voiding a Queued job, or one in Intake inspection, creates a refund row for everything that was paid on it (all of it, or only the down payment) and the day's total is correct.
 - A job cannot be saved with less than the minimum down payment, and cash received below the amount paid now is rejected.
 - A load with a balance cannot be claimed until the balance is collected, on the page and in `StatusService` (a plain move to Claimed is refused). A load paid in full is claimed as before.
 - A job dropped off yesterday is still on the board today.
@@ -109,14 +110,14 @@ Run this at the end of each phase that touches it, and once more before the demo
 1. Create a job with one service add-on and a product add-on at quantity 2, paid in cash with more than the total. Check the total and the change by hand, and that the slip prints the quantity, the same cash received, and the change.
 2. Advance it through every stage. Confirm one history row per change with the right staff name.
 3. Fail inspection, send it back to Washing, and advance it again. Confirm the timeline shows the rework.
-4. Void a Queued job. Confirm the full refund row and that the daily total nets it out.
+4. Void a Queued job. Confirm the full refund row and that the daily total nets it out. Then move another job to Intake inspection and void it there the same way (the job page shows the void form at both stages). Move a third job on to Washing: the void form is gone, and a void sent from an old page is refused with the "already updated" message.
 5. Open the same job in two browser windows and advance it in both. The second must get the "already updated" message.
 6. Try to create a job with cash received below the amount being paid now. It must be rejected. Then create it with enough cash and claim it once Ready.
 7. Log in as staff and open an admin URL directly. It must redirect to the admin login. Then, as the owner, try to change the password on Settings with a wrong current password (it must be refused), change it properly, sign out, and confirm only the new password works.
 8. As the owner, change the rate of a service that has no load in the shop. Old jobs must keep their totals. Then create a job with that service and confirm the service cannot be edited until that job is claimed or voided.
 9. Compare the on-screen daily total with a `SELECT` on `Payments` for the same day.
 10. As the owner, correct a paid job's weight upward, then another one downward. The upward one must add no payment row and only raise the balance; the downward one must add one negative adjustment row that refunds exactly the excess, and its payments must then add up to its new total. Try to save a correction after another window changed what the customer paid: it must be refused.
-11. Give a service only Washing and Drying, create a job with it, and advance it. Confirm it goes Drying → Inspection with no Folding step, that a failed inspection offers only Washing or Drying, and that the owner cannot change its service once it has left Queued.
+11. Give a service only Washing and Drying, create a job with it, and advance it. Confirm it goes Queued → Intake inspection → Washing → Drying → Inspection with no Folding step, that a failed inspection offers only Washing or Drying, and that the owner can change its service while it is Queued or in Intake inspection but not once it has reached Washing.
 12. Set the maximum weight per job on Pricing to 50 kg, then try to create a job at 50.5 kg. It must be refused with the limit shown, and 50 kg must be accepted.
 13. On the owner login, use "Forgot password?", type the owner username, the recovery email from Settings and a new password twice. Confirm the old password no longer works and the new one does. Then try a wrong email, and then a staff username: both must be refused with "Username or recovery email is wrong".
 14. Part payments. With the minimum at 50%, create a 240 job with a down payment of 150 (cash 200): the slip must show change 50, balance due 90 and a PARTIALLY PAID stamp, and the job lists must show "Partial · ₱90.00 due". Take a 50 payment on the job page, then try to take 100 (refused: the balance is only 40). Move the load to Ready and try to claim it: the release card must collect the remaining 40, and only then does the job become Claimed. Check that no claimed job appears in the `vw_JobPayments` query in the README.
@@ -126,7 +127,7 @@ Run this at the end of each phase that touches it, and once more before the demo
 18. Loading feedback. Press Create job, Record payment, Collect and mark claimed, Save changes, and Sign in: the pressed button must show a spinner and keep its width, a thin bar must slide along the top of the window, and pressing again quickly must not send anything twice (check that only one job or one payment row was made). Going Back after a page change must not leave a button spinning.
 19. Refunds. Create a job with a down payment and void it with "the customer is here" ticked: the refund is handed over at once (a negative refund payment today, the job nets to 0). Create another and void it with the box unticked: an email with a refund code arrives, no refund payment exists yet, the job page shows "Refund waiting", and both dashboards list it under Needs attention. On the job page try a wrong code (the tries left must count down), then the claim number as a code (refused), then the right code in lowercase with a dash: it must release once, write one negative payment dated now under the person who did it, and drop the day's net total by that amount. Try the same code again, and open the job in two windows and press "Give the refund" in both: only one may succeed, the other must say it was already given. Lock a refund with five wrong codes: even the right code must be refused, a staff account must not see "Release without the code", and the owner must be able to release it only after typing a reason. "Send a new code" must make the old code stop working only after the new email is sent. For a customer with no email address the void email must be Skipped and only the owner override can release it.
 20. Customers and New job. As the owner, press Edit on a customer: a window opens filled with their details; save a change, and then try to save a contact number that already belongs to someone else (the window must reopen with the reason). As staff there must be no Edit button. On New job, click in the contact box: saved numbers drop down, typing digits narrows them, and clicking one fills the box and finds the customer.
-21. Rounding and quick amounts. On Pricing choose a rounding step of 0.1 kg and save: a 3.2 kg load must bill as 3.2 kg on New job, on the slip, and when the owner edits the job (all three must agree). On the job page press the quick cash buttons: Exact, ₱100 ... ₱1,000 must fill the cash box and show the change.
+21. Exact price and quick amounts. At ₱40.00 per kilo a 3.2 kg load must bill as ₱128.00 on New job, on the slip, and when the owner edits the job (all three must agree), and a 5.15 kg load at ₱35.00 as ₱180.25. There is no rounding setting on Pricing. On the job page press the quick cash buttons: Exact, ₱100 ... ₱1,000 must fill the cash box and show the change.
 ## Defense questions to be ready for
 
 Each of these maps to a starred file. The student should be able to answer them without looking at the code.
@@ -138,7 +139,7 @@ Each of these maps to a starred file. The student should be able to answer them 
 - Why is there a status history table instead of date columns on the job? (`StatusService`, schema)
 - How is a staff member kept out of the admin pages, even by typing the URL? (`AdminBasePage`, `Web.config`)
 - Why void instead of delete? (schema, `StatusService`)
-- How is a total computed, including rounding, the minimum charge, and add-ons? (`PricingService`)
+- How is a total computed, including the minimum charge and add-ons? (`PricingService`)
 - How does the system protect passwords? (PBKDF2 with a salt in `PasswordHasher`, checked in each login page)
 - How does the owner get back in after forgetting the password? (`admin/Login.aspx.cs`, `btnReset_Click`: username plus the recovery email from Settings)
 - Why does each service have its own route, and why can the owner not change a service while a load using it is still in the shop? (`StatusService`, schema)

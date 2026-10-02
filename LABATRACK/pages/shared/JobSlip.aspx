@@ -38,7 +38,7 @@
 
             <hr class="rule" />
             <div class="row"><span><%: Job.ServiceName %></span><span><%: Money(Job.LaundryCharge) %></span></div>
-            <div class="item-sub"><%: Kg(Job.WeightKg) %> kg, billed <%: Kg(Job.BillableKg) %> kg &times; <%: Money(Job.RatePerKgAtCreation) %><%: MinimumApplied ? " (minimum " + Money(Job.MinimumChargeAtCreation) + ")" : "" %></div>
+            <div class="item-sub"><%: Kg(Job.WeightKg) %> kg &times; <%: Money(Job.RatePerKgAtCreation) %><%: MinimumApplied ? " (minimum " + Money(Job.MinimumChargeAtCreation) + ")" : "" %></div>
             <asp:Repeater ID="rptAddOns" runat="server">
                 <ItemTemplate>
                     <div class="row" style="margin-top:4px;"><span><%#: Eval("Name") %><%# (bool)Eval("IsProduct") ? " &times; " + Eval("Quantity") : "" %></span><span><%# Money(LineAmount((LABATRACK.models.JobAddOn)Container.DataItem)) %></span></div>

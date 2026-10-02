@@ -207,6 +207,7 @@ table.table { width: 100%; border-collapse: collapse; }
 }
 .pill::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .8; }
 .st-queued     { background: #eef1f5; color: #52606f; }
+.st-intake     { background: #e9f4ea; color: #2f7a3f; }
 .st-washing    { background: #e6f0fd; color: #2a61c4; }
 .st-drying     { background: #fdf2e2; color: #a86a12; }
 .st-folding    { background: #f0ebfb; color: #6b4bbd; }
@@ -365,7 +366,7 @@ textarea { height: auto; min-height: 84px; padding: 10px 12px; resize: vertical;
 .bar > span { display: block; height: 100%; border-radius: 8px; background: var(--primary); }
 .split { display: flex; height: 10px; border-radius: 10px; overflow: hidden; }
 
-.pipeline { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.pipeline { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
 .pipe { padding: 16px 18px; border-right: 1px solid var(--border); }
 .pipe:last-child { border-right: 0; }
 .pipe .count { font-size: 22px; font-weight: 650; margin-top: 6px; font-variant-numeric: tabular-nums; }

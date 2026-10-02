@@ -4,7 +4,6 @@
     if (!loadCard || !serviceBox || serviceBox.options.length === 0) return;
     var weightBox = document.getElementById('txtWeight');
     var minimum = parseFloat(loadCard.getAttribute('data-minimum'));
-    var rounding = parseFloat(loadCard.getAttribute('data-rounding'));
     var maxWeight = parseFloat(loadCard.getAttribute('data-max-weight'));
     var rates = {};
     loadCard.getAttribute('data-rates').split(',').forEach(function (pair) {
@@ -31,7 +30,7 @@
     var products = document.querySelectorAll('[data-product]');
 
     var breakdown = {};
-    ['weightError', 'weightHint', 'serviceRoute', 'sumService', 'sumRate', 'sumWeight', 'sumBillable',
+    ['weightError', 'weightHint', 'serviceRoute', 'sumService', 'sumRate', 'sumWeight',
      'sumLaundry', 'sumMinLabel', 'sumMin'].forEach(function (id) {
         breakdown[id] = document.getElementById(id);
     });
@@ -97,7 +96,7 @@
     function routeText(code) {
         var names = { W: 'Washing', D: 'Drying', F: 'Folding' };
         var steps = (code || '').split('').map(function (c) { return names[c]; });
-        return steps.concat('Inspection').join(' → ');
+        return ['Intake inspection'].concat(steps, 'Inspection').join(' → ');
     }
 
     function kg(n) {
@@ -122,21 +121,17 @@
 
         if (!ok) {
             breakdown.weightHint.textContent = 'Weigh the load, then type the kilos shown on the scale.';
-            breakdown.sumWeight.textContent = 'Weight → billable';
-            breakdown.sumBillable.textContent = breakdown.sumLaundry.textContent = breakdown.sumMin.textContent = '—';
+            breakdown.sumWeight.textContent = breakdown.sumLaundry.textContent = breakdown.sumMin.textContent = '—';
             return NaN;
         }
 
-        var stepC = Math.round(rounding * 100);
-        var billableC = Math.ceil(Math.round(weight * 100) / stepC) * stepC;
-        var billable = billableC / 100;
-        var chargeC = Math.floor((billableC * Math.round(rate * 100) + 50) / 100);
+        var weightC = Math.round(weight * 100);
+        var chargeC = Math.floor((weightC * Math.round(rate * 100) + 50) / 100);
         var charge = chargeC / 100;
         var raised = charge < minimum;
 
-        breakdown.weightHint.textContent = 'Rounded up to the next ' + kg(rounding) + ': bills as ' + kg(billable) + '.';
-        breakdown.sumWeight.textContent = kg(weight) + ' → billable';
-        breakdown.sumBillable.textContent = kg(billable);
+        breakdown.weightHint.textContent = kg(weight) + ' × ' + peso(rate) + ' = ' + peso(charge) + '.';
+        breakdown.sumWeight.textContent = kg(weight);
         breakdown.sumLaundry.textContent = peso(Math.max(charge, minimum));
         breakdown.sumMinLabel.textContent = 'Minimum ' + peso(minimum);
         breakdown.sumMin.textContent = raised ? 'applied (was ' + peso(charge) + ')' : 'not needed';
@@ -250,8 +245,7 @@
                 + (plan === 'part' ? '.\nBalance ' + peso(balance) + ', paid before pick-up.' : '.');
         }
         var text = name + (contact ? ' · ' + contact : '') + '\n'
-            + breakdown.sumService.textContent + ', ' + breakdown.sumWeight.textContent.replace(' → billable', '')
-            + ' (billed as ' + breakdown.sumBillable.textContent + ')\n'
+            + breakdown.sumService.textContent + ', ' + breakdown.sumWeight.textContent + '\n'
             + (lines.length ? lines.map(function (line) { return line.label; }).join(', ') + '\n' : '')
             + '\nTotal ' + peso(total) + '\n' + paying
             + '\n\nThe prices are saved with the job and never change later. The claim number is given when you continue.';

@@ -135,12 +135,7 @@
                                         <label for="txtMinimumCharge">Minimum laundry charge</label>
                                         <div class="input-prefix"><span>₱</span><asp:TextBox ID="txtMinimumCharge" runat="server" inputmode="decimal" MaxLength="9" /></div>
                                         <asp:Label ID="lblMinimumError" runat="server" CssClass="error-text" Visible="false" EnableViewState="false" />
-                                        <span class="hint">A laundry charge below this is raised to it. Add-ons are added after.</span>
-                                    </div>
-                                    <div class="field">
-                                        <label for="ddlRounding">Round weight up to the next</label>
-                                        <asp:DropDownList ID="ddlRounding" runat="server" />
-                                        <span class="hint">The weighed load is rounded up to a whole step. With a 0.1 kg step a 3.2 kg load bills as 3.2 kg; with 0.5 kg as 3.5 kg; with 1 kg as 4 kg.</span>
+                                        <span class="hint">The laundry charge is the weight times the rate per kilo. One below this is raised to it. Add-ons are added after.</span>
                                     </div>
                                     <div class="field">
                                         <label for="txtMaxWeight">Maximum weight per job (kg)</label>

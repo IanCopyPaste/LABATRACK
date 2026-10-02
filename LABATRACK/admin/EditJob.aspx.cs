@@ -27,7 +27,7 @@ namespace LABATRACK.admin
 
         protected bool ServiceChangeAllowed
         {
-            get { return Job.CurrentStatus == JobStatus.Queued; }
+            get { return Job.CurrentStatus == JobStatus.Queued || Job.CurrentStatus == JobStatus.IntakeInspection; }
         }
 
         private List<JobAddOn> currentLines = new List<JobAddOn>();
@@ -188,9 +188,9 @@ namespace LABATRACK.admin
                         {
                             error = "A " + job.CurrentStatus.ToLowerInvariant() + " job cannot be changed.";
                         }
-                        else if (serviceChanged && job.CurrentStatus != JobStatus.Queued)
+                        else if (serviceChanged && job.CurrentStatus != JobStatus.Queued && job.CurrentStatus != JobStatus.IntakeInspection)
                         {
-                            error = "The service can only be changed while the job is still Queued.";
+                            error = "The service can only be changed while the job is still Queued or in Intake inspection.";
                         }
                         else
                         {
@@ -311,7 +311,6 @@ namespace LABATRACK.admin
                                 cmd.Parameters.Add("@ExpectedStatus", SqlDbType.NVarChar, 20).Value = expectedStatus;
                                 cmd.Parameters.Add("@ServiceId", SqlDbType.Int).Value = serviceId;
                                 cmd.Parameters.Add(new SqlParameter("@WeightKg", SqlDbType.Decimal) { Precision = 6, Scale = 2, Value = weight });
-                                cmd.Parameters.Add(new SqlParameter("@BillableKg", SqlDbType.Decimal) { Precision = 6, Scale = 2, Value = quote.BillableKg });
                                 cmd.Parameters.Add(new SqlParameter("@RatePerKgAtCreation", SqlDbType.Decimal) { Precision = 10, Scale = 2, Value = quote.RatePerKg });
                                 cmd.Parameters.Add(new SqlParameter("@LaundryCharge", SqlDbType.Decimal) { Precision = 10, Scale = 2, Value = quote.LaundryCharge });
                                 cmd.Parameters.Add("@IncludesWashing", SqlDbType.Bit).Value = washing;
@@ -438,9 +437,7 @@ namespace LABATRACK.admin
             q.WeightKg = weight;
             q.RatePerKg = rate;
             q.MinimumCharge = job.MinimumChargeAtCreation;
-            q.RoundingIncrementKg = job.RoundingIncrementKgAtCreation;
-            q.BillableKg = Math.Ceiling(weight / job.RoundingIncrementKgAtCreation) * job.RoundingIncrementKgAtCreation;
-            q.ChargeBeforeMinimum = Math.Round(q.BillableKg * rate, 2, MidpointRounding.AwayFromZero);
+            q.ChargeBeforeMinimum = Math.Round(weight * rate, 2, MidpointRounding.AwayFromZero);
             if (q.ChargeBeforeMinimum < job.MinimumChargeAtCreation)
                 q.LaundryCharge = job.MinimumChargeAtCreation;
             else
@@ -839,6 +836,7 @@ namespace LABATRACK.admin
             switch (stage)
             {
                 case "Queued": return "st-queued";
+                case "Intake inspection": return "st-intake";
                 case "Washing": return "st-washing";
                 case "Drying": return "st-drying";
                 case "Folding": return "st-folding";

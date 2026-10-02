@@ -15,11 +15,9 @@ namespace LABATRACK.models
         public int CustomerId { get; set; }
         public int ServiceId { get; set; }
         public decimal WeightKg { get; set; }
-        public decimal BillableKg { get; set; }
 
         public decimal RatePerKgAtCreation { get; set; }
         public decimal MinimumChargeAtCreation { get; set; }
-        public decimal RoundingIncrementKgAtCreation { get; set; }
         public decimal LaundryCharge { get; set; }
         public decimal TotalAmount { get; set; }
 
@@ -110,6 +108,7 @@ namespace LABATRACK.models
             {
                 List<string> route = new List<string>();
                 route.Add(JobStatus.Queued);
+                route.Add(JobStatus.IntakeInspection);
                 route.AddRange(WorkStages);
                 route.Add(JobStatus.Inspection);
                 route.Add(JobStatus.Ready);
@@ -142,10 +141,8 @@ namespace LABATRACK.models
             job.ServiceId = (int)r["ServiceId"];
             job.ServiceName = (string)r["ServiceName"];
             job.WeightKg = (decimal)r["WeightKg"];
-            job.BillableKg = (decimal)r["BillableKg"];
             job.RatePerKgAtCreation = (decimal)r["RatePerKgAtCreation"];
             job.MinimumChargeAtCreation = (decimal)r["MinimumChargeAtCreation"];
-            job.RoundingIncrementKgAtCreation = (decimal)r["RoundingIncrementKgAtCreation"];
             job.LaundryCharge = (decimal)r["LaundryCharge"];
             job.TotalAmount = (decimal)r["TotalAmount"];
             job.IncludesWashing = (bool)r["IncludesWashing"];

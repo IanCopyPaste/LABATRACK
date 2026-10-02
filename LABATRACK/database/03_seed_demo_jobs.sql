@@ -6,7 +6,7 @@
 
     It covers every stage, a load sent back from inspection (rework), two voided jobs (one whose
     refund was handed back at once, one of a down payment whose refund is still waiting for the
-    customer: its demo refund code is K7M-2QX), cash payments with change and e-wallet payments, down
+    customer: its demo refund code is K7M-2QX; it was voided from Intake inspection), cash payments with change and e-wallet payments, down
     payments with the balance paid when the load was claimed, loads still in the shop with a
     balance, an owner's correction that raised the total (paid as a balance at claim), and loads
     left unclaimed for over a week.
@@ -15,8 +15,8 @@
     back from now), so the dashboards show a real "today". Run it on the day of the demo, on a
     fresh database. If the database already has jobs, it does nothing.
 
-    Every amount is written out and follows the pricing rules (rate x billable kg, weight rounded
-    up to the next kg, minimum 120, then add-ons). Every down payment is at least 50% of the total
+    Every amount is written out and follows the pricing rules (weight x rate per kilo, raised to
+    the minimum 120 when lower, then add-ons). Every down payment is at least 50% of the total
     (the starting minimum in 02_seed_settings.sql). Hand check after running it:
         SELECT v.JobId, j.CurrentStatus, v.TotalAmount, v.AmountPaid FROM dbo.vw_JobPayments AS v
         JOIN dbo.JobOrders AS j ON j.JobId = v.JobId WHERE v.AmountPaid <> v.TotalAmount;
@@ -118,16 +118,17 @@ DECLARE @c15 INT;
 INSERT INTO dbo.Customers (Name, ContactNumber, Email, CreatedAt) VALUES (N'Aileen Soriano', N'0917 555 0115', N'aileen.s@example.com', DATEADD(MINUTE, 540, DATEADD(DAY, -20, @Today)));
 SET @c15 = SCOPE_IDENTITY();
 
-/* 1. Maria Santos, Wash-Dry-Fold 5.1 kg, Claimed: 6.00 kg x 40.00 = laundry 240.00; total 290.00 */
+/* 1. Maria Santos, Wash-Dry-Fold 6 kg, Claimed: 6.00 kg x 40.00 = laundry 240.00; total 290.00 */
 SET @At = DATEADD(MINUTE, 552, DATEADD(DAY, -20, @Today));
 SET @Claim = N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-' + RIGHT(N'000' + CAST((SELECT COUNT(*) + 1 FROM dbo.JobOrders WHERE ClaimNumber LIKE N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-%') AS NVARCHAR(10)), 3);
-INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, BillableKg, RatePerKgAtCreation, MinimumChargeAtCreation, RoundingIncrementKgAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
-VALUES (@Claim, @c1, @sWDF, 5.10, 6.00, 40.00, 120.00, 1.00, 240.00, 1, 1, 1, 290.00, N'Claimed', NULL, DATEADD(HOUR, 24, @At), @At, @jcruz);
+INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, RatePerKgAtCreation, MinimumChargeAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
+VALUES (@Claim, @c1, @sWDF, 6.00, 40.00, 120.00, 240.00, 1, 1, 1, 290.00, N'Claimed', NULL, DATEADD(HOUR, 24, @At), @At, @jcruz);
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobAddOns (JobId, AddOnId, Quantity, PriceAtCreation, AddedAt) VALUES (@JobId, @aRinse, 1, 20.00, @At);
 INSERT INTO dbo.JobAddOns (JobId, AddOnId, Quantity, PriceAtCreation, AddedAt) VALUES (@JobId, @aCond, 2, 15.00, @At);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, 552, DATEADD(DAY, -20, @Today)), @jcruz, NULL);
-INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Washing', DATEADD(MINUTE, 577, DATEADD(DAY, -20, @Today)), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Intake inspection', DATEADD(MINUTE, 565, DATEADD(DAY, -20, @Today)), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Intake inspection', N'Washing', DATEADD(MINUTE, 577, DATEADD(DAY, -20, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Washing', N'Drying', DATEADD(MINUTE, 602, DATEADD(DAY, -20, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Drying', N'Folding', DATEADD(MINUTE, 652, DATEADD(DAY, -20, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Folding', N'Inspection', DATEADD(MINUTE, 707, DATEADD(DAY, -20, @Today)), @jcruz, NULL);
@@ -140,11 +141,12 @@ INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResen
 /* 2. Ana Reyes, Wash-Dry-Fold 2 kg, Claimed: 2.00 kg x 40.00 = laundry 120.00; total 120.00 */
 SET @At = DATEADD(MINUTE, 610, DATEADD(DAY, -20, @Today));
 SET @Claim = N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-' + RIGHT(N'000' + CAST((SELECT COUNT(*) + 1 FROM dbo.JobOrders WHERE ClaimNumber LIKE N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-%') AS NVARCHAR(10)), 3);
-INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, BillableKg, RatePerKgAtCreation, MinimumChargeAtCreation, RoundingIncrementKgAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
-VALUES (@Claim, @c3, @sWDF, 2.00, 2.00, 40.00, 120.00, 1.00, 120.00, 1, 1, 1, 120.00, N'Claimed', NULL, DATEADD(HOUR, 24, @At), @At, @jcruz);
+INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, RatePerKgAtCreation, MinimumChargeAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
+VALUES (@Claim, @c3, @sWDF, 2.00, 40.00, 120.00, 120.00, 1, 1, 1, 120.00, N'Claimed', NULL, DATEADD(HOUR, 24, @At), @At, @jcruz);
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, 610, DATEADD(DAY, -20, @Today)), @jcruz, NULL);
-INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Washing', DATEADD(MINUTE, 635, DATEADD(DAY, -20, @Today)), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Intake inspection', DATEADD(MINUTE, 623, DATEADD(DAY, -20, @Today)), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Intake inspection', N'Washing', DATEADD(MINUTE, 635, DATEADD(DAY, -20, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Washing', N'Drying', DATEADD(MINUTE, 660, DATEADD(DAY, -20, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Drying', N'Folding', DATEADD(MINUTE, 710, DATEADD(DAY, -20, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Folding', N'Inspection', DATEADD(MINUTE, 765, DATEADD(DAY, -20, @Today)), @jcruz, NULL);
@@ -154,15 +156,16 @@ INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, Rec
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Drop-off', N'ana.reyes@example.com', N'Sent', NULL, 0, DATEADD(SECOND, 5, @At), @jcruz);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Ready', N'ana.reyes@example.com', N'Sent', NULL, 0, DATEADD(MINUTE, 810, DATEADD(DAY, -20, @Today)), @jcruz);
 
-/* 3. Carlo Mendoza, Wash-Dry 4.6 kg, Claimed: 5.00 kg x 35.00 = laundry 175.00; total 195.00 */
+/* 3. Carlo Mendoza, Wash-Dry 5 kg, Claimed: 5.00 kg x 35.00 = laundry 175.00; total 195.00 */
 SET @At = DATEADD(MINUTE, 545, DATEADD(DAY, -19, @Today));
 SET @Claim = N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-' + RIGHT(N'000' + CAST((SELECT COUNT(*) + 1 FROM dbo.JobOrders WHERE ClaimNumber LIKE N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-%') AS NVARCHAR(10)), 3);
-INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, BillableKg, RatePerKgAtCreation, MinimumChargeAtCreation, RoundingIncrementKgAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
-VALUES (@Claim, @c4, @sWD, 4.60, 5.00, 35.00, 120.00, 1.00, 175.00, 1, 1, 0, 195.00, N'Claimed', NULL, DATEADD(HOUR, 24, @At), @At, @arivera);
+INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, RatePerKgAtCreation, MinimumChargeAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
+VALUES (@Claim, @c4, @sWD, 5.00, 35.00, 120.00, 175.00, 1, 1, 0, 195.00, N'Claimed', NULL, DATEADD(HOUR, 24, @At), @At, @arivera);
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobAddOns (JobId, AddOnId, Quantity, PriceAtCreation, AddedAt) VALUES (@JobId, @aRinse, 1, 20.00, @At);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, 545, DATEADD(DAY, -19, @Today)), @arivera, NULL);
-INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Washing', DATEADD(MINUTE, 570, DATEADD(DAY, -19, @Today)), @arivera, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Intake inspection', DATEADD(MINUTE, 558, DATEADD(DAY, -19, @Today)), @arivera, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Intake inspection', N'Washing', DATEADD(MINUTE, 570, DATEADD(DAY, -19, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Washing', N'Drying', DATEADD(MINUTE, 595, DATEADD(DAY, -19, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Drying', N'Inspection', DATEADD(MINUTE, 645, DATEADD(DAY, -19, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Inspection', N'Ready for pick-up', DATEADD(MINUTE, 690, DATEADD(DAY, -19, @Today)), @arivera, NULL);
@@ -174,11 +177,12 @@ INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResen
 /* 4. Ramon Bautista, Wash-Dry-Fold 7 kg, Claimed: 7.00 kg x 40.00 = laundry 280.00; total 280.00 */
 SET @At = DATEADD(MINUTE, 1080, DATEADD(DAY, -19, @Today));
 SET @Claim = N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-' + RIGHT(N'000' + CAST((SELECT COUNT(*) + 1 FROM dbo.JobOrders WHERE ClaimNumber LIKE N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-%') AS NVARCHAR(10)), 3);
-INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, BillableKg, RatePerKgAtCreation, MinimumChargeAtCreation, RoundingIncrementKgAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
-VALUES (@Claim, @c6, @sWDF, 7.00, 7.00, 40.00, 120.00, 1.00, 280.00, 1, 1, 1, 280.00, N'Claimed', NULL, DATEADD(HOUR, 24, @At), @At, @jcruz);
+INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, RatePerKgAtCreation, MinimumChargeAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
+VALUES (@Claim, @c6, @sWDF, 7.00, 40.00, 120.00, 280.00, 1, 1, 1, 280.00, N'Claimed', NULL, DATEADD(HOUR, 24, @At), @At, @jcruz);
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, 1080, DATEADD(DAY, -19, @Today)), @jcruz, NULL);
-INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Washing', DATEADD(MINUTE, 1105, DATEADD(DAY, -19, @Today)), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Intake inspection', DATEADD(MINUTE, 1093, DATEADD(DAY, -19, @Today)), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Intake inspection', N'Washing', DATEADD(MINUTE, 1105, DATEADD(DAY, -19, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Washing', N'Drying', DATEADD(MINUTE, 1130, DATEADD(DAY, -19, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Drying', N'Folding', DATEADD(MINUTE, 1180, DATEADD(DAY, -19, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Folding', N'Inspection', DATEADD(MINUTE, 1235, DATEADD(DAY, -19, @Today)), @jcruz, NULL);
@@ -190,15 +194,16 @@ INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, Rec
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Drop-off', NULL, N'Skipped', N'The customer has no email address.', 0, DATEADD(SECOND, 5, @At), @jcruz);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Ready', NULL, N'Skipped', N'The customer has no email address.', 0, DATEADD(MINUTE, 1280, DATEADD(DAY, -19, @Today)), @jcruz);
 
-/* 5. Joy Castillo, Comforter / Bulky 2.5 kg, Claimed: 3.00 kg x 60.00 = laundry 180.00; total 210.00 */
+/* 5. Joy Castillo, Comforter / Bulky 3 kg, Claimed: 3.00 kg x 60.00 = laundry 180.00; total 210.00 */
 SET @At = DATEADD(MINUTE, 700, DATEADD(DAY, -18, @Today));
 SET @Claim = N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-' + RIGHT(N'000' + CAST((SELECT COUNT(*) + 1 FROM dbo.JobOrders WHERE ClaimNumber LIKE N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-%') AS NVARCHAR(10)), 3);
-INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, BillableKg, RatePerKgAtCreation, MinimumChargeAtCreation, RoundingIncrementKgAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
-VALUES (@Claim, @c13, @sCB, 2.50, 3.00, 60.00, 120.00, 1.00, 180.00, 1, 1, 1, 210.00, N'Claimed', N'1 blouse with a loose button. No stains noted.', DATEADD(HOUR, 24, @At), @At, @arivera);
+INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, RatePerKgAtCreation, MinimumChargeAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
+VALUES (@Claim, @c13, @sCB, 3.00, 60.00, 120.00, 180.00, 1, 1, 1, 210.00, N'Claimed', N'1 blouse with a loose button. No stains noted.', DATEADD(HOUR, 24, @At), @At, @arivera);
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobAddOns (JobId, AddOnId, Quantity, PriceAtCreation, AddedAt) VALUES (@JobId, @aStain, 1, 30.00, @At);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, 700, DATEADD(DAY, -18, @Today)), @arivera, NULL);
-INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Washing', DATEADD(MINUTE, 725, DATEADD(DAY, -18, @Today)), @arivera, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Intake inspection', DATEADD(MINUTE, 713, DATEADD(DAY, -18, @Today)), @arivera, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Intake inspection', N'Washing', DATEADD(MINUTE, 725, DATEADD(DAY, -18, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Washing', N'Drying', DATEADD(MINUTE, 750, DATEADD(DAY, -18, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Drying', N'Folding', DATEADD(MINUTE, 800, DATEADD(DAY, -18, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Folding', N'Inspection', DATEADD(MINUTE, 855, DATEADD(DAY, -18, @Today)), @arivera, NULL);
@@ -208,15 +213,16 @@ INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, Rec
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Drop-off', N'joy.castillo@example.com', N'Sent', NULL, 0, DATEADD(SECOND, 5, @At), @arivera);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Ready', N'joy.castillo@example.com', N'Sent', NULL, 0, DATEADD(MINUTE, 900, DATEADD(DAY, -18, @Today)), @arivera);
 
-/* 6. Jose Dela Cruz, Wash-Dry-Fold 3.2 kg, Claimed: 4.00 kg x 40.00 = laundry 160.00; total 175.00 */
+/* 6. Jose Dela Cruz, Wash-Dry-Fold 4 kg, Claimed: 4.00 kg x 40.00 = laundry 160.00; total 175.00 */
 SET @At = DATEADD(MINUTE, 520, DATEADD(DAY, -17, @Today));
 SET @Claim = N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-' + RIGHT(N'000' + CAST((SELECT COUNT(*) + 1 FROM dbo.JobOrders WHERE ClaimNumber LIKE N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-%') AS NVARCHAR(10)), 3);
-INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, BillableKg, RatePerKgAtCreation, MinimumChargeAtCreation, RoundingIncrementKgAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
-VALUES (@Claim, @c2, @sWDF, 3.20, 4.00, 40.00, 120.00, 1.00, 160.00, 1, 1, 1, 175.00, N'Claimed', NULL, DATEADD(HOUR, 24, @At), @At, @jcruz);
+INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, RatePerKgAtCreation, MinimumChargeAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
+VALUES (@Claim, @c2, @sWDF, 4.00, 40.00, 120.00, 160.00, 1, 1, 1, 175.00, N'Claimed', NULL, DATEADD(HOUR, 24, @At), @At, @jcruz);
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobAddOns (JobId, AddOnId, Quantity, PriceAtCreation, AddedAt) VALUES (@JobId, @aCond, 1, 15.00, @At);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, 520, DATEADD(DAY, -17, @Today)), @jcruz, NULL);
-INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Washing', DATEADD(MINUTE, 545, DATEADD(DAY, -17, @Today)), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Intake inspection', DATEADD(MINUTE, 533, DATEADD(DAY, -17, @Today)), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Intake inspection', N'Washing', DATEADD(MINUTE, 545, DATEADD(DAY, -17, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Washing', N'Drying', DATEADD(MINUTE, 570, DATEADD(DAY, -17, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Drying', N'Folding', DATEADD(MINUTE, 620, DATEADD(DAY, -17, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Folding', N'Inspection', DATEADD(MINUTE, 675, DATEADD(DAY, -17, @Today)), @jcruz, NULL);
@@ -229,11 +235,12 @@ INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResen
 /* 7. Paolo Garcia, Wash-Dry-Fold 6 kg, Claimed: 6.00 kg x 40.00 = laundry 240.00; total 240.00 */
 SET @At = DATEADD(MINUTE, 830, DATEADD(DAY, -16, @Today));
 SET @Claim = N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-' + RIGHT(N'000' + CAST((SELECT COUNT(*) + 1 FROM dbo.JobOrders WHERE ClaimNumber LIKE N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-%') AS NVARCHAR(10)), 3);
-INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, BillableKg, RatePerKgAtCreation, MinimumChargeAtCreation, RoundingIncrementKgAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
-VALUES (@Claim, @c8, @sWDF, 6.00, 6.00, 40.00, 120.00, 1.00, 240.00, 1, 1, 1, 240.00, N'Claimed', N'Dark and white items bagged separately.', DATEADD(HOUR, 24, @At), @At, @jcruz);
+INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, RatePerKgAtCreation, MinimumChargeAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
+VALUES (@Claim, @c8, @sWDF, 6.00, 40.00, 120.00, 240.00, 1, 1, 1, 240.00, N'Claimed', N'Dark and white items bagged separately.', DATEADD(HOUR, 24, @At), @At, @jcruz);
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, 830, DATEADD(DAY, -16, @Today)), @jcruz, NULL);
-INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Washing', DATEADD(MINUTE, 855, DATEADD(DAY, -16, @Today)), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Intake inspection', DATEADD(MINUTE, 843, DATEADD(DAY, -16, @Today)), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Intake inspection', N'Washing', DATEADD(MINUTE, 855, DATEADD(DAY, -16, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Washing', N'Drying', DATEADD(MINUTE, 880, DATEADD(DAY, -16, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Drying', N'Folding', DATEADD(MINUTE, 930, DATEADD(DAY, -16, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Folding', N'Inspection', DATEADD(MINUTE, 985, DATEADD(DAY, -16, @Today)), @jcruz, NULL);
@@ -246,12 +253,13 @@ INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResen
 /* 8. Liza Peñaflor, Wash-Dry 3 kg, Claimed: 3.00 kg x 35.00 = laundry 120.00; total 132.00 */
 SET @At = DATEADD(MINUTE, 610, DATEADD(DAY, -15, @Today));
 SET @Claim = N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-' + RIGHT(N'000' + CAST((SELECT COUNT(*) + 1 FROM dbo.JobOrders WHERE ClaimNumber LIKE N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-%') AS NVARCHAR(10)), 3);
-INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, BillableKg, RatePerKgAtCreation, MinimumChargeAtCreation, RoundingIncrementKgAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
-VALUES (@Claim, @c5, @sWD, 3.00, 3.00, 35.00, 120.00, 1.00, 120.00, 1, 1, 0, 132.00, N'Claimed', NULL, DATEADD(HOUR, 24, @At), @At, @arivera);
+INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, RatePerKgAtCreation, MinimumChargeAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
+VALUES (@Claim, @c5, @sWD, 3.00, 35.00, 120.00, 120.00, 1, 1, 0, 132.00, N'Claimed', NULL, DATEADD(HOUR, 24, @At), @At, @arivera);
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobAddOns (JobId, AddOnId, Quantity, PriceAtCreation, AddedAt) VALUES (@JobId, @aSachet, 1, 12.00, @At);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, 610, DATEADD(DAY, -15, @Today)), @arivera, NULL);
-INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Washing', DATEADD(MINUTE, 635, DATEADD(DAY, -15, @Today)), @arivera, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Intake inspection', DATEADD(MINUTE, 623, DATEADD(DAY, -15, @Today)), @arivera, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Intake inspection', N'Washing', DATEADD(MINUTE, 635, DATEADD(DAY, -15, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Washing', N'Drying', DATEADD(MINUTE, 660, DATEADD(DAY, -15, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Drying', N'Inspection', DATEADD(MINUTE, 710, DATEADD(DAY, -15, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Inspection', N'Ready for pick-up', DATEADD(MINUTE, 755, DATEADD(DAY, -15, @Today)), @arivera, NULL);
@@ -260,15 +268,16 @@ INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, Rec
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Drop-off', N'liza.penaflor@example.com', N'Sent', NULL, 0, DATEADD(SECOND, 5, @At), @arivera);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Ready', N'liza.penaflor@example.com', N'Sent', NULL, 0, DATEADD(MINUTE, 755, DATEADD(DAY, -15, @Today)), @arivera);
 
-/* 9. Nena Aquino, Wash-Dry-Fold 4.4 kg, Claimed: 5.00 kg x 40.00 = laundry 200.00; total 220.00 */
+/* 9. Nena Aquino, Wash-Dry-Fold 5 kg, Claimed: 5.00 kg x 40.00 = laundry 200.00; total 220.00 */
 SET @At = DATEADD(MINUTE, 555, DATEADD(DAY, -14, @Today));
 SET @Claim = N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-' + RIGHT(N'000' + CAST((SELECT COUNT(*) + 1 FROM dbo.JobOrders WHERE ClaimNumber LIKE N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-%') AS NVARCHAR(10)), 3);
-INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, BillableKg, RatePerKgAtCreation, MinimumChargeAtCreation, RoundingIncrementKgAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
-VALUES (@Claim, @c9, @sWDF, 4.40, 5.00, 40.00, 120.00, 1.00, 200.00, 1, 1, 1, 220.00, N'Claimed', NULL, DATEADD(HOUR, 24, @At), @At, @jcruz);
+INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, RatePerKgAtCreation, MinimumChargeAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
+VALUES (@Claim, @c9, @sWDF, 5.00, 40.00, 120.00, 200.00, 1, 1, 1, 220.00, N'Claimed', NULL, DATEADD(HOUR, 24, @At), @At, @jcruz);
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobAddOns (JobId, AddOnId, Quantity, PriceAtCreation, AddedAt) VALUES (@JobId, @aRinse, 1, 20.00, @At);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, 555, DATEADD(DAY, -14, @Today)), @jcruz, NULL);
-INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Washing', DATEADD(MINUTE, 580, DATEADD(DAY, -14, @Today)), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Intake inspection', DATEADD(MINUTE, 568, DATEADD(DAY, -14, @Today)), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Intake inspection', N'Washing', DATEADD(MINUTE, 580, DATEADD(DAY, -14, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Washing', N'Drying', DATEADD(MINUTE, 605, DATEADD(DAY, -14, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Drying', N'Folding', DATEADD(MINUTE, 655, DATEADD(DAY, -14, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Folding', N'Inspection', DATEADD(MINUTE, 710, DATEADD(DAY, -14, @Today)), @jcruz, NULL);
@@ -278,14 +287,15 @@ INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, Rec
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Drop-off', NULL, N'Skipped', N'The customer has no email address.', 0, DATEADD(SECOND, 5, @At), @jcruz);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Ready', NULL, N'Skipped', N'The customer has no email address.', 0, DATEADD(MINUTE, 755, DATEADD(DAY, -14, @Today)), @jcruz);
 
-/* 10. Rico Navarro, Wash-Dry-Fold 1.5 kg, Claimed: 2.00 kg x 40.00 = laundry 120.00; total 120.00 */
+/* 10. Rico Navarro, Wash-Dry-Fold 2 kg, Claimed: 2.00 kg x 40.00 = laundry 120.00; total 120.00 */
 SET @At = DATEADD(MINUTE, 1025, DATEADD(DAY, -13, @Today));
 SET @Claim = N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-' + RIGHT(N'000' + CAST((SELECT COUNT(*) + 1 FROM dbo.JobOrders WHERE ClaimNumber LIKE N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-%') AS NVARCHAR(10)), 3);
-INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, BillableKg, RatePerKgAtCreation, MinimumChargeAtCreation, RoundingIncrementKgAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
-VALUES (@Claim, @c14, @sWDF, 1.50, 2.00, 40.00, 120.00, 1.00, 120.00, 1, 1, 1, 120.00, N'Claimed', N'1 blouse with a loose button. No stains noted.', DATEADD(HOUR, 24, @At), @At, @arivera);
+INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, RatePerKgAtCreation, MinimumChargeAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
+VALUES (@Claim, @c14, @sWDF, 2.00, 40.00, 120.00, 120.00, 1, 1, 1, 120.00, N'Claimed', N'1 blouse with a loose button. No stains noted.', DATEADD(HOUR, 24, @At), @At, @arivera);
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, 1025, DATEADD(DAY, -13, @Today)), @arivera, NULL);
-INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Washing', DATEADD(MINUTE, 1050, DATEADD(DAY, -13, @Today)), @arivera, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Intake inspection', DATEADD(MINUTE, 1038, DATEADD(DAY, -13, @Today)), @arivera, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Intake inspection', N'Washing', DATEADD(MINUTE, 1050, DATEADD(DAY, -13, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Washing', N'Drying', DATEADD(MINUTE, 1075, DATEADD(DAY, -13, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Drying', N'Folding', DATEADD(MINUTE, 1125, DATEADD(DAY, -13, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Folding', N'Inspection', DATEADD(MINUTE, 1180, DATEADD(DAY, -13, @Today)), @arivera, NULL);
@@ -298,11 +308,12 @@ INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResen
 /* 11. Dennis Uy, Comforter / Bulky 3 kg, Claimed: 3.00 kg x 60.00 = laundry 180.00; total 180.00 */
 SET @At = DATEADD(MINUTE, 780, DATEADD(DAY, -12, @Today));
 SET @Claim = N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-' + RIGHT(N'000' + CAST((SELECT COUNT(*) + 1 FROM dbo.JobOrders WHERE ClaimNumber LIKE N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-%') AS NVARCHAR(10)), 3);
-INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, BillableKg, RatePerKgAtCreation, MinimumChargeAtCreation, RoundingIncrementKgAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
-VALUES (@Claim, @c11, @sCB, 3.00, 3.00, 60.00, 120.00, 1.00, 180.00, 1, 1, 1, 180.00, N'Claimed', NULL, DATEADD(HOUR, 24, @At), @At, @jcruz);
+INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, RatePerKgAtCreation, MinimumChargeAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
+VALUES (@Claim, @c11, @sCB, 3.00, 60.00, 120.00, 180.00, 1, 1, 1, 180.00, N'Claimed', NULL, DATEADD(HOUR, 24, @At), @At, @jcruz);
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, 780, DATEADD(DAY, -12, @Today)), @jcruz, NULL);
-INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Washing', DATEADD(MINUTE, 805, DATEADD(DAY, -12, @Today)), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Intake inspection', DATEADD(MINUTE, 793, DATEADD(DAY, -12, @Today)), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Intake inspection', N'Washing', DATEADD(MINUTE, 805, DATEADD(DAY, -12, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Washing', N'Drying', DATEADD(MINUTE, 830, DATEADD(DAY, -12, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Drying', N'Folding', DATEADD(MINUTE, 880, DATEADD(DAY, -12, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Folding', N'Inspection', DATEADD(MINUTE, 935, DATEADD(DAY, -12, @Today)), @jcruz, NULL);
@@ -312,16 +323,17 @@ INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, Rec
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Drop-off', N'dennis.uy@example.com', N'Sent', NULL, 0, DATEADD(SECOND, 5, @At), @jcruz);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Ready', N'dennis.uy@example.com', N'Sent', NULL, 0, DATEADD(MINUTE, 980, DATEADD(DAY, -12, @Today)), @jcruz);
 
-/* 12. Grace Villanueva, Wash-Dry-Fold 8.3 kg, Claimed: 9.00 kg x 40.00 = laundry 360.00; total 417.00 */
+/* 12. Grace Villanueva, Wash-Dry-Fold 9 kg, Claimed: 9.00 kg x 40.00 = laundry 360.00; total 417.00 */
 SET @At = DATEADD(MINUTE, 500, DATEADD(DAY, -11, @Today));
 SET @Claim = N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-' + RIGHT(N'000' + CAST((SELECT COUNT(*) + 1 FROM dbo.JobOrders WHERE ClaimNumber LIKE N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-%') AS NVARCHAR(10)), 3);
-INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, BillableKg, RatePerKgAtCreation, MinimumChargeAtCreation, RoundingIncrementKgAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
-VALUES (@Claim, @c7, @sWDF, 8.30, 9.00, 40.00, 120.00, 1.00, 360.00, 1, 1, 1, 417.00, N'Claimed', NULL, DATEADD(HOUR, 24, @At), @At, @arivera);
+INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, RatePerKgAtCreation, MinimumChargeAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
+VALUES (@Claim, @c7, @sWDF, 9.00, 40.00, 120.00, 360.00, 1, 1, 1, 417.00, N'Claimed', NULL, DATEADD(HOUR, 24, @At), @At, @arivera);
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobAddOns (JobId, AddOnId, Quantity, PriceAtCreation, AddedAt) VALUES (@JobId, @aCond, 3, 15.00, @At);
 INSERT INTO dbo.JobAddOns (JobId, AddOnId, Quantity, PriceAtCreation, AddedAt) VALUES (@JobId, @aSachet, 1, 12.00, @At);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, 500, DATEADD(DAY, -11, @Today)), @arivera, NULL);
-INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Washing', DATEADD(MINUTE, 525, DATEADD(DAY, -11, @Today)), @arivera, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Intake inspection', DATEADD(MINUTE, 513, DATEADD(DAY, -11, @Today)), @arivera, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Intake inspection', N'Washing', DATEADD(MINUTE, 525, DATEADD(DAY, -11, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Washing', N'Drying', DATEADD(MINUTE, 550, DATEADD(DAY, -11, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Drying', N'Folding', DATEADD(MINUTE, 600, DATEADD(DAY, -11, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Folding', N'Inspection', DATEADD(MINUTE, 655, DATEADD(DAY, -11, @Today)), @arivera, NULL);
@@ -336,8 +348,8 @@ INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResen
 /* 13. Mark Tan, Wash-Dry 2 kg, Voided: 2.00 kg x 35.00 = laundry 120.00; total 120.00 */
 SET @At = DATEADD(MINUTE, 900, DATEADD(DAY, -11, @Today));
 SET @Claim = N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-' + RIGHT(N'000' + CAST((SELECT COUNT(*) + 1 FROM dbo.JobOrders WHERE ClaimNumber LIKE N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-%') AS NVARCHAR(10)), 3);
-INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, BillableKg, RatePerKgAtCreation, MinimumChargeAtCreation, RoundingIncrementKgAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
-VALUES (@Claim, @c12, @sWD, 2.00, 2.00, 35.00, 120.00, 1.00, 120.00, 1, 1, 0, 120.00, N'Voided', NULL, DATEADD(HOUR, 24, @At), @At, @arivera);
+INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, RatePerKgAtCreation, MinimumChargeAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
+VALUES (@Claim, @c12, @sWD, 2.00, 35.00, 120.00, 120.00, 1, 1, 0, 120.00, N'Voided', NULL, DATEADD(HOUR, 24, @At), @At, @arivera);
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, 900, DATEADD(DAY, -11, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Voided', DATEADD(MINUTE, 915, DATEADD(DAY, -11, @Today)), @arivera, N'Duplicate order, the load was entered twice');
@@ -346,15 +358,16 @@ INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, Rec
 INSERT INTO dbo.Refunds (JobId, Amount, Status, CreatedAt, CreatedByUserId, ReleasedAt, ReleasedByUserId, ReleasedHow) VALUES (@JobId, 120.00, N'Released', DATEADD(MINUTE, 915, DATEADD(DAY, -11, @Today)), @arivera, DATEADD(MINUTE, 915, DATEADD(DAY, -11, @Today)), @arivera, N'At void');
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Drop-off', NULL, N'Skipped', N'The customer has no email address.', 0, DATEADD(SECOND, 5, @At), @arivera);
 
-/* 14. Aileen Soriano, Wash-Dry-Fold 5.5 kg, Claimed: 6.00 kg x 40.00 = laundry 240.00; total 270.00 */
+/* 14. Aileen Soriano, Wash-Dry-Fold 6 kg, Claimed: 6.00 kg x 40.00 = laundry 240.00; total 270.00 */
 SET @At = DATEADD(MINUTE, 560, DATEADD(DAY, -10, @Today));
 SET @Claim = N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-' + RIGHT(N'000' + CAST((SELECT COUNT(*) + 1 FROM dbo.JobOrders WHERE ClaimNumber LIKE N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-%') AS NVARCHAR(10)), 3);
-INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, BillableKg, RatePerKgAtCreation, MinimumChargeAtCreation, RoundingIncrementKgAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
-VALUES (@Claim, @c15, @sWDF, 5.50, 6.00, 40.00, 120.00, 1.00, 240.00, 1, 1, 1, 270.00, N'Claimed', N'Dark and white items bagged separately.', DATEADD(HOUR, 24, @At), @At, @jcruz);
+INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, RatePerKgAtCreation, MinimumChargeAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
+VALUES (@Claim, @c15, @sWDF, 6.00, 40.00, 120.00, 240.00, 1, 1, 1, 270.00, N'Claimed', N'Dark and white items bagged separately.', DATEADD(HOUR, 24, @At), @At, @jcruz);
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobAddOns (JobId, AddOnId, Quantity, PriceAtCreation, AddedAt) VALUES (@JobId, @aStain, 1, 30.00, @At);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, 560, DATEADD(DAY, -10, @Today)), @jcruz, NULL);
-INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Washing', DATEADD(MINUTE, 585, DATEADD(DAY, -10, @Today)), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Intake inspection', DATEADD(MINUTE, 573, DATEADD(DAY, -10, @Today)), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Intake inspection', N'Washing', DATEADD(MINUTE, 585, DATEADD(DAY, -10, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Washing', N'Drying', DATEADD(MINUTE, 610, DATEADD(DAY, -10, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Drying', N'Folding', DATEADD(MINUTE, 660, DATEADD(DAY, -10, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Folding', N'Inspection', DATEADD(MINUTE, 715, DATEADD(DAY, -10, @Today)), @jcruz, NULL);
@@ -367,11 +380,12 @@ INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResen
 /* 15. Maria Santos, Wash-Dry 3 kg, Claimed: 3.00 kg x 35.00 = laundry 120.00; total 120.00 */
 SET @At = DATEADD(MINUTE, 830, DATEADD(DAY, -10, @Today));
 SET @Claim = N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-' + RIGHT(N'000' + CAST((SELECT COUNT(*) + 1 FROM dbo.JobOrders WHERE ClaimNumber LIKE N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-%') AS NVARCHAR(10)), 3);
-INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, BillableKg, RatePerKgAtCreation, MinimumChargeAtCreation, RoundingIncrementKgAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
-VALUES (@Claim, @c1, @sWD, 3.00, 3.00, 35.00, 120.00, 1.00, 120.00, 1, 1, 0, 120.00, N'Claimed', N'1 blouse with a loose button. No stains noted.', DATEADD(HOUR, 24, @At), @At, @jcruz);
+INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, RatePerKgAtCreation, MinimumChargeAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
+VALUES (@Claim, @c1, @sWD, 3.00, 35.00, 120.00, 120.00, 1, 1, 0, 120.00, N'Claimed', N'1 blouse with a loose button. No stains noted.', DATEADD(HOUR, 24, @At), @At, @jcruz);
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, 830, DATEADD(DAY, -10, @Today)), @jcruz, NULL);
-INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Washing', DATEADD(MINUTE, 855, DATEADD(DAY, -10, @Today)), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Intake inspection', DATEADD(MINUTE, 843, DATEADD(DAY, -10, @Today)), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Intake inspection', N'Washing', DATEADD(MINUTE, 855, DATEADD(DAY, -10, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Washing', N'Drying', DATEADD(MINUTE, 880, DATEADD(DAY, -10, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Drying', N'Inspection', DATEADD(MINUTE, 930, DATEADD(DAY, -10, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Inspection', N'Ready for pick-up', DATEADD(MINUTE, 975, DATEADD(DAY, -10, @Today)), @jcruz, NULL);
@@ -383,11 +397,12 @@ INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResen
 /* 16. Rosa Lim, Wash-Dry-Fold 4 kg, Ready for pick-up: 4.00 kg x 40.00 = laundry 160.00; total 160.00 */
 SET @At = DATEADD(MINUTE, 980, DATEADD(DAY, -9, @Today));
 SET @Claim = N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-' + RIGHT(N'000' + CAST((SELECT COUNT(*) + 1 FROM dbo.JobOrders WHERE ClaimNumber LIKE N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-%') AS NVARCHAR(10)), 3);
-INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, BillableKg, RatePerKgAtCreation, MinimumChargeAtCreation, RoundingIncrementKgAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
-VALUES (@Claim, @c10, @sWDF, 4.00, 4.00, 40.00, 120.00, 1.00, 160.00, 1, 1, 1, 160.00, N'Ready for pick-up', NULL, DATEADD(HOUR, 24, @At), @At, @arivera);
+INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, RatePerKgAtCreation, MinimumChargeAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
+VALUES (@Claim, @c10, @sWDF, 4.00, 40.00, 120.00, 160.00, 1, 1, 1, 160.00, N'Ready for pick-up', NULL, DATEADD(HOUR, 24, @At), @At, @arivera);
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, 980, DATEADD(DAY, -9, @Today)), @arivera, NULL);
-INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Washing', DATEADD(MINUTE, 1005, DATEADD(DAY, -9, @Today)), @arivera, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Intake inspection', DATEADD(MINUTE, 993, DATEADD(DAY, -9, @Today)), @arivera, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Intake inspection', N'Washing', DATEADD(MINUTE, 1005, DATEADD(DAY, -9, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Washing', N'Drying', DATEADD(MINUTE, 1030, DATEADD(DAY, -9, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Drying', N'Folding', DATEADD(MINUTE, 1080, DATEADD(DAY, -9, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Folding', N'Inspection', DATEADD(MINUTE, 1135, DATEADD(DAY, -9, @Today)), @arivera, NULL);
@@ -397,14 +412,15 @@ INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, Rec
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Drop-off', NULL, N'Skipped', N'The customer has no email address.', 0, DATEADD(SECOND, 5, @At), @arivera);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Ready', NULL, N'Skipped', N'The customer has no email address.', 0, DATEADD(MINUTE, 1180, DATEADD(DAY, -9, @Today)), @arivera);
 
-/* 17. Dennis Uy, Wash-Dry 5.5 kg, Ready for pick-up: 6.00 kg x 35.00 = laundry 210.00; total 210.00 */
+/* 17. Dennis Uy, Wash-Dry 6 kg, Ready for pick-up: 6.00 kg x 35.00 = laundry 210.00; total 210.00 */
 SET @At = DATEADD(MINUTE, 600, DATEADD(DAY, -8, @Today));
 SET @Claim = N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-' + RIGHT(N'000' + CAST((SELECT COUNT(*) + 1 FROM dbo.JobOrders WHERE ClaimNumber LIKE N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-%') AS NVARCHAR(10)), 3);
-INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, BillableKg, RatePerKgAtCreation, MinimumChargeAtCreation, RoundingIncrementKgAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
-VALUES (@Claim, @c11, @sWD, 5.50, 6.00, 35.00, 120.00, 1.00, 210.00, 1, 1, 0, 210.00, N'Ready for pick-up', NULL, DATEADD(HOUR, 24, @At), @At, @jcruz);
+INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, RatePerKgAtCreation, MinimumChargeAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
+VALUES (@Claim, @c11, @sWD, 6.00, 35.00, 120.00, 210.00, 1, 1, 0, 210.00, N'Ready for pick-up', NULL, DATEADD(HOUR, 24, @At), @At, @jcruz);
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, 600, DATEADD(DAY, -8, @Today)), @jcruz, NULL);
-INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Washing', DATEADD(MINUTE, 625, DATEADD(DAY, -8, @Today)), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Intake inspection', DATEADD(MINUTE, 613, DATEADD(DAY, -8, @Today)), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Intake inspection', N'Washing', DATEADD(MINUTE, 625, DATEADD(DAY, -8, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Washing', N'Drying', DATEADD(MINUTE, 650, DATEADD(DAY, -8, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Drying', N'Inspection', DATEADD(MINUTE, 700, DATEADD(DAY, -8, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Inspection', N'Ready for pick-up', DATEADD(MINUTE, 745, DATEADD(DAY, -8, @Today)), @jcruz, NULL);
@@ -412,15 +428,16 @@ INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, Rec
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Drop-off', N'dennis.uy@example.com', N'Sent', NULL, 0, DATEADD(SECOND, 5, @At), @jcruz);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Ready', N'dennis.uy@example.com', N'Sent', NULL, 0, DATEADD(MINUTE, 745, DATEADD(DAY, -8, @Today)), @jcruz);
 
-/* 18. Liza Peñaflor, Wash-Dry-Fold 6.2 kg, Claimed: 7.00 kg x 40.00 = laundry 280.00; total 300.00 */
+/* 18. Liza Peñaflor, Wash-Dry-Fold 7 kg, Claimed: 7.00 kg x 40.00 = laundry 280.00; total 300.00 */
 SET @At = DATEADD(MINUTE, 530, DATEADD(DAY, -7, @Today));
 SET @Claim = N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-' + RIGHT(N'000' + CAST((SELECT COUNT(*) + 1 FROM dbo.JobOrders WHERE ClaimNumber LIKE N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-%') AS NVARCHAR(10)), 3);
-INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, BillableKg, RatePerKgAtCreation, MinimumChargeAtCreation, RoundingIncrementKgAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
-VALUES (@Claim, @c5, @sWDF, 6.20, 7.00, 40.00, 120.00, 1.00, 280.00, 1, 1, 1, 300.00, N'Claimed', NULL, DATEADD(HOUR, 24, @At), @At, @jcruz);
+INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, RatePerKgAtCreation, MinimumChargeAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
+VALUES (@Claim, @c5, @sWDF, 7.00, 40.00, 120.00, 280.00, 1, 1, 1, 300.00, N'Claimed', NULL, DATEADD(HOUR, 24, @At), @At, @jcruz);
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobAddOns (JobId, AddOnId, Quantity, PriceAtCreation, AddedAt) VALUES (@JobId, @aRinse, 1, 20.00, @At);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, 530, DATEADD(DAY, -7, @Today)), @jcruz, NULL);
-INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Washing', DATEADD(MINUTE, 555, DATEADD(DAY, -7, @Today)), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Intake inspection', DATEADD(MINUTE, 543, DATEADD(DAY, -7, @Today)), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Intake inspection', N'Washing', DATEADD(MINUTE, 555, DATEADD(DAY, -7, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Washing', N'Drying', DATEADD(MINUTE, 580, DATEADD(DAY, -7, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Drying', N'Folding', DATEADD(MINUTE, 630, DATEADD(DAY, -7, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Folding', N'Inspection', DATEADD(MINUTE, 685, DATEADD(DAY, -7, @Today)), @jcruz, NULL);
@@ -433,12 +450,13 @@ INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResen
 /* 19. Ana Reyes, Wash-Dry-Fold 5 kg, Claimed: 5.00 kg x 40.00 = laundry 200.00; total 215.00 */
 SET @At = DATEADD(MINUTE, 660, DATEADD(DAY, -7, @Today));
 SET @Claim = N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-' + RIGHT(N'000' + CAST((SELECT COUNT(*) + 1 FROM dbo.JobOrders WHERE ClaimNumber LIKE N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-%') AS NVARCHAR(10)), 3);
-INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, BillableKg, RatePerKgAtCreation, MinimumChargeAtCreation, RoundingIncrementKgAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
-VALUES (@Claim, @c3, @sWDF, 5.00, 5.00, 40.00, 120.00, 1.00, 200.00, 1, 1, 1, 215.00, N'Claimed', NULL, DATEADD(HOUR, 24, @At), @At, @arivera);
+INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, RatePerKgAtCreation, MinimumChargeAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
+VALUES (@Claim, @c3, @sWDF, 5.00, 40.00, 120.00, 200.00, 1, 1, 1, 215.00, N'Claimed', NULL, DATEADD(HOUR, 24, @At), @At, @arivera);
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobAddOns (JobId, AddOnId, Quantity, PriceAtCreation, AddedAt) VALUES (@JobId, @aCond, 1, 15.00, @At);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, 660, DATEADD(DAY, -7, @Today)), @arivera, NULL);
-INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Washing', DATEADD(MINUTE, 685, DATEADD(DAY, -7, @Today)), @arivera, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Intake inspection', DATEADD(MINUTE, 673, DATEADD(DAY, -7, @Today)), @arivera, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Intake inspection', N'Washing', DATEADD(MINUTE, 685, DATEADD(DAY, -7, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Washing', N'Drying', DATEADD(MINUTE, 710, DATEADD(DAY, -7, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Drying', N'Folding', DATEADD(MINUTE, 760, DATEADD(DAY, -7, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Folding', N'Inspection', DATEADD(MINUTE, 815, DATEADD(DAY, -7, @Today)), @arivera, NULL);
@@ -448,14 +466,15 @@ INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, Rec
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Drop-off', N'ana.reyes@example.com', N'Sent', NULL, 0, DATEADD(SECOND, 5, @At), @arivera);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Ready', N'ana.reyes@example.com', N'Sent', NULL, 0, DATEADD(MINUTE, 860, DATEADD(DAY, -7, @Today)), @arivera);
 
-/* 20. Jose Dela Cruz, Wash-Dry-Fold 2.8 kg, Claimed: 3.00 kg x 40.00 = laundry 120.00; total 120.00 */
+/* 20. Jose Dela Cruz, Wash-Dry-Fold 3 kg, Claimed: 3.00 kg x 40.00 = laundry 120.00; total 120.00 */
 SET @At = DATEADD(MINUTE, 570, DATEADD(DAY, -6, @Today));
 SET @Claim = N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-' + RIGHT(N'000' + CAST((SELECT COUNT(*) + 1 FROM dbo.JobOrders WHERE ClaimNumber LIKE N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-%') AS NVARCHAR(10)), 3);
-INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, BillableKg, RatePerKgAtCreation, MinimumChargeAtCreation, RoundingIncrementKgAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
-VALUES (@Claim, @c2, @sWDF, 2.80, 3.00, 40.00, 120.00, 1.00, 120.00, 1, 1, 1, 120.00, N'Claimed', N'1 blouse with a loose button. No stains noted.', DATEADD(HOUR, 24, @At), @At, @jcruz);
+INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, RatePerKgAtCreation, MinimumChargeAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
+VALUES (@Claim, @c2, @sWDF, 3.00, 40.00, 120.00, 120.00, 1, 1, 1, 120.00, N'Claimed', N'1 blouse with a loose button. No stains noted.', DATEADD(HOUR, 24, @At), @At, @jcruz);
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, 570, DATEADD(DAY, -6, @Today)), @jcruz, NULL);
-INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Washing', DATEADD(MINUTE, 595, DATEADD(DAY, -6, @Today)), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Intake inspection', DATEADD(MINUTE, 583, DATEADD(DAY, -6, @Today)), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Intake inspection', N'Washing', DATEADD(MINUTE, 595, DATEADD(DAY, -6, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Washing', N'Drying', DATEADD(MINUTE, 620, DATEADD(DAY, -6, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Drying', N'Folding', DATEADD(MINUTE, 670, DATEADD(DAY, -6, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Folding', N'Inspection', DATEADD(MINUTE, 725, DATEADD(DAY, -6, @Today)), @jcruz, NULL);
@@ -468,11 +487,12 @@ INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResen
 /* 21. Carlo Mendoza, Comforter / Bulky 3 kg, Claimed: 3.00 kg x 60.00 = laundry 180.00; total 180.00 */
 SET @At = DATEADD(MINUTE, 795, DATEADD(DAY, -6, @Today));
 SET @Claim = N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-' + RIGHT(N'000' + CAST((SELECT COUNT(*) + 1 FROM dbo.JobOrders WHERE ClaimNumber LIKE N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-%') AS NVARCHAR(10)), 3);
-INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, BillableKg, RatePerKgAtCreation, MinimumChargeAtCreation, RoundingIncrementKgAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
-VALUES (@Claim, @c4, @sCB, 3.00, 3.00, 60.00, 120.00, 1.00, 180.00, 1, 1, 1, 180.00, N'Claimed', N'Dark and white items bagged separately.', DATEADD(HOUR, 24, @At), @At, @arivera);
+INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, RatePerKgAtCreation, MinimumChargeAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
+VALUES (@Claim, @c4, @sCB, 3.00, 60.00, 120.00, 180.00, 1, 1, 1, 180.00, N'Claimed', N'Dark and white items bagged separately.', DATEADD(HOUR, 24, @At), @At, @arivera);
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, 795, DATEADD(DAY, -6, @Today)), @arivera, NULL);
-INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Washing', DATEADD(MINUTE, 820, DATEADD(DAY, -6, @Today)), @arivera, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Intake inspection', DATEADD(MINUTE, 808, DATEADD(DAY, -6, @Today)), @arivera, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Intake inspection', N'Washing', DATEADD(MINUTE, 820, DATEADD(DAY, -6, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Washing', N'Drying', DATEADD(MINUTE, 845, DATEADD(DAY, -6, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Drying', N'Folding', DATEADD(MINUTE, 895, DATEADD(DAY, -6, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Folding', N'Inspection', DATEADD(MINUTE, 950, DATEADD(DAY, -6, @Today)), @arivera, NULL);
@@ -482,34 +502,36 @@ INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, Rec
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Drop-off', NULL, N'Skipped', N'The customer has no email address.', 0, DATEADD(SECOND, 5, @At), @arivera);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Ready', NULL, N'Skipped', N'The customer has no email address.', 0, DATEADD(MINUTE, 995, DATEADD(DAY, -6, @Today)), @arivera);
 
-/* 22. Joy Castillo, Wash-Dry 5.3 kg, Claimed: 6.00 kg x 35.00 = laundry 210.00; total 230.00 */
+/* 22. Joy Castillo, Wash-Dry 6 kg, Claimed: 6.00 kg x 35.00 = laundry 210.00; total 230.00 */
 SET @At = DATEADD(MINUTE, 542, DATEADD(DAY, -5, @Today));
 SET @Claim = N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-' + RIGHT(N'000' + CAST((SELECT COUNT(*) + 1 FROM dbo.JobOrders WHERE ClaimNumber LIKE N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-%') AS NVARCHAR(10)), 3);
-INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, BillableKg, RatePerKgAtCreation, MinimumChargeAtCreation, RoundingIncrementKgAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId, LastEditedAt, LastEditedByUserId)
-VALUES (@Claim, @c13, @sWD, 5.30, 6.00, 35.00, 120.00, 1.00, 210.00, 1, 1, 0, 230.00, N'Claimed', NULL, DATEADD(HOUR, 24, @At), @At, @jcruz, DATEADD(MINUTE, 560, DATEADD(DAY, -5, @Today)), @owner);
+INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, RatePerKgAtCreation, MinimumChargeAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId, LastEditedAt, LastEditedByUserId)
+VALUES (@Claim, @c13, @sWD, 6.00, 35.00, 120.00, 210.00, 1, 1, 0, 230.00, N'Claimed', NULL, DATEADD(HOUR, 24, @At), @At, @jcruz, DATEADD(MINUTE, 560, DATEADD(DAY, -5, @Today)), @owner);
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobAddOns (JobId, AddOnId, Quantity, PriceAtCreation, AddedAt) VALUES (@JobId, @aRinse, 1, 20.00, @At);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, 542, DATEADD(DAY, -5, @Today)), @jcruz, NULL);
-INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Washing', DATEADD(MINUTE, 567, DATEADD(DAY, -5, @Today)), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Intake inspection', DATEADD(MINUTE, 555, DATEADD(DAY, -5, @Today)), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Intake inspection', N'Washing', DATEADD(MINUTE, 567, DATEADD(DAY, -5, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Washing', N'Drying', DATEADD(MINUTE, 592, DATEADD(DAY, -5, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Drying', N'Inspection', DATEADD(MINUTE, 642, DATEADD(DAY, -5, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Inspection', N'Ready for pick-up', DATEADD(MINUTE, 687, DATEADD(DAY, -5, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Ready for pick-up', N'Claimed', DATEADD(MINUTE, 700, DATEADD(DAY, -3, @Today)), @jcruz, NULL);
 INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, RecordedByUserId) VALUES (@JobId, N'Drop-off', 195.00, N'E-wallet', NULL, @At, @jcruz);
--- The owner corrected the weight from 4.6 kg to 5.3 kg: 195.00 -> 230.00. Nothing was taken then: the 35.00 became a balance.
+-- The owner corrected the weight from 5 kg to 6 kg: 195.00 -> 230.00. Nothing was taken then: the 35.00 became a balance.
 INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, RecordedByUserId) VALUES (@JobId, N'Balance', 35.00, N'Cash', 50.00, DATEADD(MINUTE, 700, DATEADD(DAY, -3, @Today)), @jcruz);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Drop-off', N'joy.castillo@example.com', N'Sent', NULL, 0, DATEADD(SECOND, 5, @At), @jcruz);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Ready', N'joy.castillo@example.com', N'Sent', NULL, 0, DATEADD(MINUTE, 687, DATEADD(DAY, -5, @Today)), @jcruz);
 
-/* 23. Paolo Garcia, Wash-Dry-Fold 3.9 kg, Claimed: 4.00 kg x 40.00 = laundry 160.00; total 184.00 */
+/* 23. Paolo Garcia, Wash-Dry-Fold 4 kg, Claimed: 4.00 kg x 40.00 = laundry 160.00; total 184.00 */
 SET @At = DATEADD(MINUTE, 1010, DATEADD(DAY, -5, @Today));
 SET @Claim = N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-' + RIGHT(N'000' + CAST((SELECT COUNT(*) + 1 FROM dbo.JobOrders WHERE ClaimNumber LIKE N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-%') AS NVARCHAR(10)), 3);
-INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, BillableKg, RatePerKgAtCreation, MinimumChargeAtCreation, RoundingIncrementKgAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
-VALUES (@Claim, @c8, @sWDF, 3.90, 4.00, 40.00, 120.00, 1.00, 160.00, 1, 1, 1, 184.00, N'Claimed', NULL, DATEADD(HOUR, 24, @At), @At, @arivera);
+INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, RatePerKgAtCreation, MinimumChargeAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
+VALUES (@Claim, @c8, @sWDF, 4.00, 40.00, 120.00, 160.00, 1, 1, 1, 184.00, N'Claimed', NULL, DATEADD(HOUR, 24, @At), @At, @arivera);
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobAddOns (JobId, AddOnId, Quantity, PriceAtCreation, AddedAt) VALUES (@JobId, @aSachet, 2, 12.00, @At);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, 1010, DATEADD(DAY, -5, @Today)), @arivera, NULL);
-INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Washing', DATEADD(MINUTE, 1035, DATEADD(DAY, -5, @Today)), @arivera, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Intake inspection', DATEADD(MINUTE, 1023, DATEADD(DAY, -5, @Today)), @arivera, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Intake inspection', N'Washing', DATEADD(MINUTE, 1035, DATEADD(DAY, -5, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Washing', N'Drying', DATEADD(MINUTE, 1060, DATEADD(DAY, -5, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Drying', N'Folding', DATEADD(MINUTE, 1110, DATEADD(DAY, -5, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Folding', N'Inspection', DATEADD(MINUTE, 1165, DATEADD(DAY, -5, @Today)), @arivera, NULL);
@@ -519,14 +541,15 @@ INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, Rec
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Drop-off', N'paolo.garcia@example.com', N'Sent', NULL, 0, DATEADD(SECOND, 5, @At), @arivera);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Ready', N'paolo.garcia@example.com', N'Sent', NULL, 0, DATEADD(MINUTE, 1210, DATEADD(DAY, -5, @Today)), @arivera);
 
-/* 24. Maria Santos, Wash-Dry-Fold 4.1 kg, Ready for pick-up: 5.00 kg x 40.00 = laundry 200.00; total 200.00 */
+/* 24. Maria Santos, Wash-Dry-Fold 5 kg, Ready for pick-up: 5.00 kg x 40.00 = laundry 200.00; total 200.00 */
 SET @At = DATEADD(MINUTE, 555, DATEADD(DAY, -4, @Today));
 SET @Claim = N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-' + RIGHT(N'000' + CAST((SELECT COUNT(*) + 1 FROM dbo.JobOrders WHERE ClaimNumber LIKE N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-%') AS NVARCHAR(10)), 3);
-INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, BillableKg, RatePerKgAtCreation, MinimumChargeAtCreation, RoundingIncrementKgAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
-VALUES (@Claim, @c1, @sWDF, 4.10, 5.00, 40.00, 120.00, 1.00, 200.00, 1, 1, 1, 200.00, N'Ready for pick-up', NULL, DATEADD(HOUR, 24, @At), @At, @jcruz);
+INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, RatePerKgAtCreation, MinimumChargeAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
+VALUES (@Claim, @c1, @sWDF, 5.00, 40.00, 120.00, 200.00, 1, 1, 1, 200.00, N'Ready for pick-up', NULL, DATEADD(HOUR, 24, @At), @At, @jcruz);
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, 555, DATEADD(DAY, -4, @Today)), @jcruz, NULL);
-INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Washing', DATEADD(MINUTE, 580, DATEADD(DAY, -4, @Today)), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Intake inspection', DATEADD(MINUTE, 568, DATEADD(DAY, -4, @Today)), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Intake inspection', N'Washing', DATEADD(MINUTE, 580, DATEADD(DAY, -4, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Washing', N'Drying', DATEADD(MINUTE, 605, DATEADD(DAY, -4, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Drying', N'Folding', DATEADD(MINUTE, 655, DATEADD(DAY, -4, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Folding', N'Inspection', DATEADD(MINUTE, 710, DATEADD(DAY, -4, @Today)), @jcruz, NULL);
@@ -536,15 +559,16 @@ INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, Rec
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Drop-off', N'maria.santos@example.com', N'Sent', NULL, 0, DATEADD(SECOND, 5, @At), @jcruz);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Ready', N'maria.santos@example.com', N'Sent', NULL, 0, DATEADD(MINUTE, 755, DATEADD(DAY, -4, @Today)), @jcruz);
 
-/* 25. Rico Navarro, Wash-Dry-Fold 9.4 kg, Claimed: 10.00 kg x 40.00 = laundry 400.00; total 430.00 */
+/* 25. Rico Navarro, Wash-Dry-Fold 10 kg, Claimed: 10.00 kg x 40.00 = laundry 400.00; total 430.00 */
 SET @At = DATEADD(MINUTE, 845, DATEADD(DAY, -4, @Today));
 SET @Claim = N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-' + RIGHT(N'000' + CAST((SELECT COUNT(*) + 1 FROM dbo.JobOrders WHERE ClaimNumber LIKE N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-%') AS NVARCHAR(10)), 3);
-INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, BillableKg, RatePerKgAtCreation, MinimumChargeAtCreation, RoundingIncrementKgAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
-VALUES (@Claim, @c14, @sWDF, 9.40, 10.00, 40.00, 120.00, 1.00, 400.00, 1, 1, 1, 430.00, N'Claimed', N'1 blouse with a loose button. No stains noted.', DATEADD(HOUR, 24, @At), @At, @arivera);
+INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, RatePerKgAtCreation, MinimumChargeAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
+VALUES (@Claim, @c14, @sWDF, 10.00, 40.00, 120.00, 400.00, 1, 1, 1, 430.00, N'Claimed', N'1 blouse with a loose button. No stains noted.', DATEADD(HOUR, 24, @At), @At, @arivera);
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobAddOns (JobId, AddOnId, Quantity, PriceAtCreation, AddedAt) VALUES (@JobId, @aCond, 2, 15.00, @At);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, 845, DATEADD(DAY, -4, @Today)), @arivera, NULL);
-INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Washing', DATEADD(MINUTE, 870, DATEADD(DAY, -4, @Today)), @arivera, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Intake inspection', DATEADD(MINUTE, 858, DATEADD(DAY, -4, @Today)), @arivera, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Intake inspection', N'Washing', DATEADD(MINUTE, 870, DATEADD(DAY, -4, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Washing', N'Drying', DATEADD(MINUTE, 895, DATEADD(DAY, -4, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Drying', N'Folding', DATEADD(MINUTE, 945, DATEADD(DAY, -4, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Folding', N'Inspection', DATEADD(MINUTE, 1000, DATEADD(DAY, -4, @Today)), @arivera, NULL);
@@ -554,14 +578,15 @@ INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, Rec
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Drop-off', NULL, N'Skipped', N'The customer has no email address.', 0, DATEADD(SECOND, 5, @At), @arivera);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Ready', NULL, N'Skipped', N'The customer has no email address.', 0, DATEADD(MINUTE, 1045, DATEADD(DAY, -4, @Today)), @arivera);
 
-/* 26. Ramon Bautista, Wash-Dry 3.7 kg, Claimed: 4.00 kg x 35.00 = laundry 140.00; total 140.00 */
+/* 26. Ramon Bautista, Wash-Dry 4 kg, Claimed: 4.00 kg x 35.00 = laundry 140.00; total 140.00 */
 SET @At = DATEADD(MINUTE, 600, DATEADD(DAY, -3, @Today));
 SET @Claim = N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-' + RIGHT(N'000' + CAST((SELECT COUNT(*) + 1 FROM dbo.JobOrders WHERE ClaimNumber LIKE N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-%') AS NVARCHAR(10)), 3);
-INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, BillableKg, RatePerKgAtCreation, MinimumChargeAtCreation, RoundingIncrementKgAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
-VALUES (@Claim, @c6, @sWD, 3.70, 4.00, 35.00, 120.00, 1.00, 140.00, 1, 1, 0, 140.00, N'Claimed', NULL, DATEADD(HOUR, 24, @At), @At, @jcruz);
+INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, RatePerKgAtCreation, MinimumChargeAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
+VALUES (@Claim, @c6, @sWD, 4.00, 35.00, 120.00, 140.00, 1, 1, 0, 140.00, N'Claimed', NULL, DATEADD(HOUR, 24, @At), @At, @jcruz);
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, 600, DATEADD(DAY, -3, @Today)), @jcruz, NULL);
-INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Washing', DATEADD(MINUTE, 625, DATEADD(DAY, -3, @Today)), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Intake inspection', DATEADD(MINUTE, 613, DATEADD(DAY, -3, @Today)), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Intake inspection', N'Washing', DATEADD(MINUTE, 625, DATEADD(DAY, -3, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Washing', N'Drying', DATEADD(MINUTE, 650, DATEADD(DAY, -3, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Drying', N'Inspection', DATEADD(MINUTE, 700, DATEADD(DAY, -3, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Inspection', N'Ready for pick-up', DATEADD(MINUTE, 745, DATEADD(DAY, -3, @Today)), @jcruz, NULL);
@@ -570,15 +595,16 @@ INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, Rec
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Drop-off', NULL, N'Skipped', N'The customer has no email address.', 0, DATEADD(SECOND, 5, @At), @jcruz);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Ready', NULL, N'Skipped', N'The customer has no email address.', 0, DATEADD(MINUTE, 745, DATEADD(DAY, -3, @Today)), @jcruz);
 
-/* 27. Nena Aquino, Wash-Dry-Fold 2.2 kg, Claimed: 3.00 kg x 40.00 = laundry 120.00; total 135.00 */
+/* 27. Nena Aquino, Wash-Dry-Fold 3 kg, Claimed: 3.00 kg x 40.00 = laundry 120.00; total 135.00 */
 SET @At = DATEADD(MINUTE, 960, DATEADD(DAY, -3, @Today));
 SET @Claim = N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-' + RIGHT(N'000' + CAST((SELECT COUNT(*) + 1 FROM dbo.JobOrders WHERE ClaimNumber LIKE N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-%') AS NVARCHAR(10)), 3);
-INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, BillableKg, RatePerKgAtCreation, MinimumChargeAtCreation, RoundingIncrementKgAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
-VALUES (@Claim, @c9, @sWDF, 2.20, 3.00, 40.00, 120.00, 1.00, 120.00, 1, 1, 1, 135.00, N'Claimed', NULL, DATEADD(HOUR, 24, @At), @At, @arivera);
+INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, RatePerKgAtCreation, MinimumChargeAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
+VALUES (@Claim, @c9, @sWDF, 3.00, 40.00, 120.00, 120.00, 1, 1, 1, 135.00, N'Claimed', NULL, DATEADD(HOUR, 24, @At), @At, @arivera);
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobAddOns (JobId, AddOnId, Quantity, PriceAtCreation, AddedAt) VALUES (@JobId, @aCond, 1, 15.00, @At);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, 960, DATEADD(DAY, -3, @Today)), @arivera, NULL);
-INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Washing', DATEADD(MINUTE, 985, DATEADD(DAY, -3, @Today)), @arivera, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Intake inspection', DATEADD(MINUTE, 973, DATEADD(DAY, -3, @Today)), @arivera, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Intake inspection', N'Washing', DATEADD(MINUTE, 985, DATEADD(DAY, -3, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Washing', N'Drying', DATEADD(MINUTE, 1010, DATEADD(DAY, -3, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Drying', N'Folding', DATEADD(MINUTE, 1060, DATEADD(DAY, -3, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Folding', N'Inspection', DATEADD(MINUTE, 1115, DATEADD(DAY, -3, @Today)), @arivera, NULL);
@@ -591,12 +617,13 @@ INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResen
 /* 28. Aileen Soriano, Comforter / Bulky 4 kg, Claimed: 4.00 kg x 60.00 = laundry 240.00; total 260.00 */
 SET @At = DATEADD(MINUTE, 640, DATEADD(DAY, -2, @Today));
 SET @Claim = N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-' + RIGHT(N'000' + CAST((SELECT COUNT(*) + 1 FROM dbo.JobOrders WHERE ClaimNumber LIKE N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-%') AS NVARCHAR(10)), 3);
-INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, BillableKg, RatePerKgAtCreation, MinimumChargeAtCreation, RoundingIncrementKgAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
-VALUES (@Claim, @c15, @sCB, 4.00, 4.00, 60.00, 120.00, 1.00, 240.00, 1, 1, 1, 260.00, N'Claimed', N'Dark and white items bagged separately.', DATEADD(HOUR, 24, @At), @At, @jcruz);
+INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, RatePerKgAtCreation, MinimumChargeAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
+VALUES (@Claim, @c15, @sCB, 4.00, 60.00, 120.00, 240.00, 1, 1, 1, 260.00, N'Claimed', N'Dark and white items bagged separately.', DATEADD(HOUR, 24, @At), @At, @jcruz);
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobAddOns (JobId, AddOnId, Quantity, PriceAtCreation, AddedAt) VALUES (@JobId, @aRinse, 1, 20.00, @At);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, 640, DATEADD(DAY, -2, @Today)), @jcruz, NULL);
-INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Washing', DATEADD(MINUTE, 665, DATEADD(DAY, -2, @Today)), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Intake inspection', DATEADD(MINUTE, 653, DATEADD(DAY, -2, @Today)), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Intake inspection', N'Washing', DATEADD(MINUTE, 665, DATEADD(DAY, -2, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Washing', N'Drying', DATEADD(MINUTE, 690, DATEADD(DAY, -2, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Drying', N'Folding', DATEADD(MINUTE, 740, DATEADD(DAY, -2, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Folding', N'Inspection', DATEADD(MINUTE, 795, DATEADD(DAY, -2, @Today)), @jcruz, NULL);
@@ -606,14 +633,15 @@ INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, Rec
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Drop-off', N'aileen.s@example.com', N'Sent', NULL, 0, DATEADD(SECOND, 5, @At), @jcruz);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Ready', N'aileen.s@example.com', N'Sent', NULL, 0, DATEADD(MINUTE, 840, DATEADD(DAY, -2, @Today)), @jcruz);
 
-/* 29. Rosa Lim, Wash-Dry-Fold 6.8 kg, Claimed: 7.00 kg x 40.00 = laundry 280.00; total 280.00 */
+/* 29. Rosa Lim, Wash-Dry-Fold 7 kg, Claimed: 7.00 kg x 40.00 = laundry 280.00; total 280.00 */
 SET @At = DATEADD(MINUTE, 920, DATEADD(DAY, -2, @Today));
 SET @Claim = N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-' + RIGHT(N'000' + CAST((SELECT COUNT(*) + 1 FROM dbo.JobOrders WHERE ClaimNumber LIKE N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-%') AS NVARCHAR(10)), 3);
-INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, BillableKg, RatePerKgAtCreation, MinimumChargeAtCreation, RoundingIncrementKgAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
-VALUES (@Claim, @c10, @sWDF, 6.80, 7.00, 40.00, 120.00, 1.00, 280.00, 1, 1, 1, 280.00, N'Claimed', NULL, DATEADD(HOUR, 24, @At), @At, @jcruz);
+INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, RatePerKgAtCreation, MinimumChargeAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
+VALUES (@Claim, @c10, @sWDF, 7.00, 40.00, 120.00, 280.00, 1, 1, 1, 280.00, N'Claimed', NULL, DATEADD(HOUR, 24, @At), @At, @jcruz);
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, 920, DATEADD(DAY, -2, @Today)), @jcruz, NULL);
-INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Washing', DATEADD(MINUTE, 945, DATEADD(DAY, -2, @Today)), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Intake inspection', DATEADD(MINUTE, 933, DATEADD(DAY, -2, @Today)), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Intake inspection', N'Washing', DATEADD(MINUTE, 945, DATEADD(DAY, -2, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Washing', N'Drying', DATEADD(MINUTE, 970, DATEADD(DAY, -2, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Drying', N'Folding', DATEADD(MINUTE, 1020, DATEADD(DAY, -2, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Folding', N'Inspection', DATEADD(MINUTE, 1075, DATEADD(DAY, -2, @Today)), @jcruz, NULL);
@@ -623,14 +651,15 @@ INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, Rec
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Drop-off', NULL, N'Skipped', N'The customer has no email address.', 0, DATEADD(SECOND, 5, @At), @jcruz);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Ready', NULL, N'Skipped', N'The customer has no email address.', 0, DATEADD(MINUTE, 1120, DATEADD(DAY, -2, @Today)), @jcruz);
 
-/* 30. Grace Villanueva, Wash-Dry-Fold 1.2 kg, Ready for pick-up: 2.00 kg x 40.00 = laundry 120.00; total 120.00 */
+/* 30. Grace Villanueva, Wash-Dry-Fold 2 kg, Ready for pick-up: 2.00 kg x 40.00 = laundry 120.00; total 120.00 */
 SET @At = DATEADD(MINUTE, 1030, DATEADD(DAY, -2, @Today));
 SET @Claim = N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-' + RIGHT(N'000' + CAST((SELECT COUNT(*) + 1 FROM dbo.JobOrders WHERE ClaimNumber LIKE N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-%') AS NVARCHAR(10)), 3);
-INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, BillableKg, RatePerKgAtCreation, MinimumChargeAtCreation, RoundingIncrementKgAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
-VALUES (@Claim, @c7, @sWDF, 1.20, 2.00, 40.00, 120.00, 1.00, 120.00, 1, 1, 1, 120.00, N'Ready for pick-up', N'1 blouse with a loose button. No stains noted.', DATEADD(HOUR, 24, @At), @At, @arivera);
+INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, RatePerKgAtCreation, MinimumChargeAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
+VALUES (@Claim, @c7, @sWDF, 2.00, 40.00, 120.00, 120.00, 1, 1, 1, 120.00, N'Ready for pick-up', N'1 blouse with a loose button. No stains noted.', DATEADD(HOUR, 24, @At), @At, @arivera);
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, 1030, DATEADD(DAY, -2, @Today)), @arivera, NULL);
-INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Washing', DATEADD(MINUTE, 1055, DATEADD(DAY, -2, @Today)), @arivera, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Intake inspection', DATEADD(MINUTE, 1043, DATEADD(DAY, -2, @Today)), @arivera, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Intake inspection', N'Washing', DATEADD(MINUTE, 1055, DATEADD(DAY, -2, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Washing', N'Drying', DATEADD(MINUTE, 1080, DATEADD(DAY, -2, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Drying', N'Folding', DATEADD(MINUTE, 1130, DATEADD(DAY, -2, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Folding', N'Inspection', DATEADD(MINUTE, 1185, DATEADD(DAY, -2, @Today)), @arivera, NULL);
@@ -642,12 +671,13 @@ INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResen
 /* 31. Nena Aquino, Wash-Dry-Fold 3 kg, Claimed: 3.00 kg x 40.00 = laundry 120.00; total 150.00 */
 SET @At = DATEADD(MINUTE, 520, DATEADD(DAY, -1, @Today));
 SET @Claim = N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-' + RIGHT(N'000' + CAST((SELECT COUNT(*) + 1 FROM dbo.JobOrders WHERE ClaimNumber LIKE N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-%') AS NVARCHAR(10)), 3);
-INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, BillableKg, RatePerKgAtCreation, MinimumChargeAtCreation, RoundingIncrementKgAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
-VALUES (@Claim, @c9, @sWDF, 3.00, 3.00, 40.00, 120.00, 1.00, 120.00, 1, 1, 1, 150.00, N'Claimed', NULL, DATEADD(HOUR, 24, @At), @At, @jcruz);
+INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, RatePerKgAtCreation, MinimumChargeAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
+VALUES (@Claim, @c9, @sWDF, 3.00, 40.00, 120.00, 120.00, 1, 1, 1, 150.00, N'Claimed', NULL, DATEADD(HOUR, 24, @At), @At, @jcruz);
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobAddOns (JobId, AddOnId, Quantity, PriceAtCreation, AddedAt) VALUES (@JobId, @aStain, 1, 30.00, @At);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, 520, DATEADD(DAY, -1, @Today)), @jcruz, NULL);
-INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Washing', DATEADD(MINUTE, 545, DATEADD(DAY, -1, @Today)), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Intake inspection', DATEADD(MINUTE, 533, DATEADD(DAY, -1, @Today)), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Intake inspection', N'Washing', DATEADD(MINUTE, 545, DATEADD(DAY, -1, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Washing', N'Drying', DATEADD(MINUTE, 570, DATEADD(DAY, -1, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Drying', N'Folding', DATEADD(MINUTE, 620, DATEADD(DAY, -1, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Folding', N'Inspection', DATEADD(MINUTE, 675, DATEADD(DAY, -1, @Today)), @jcruz, NULL);
@@ -657,16 +687,17 @@ INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, Rec
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Drop-off', NULL, N'Skipped', N'The customer has no email address.', 0, DATEADD(SECOND, 5, @At), @jcruz);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Ready', NULL, N'Skipped', N'The customer has no email address.', 0, DATEADD(MINUTE, 720, DATEADD(DAY, -1, @Today)), @jcruz);
 
-/* 32. Maria Santos, Wash-Dry-Fold 5.1 kg, Claimed: 6.00 kg x 40.00 = laundry 240.00; total 290.00 */
+/* 32. Maria Santos, Wash-Dry-Fold 6 kg, Claimed: 6.00 kg x 40.00 = laundry 240.00; total 290.00 */
 SET @At = DATEADD(MINUTE, 552, DATEADD(DAY, -1, @Today));
 SET @Claim = N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-' + RIGHT(N'000' + CAST((SELECT COUNT(*) + 1 FROM dbo.JobOrders WHERE ClaimNumber LIKE N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-%') AS NVARCHAR(10)), 3);
-INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, BillableKg, RatePerKgAtCreation, MinimumChargeAtCreation, RoundingIncrementKgAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
-VALUES (@Claim, @c1, @sWDF, 5.10, 6.00, 40.00, 120.00, 1.00, 240.00, 1, 1, 1, 290.00, N'Claimed', NULL, DATEADD(HOUR, 24, @At), @At, @jcruz);
+INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, RatePerKgAtCreation, MinimumChargeAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
+VALUES (@Claim, @c1, @sWDF, 6.00, 40.00, 120.00, 240.00, 1, 1, 1, 290.00, N'Claimed', NULL, DATEADD(HOUR, 24, @At), @At, @jcruz);
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobAddOns (JobId, AddOnId, Quantity, PriceAtCreation, AddedAt) VALUES (@JobId, @aRinse, 1, 20.00, @At);
 INSERT INTO dbo.JobAddOns (JobId, AddOnId, Quantity, PriceAtCreation, AddedAt) VALUES (@JobId, @aCond, 2, 15.00, @At);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, 552, DATEADD(DAY, -1, @Today)), @jcruz, NULL);
-INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Washing', DATEADD(MINUTE, 577, DATEADD(DAY, -1, @Today)), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Intake inspection', DATEADD(MINUTE, 565, DATEADD(DAY, -1, @Today)), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Intake inspection', N'Washing', DATEADD(MINUTE, 577, DATEADD(DAY, -1, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Washing', N'Drying', DATEADD(MINUTE, 602, DATEADD(DAY, -1, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Drying', N'Folding', DATEADD(MINUTE, 652, DATEADD(DAY, -1, @Today)), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Folding', N'Inspection', DATEADD(MINUTE, 707, DATEADD(DAY, -1, @Today)), @jcruz, NULL);
@@ -680,29 +711,31 @@ INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, Rec
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Drop-off', N'maria.santos@example.com', N'Sent', NULL, 0, DATEADD(SECOND, 5, @At), @jcruz);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Ready', N'maria.santos@example.com', N'Sent', NULL, 0, DATEADD(MINUTE, 789, DATEADD(DAY, -1, @Today)), @arivera);
 
-/* 33. Jose Dela Cruz, Wash-Dry-Fold 3.2 kg, Inspection: 4.00 kg x 40.00 = laundry 160.00; total 160.00 */
+/* 33. Jose Dela Cruz, Wash-Dry-Fold 4 kg, Inspection: 4.00 kg x 40.00 = laundry 160.00; total 160.00 */
 SET @At = DATEADD(MINUTE, 940, DATEADD(DAY, -1, @Today));
 SET @Claim = N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-' + RIGHT(N'000' + CAST((SELECT COUNT(*) + 1 FROM dbo.JobOrders WHERE ClaimNumber LIKE N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-%') AS NVARCHAR(10)), 3);
-INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, BillableKg, RatePerKgAtCreation, MinimumChargeAtCreation, RoundingIncrementKgAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
-VALUES (@Claim, @c2, @sWDF, 3.20, 4.00, 40.00, 120.00, 1.00, 160.00, 1, 1, 1, 160.00, N'Inspection', NULL, DATEADD(HOUR, 24, @At), @At, @arivera);
+INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, RatePerKgAtCreation, MinimumChargeAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
+VALUES (@Claim, @c2, @sWDF, 4.00, 40.00, 120.00, 160.00, 1, 1, 1, 160.00, N'Inspection', NULL, DATEADD(HOUR, 24, @At), @At, @arivera);
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, 940, DATEADD(DAY, -1, @Today)), @arivera, NULL);
-INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Washing', DATEADD(MINUTE, 965, DATEADD(DAY, -1, @Today)), @arivera, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Intake inspection', DATEADD(MINUTE, 953, DATEADD(DAY, -1, @Today)), @arivera, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Intake inspection', N'Washing', DATEADD(MINUTE, 965, DATEADD(DAY, -1, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Washing', N'Drying', DATEADD(MINUTE, 990, DATEADD(DAY, -1, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Drying', N'Folding', DATEADD(MINUTE, 1040, DATEADD(DAY, -1, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Folding', N'Inspection', DATEADD(MINUTE, 1095, DATEADD(DAY, -1, @Today)), @arivera, NULL);
 INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, RecordedByUserId) VALUES (@JobId, N'Drop-off', 160.00, N'Cash', 200.00, @At, @arivera);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Drop-off', NULL, N'Skipped', N'The customer has no email address.', 0, DATEADD(SECOND, 5, @At), @arivera);
 
-/* 34. Mark Tan, Wash-Dry 4.9 kg, Ready for pick-up: 5.00 kg x 35.00 = laundry 175.00; total 187.00 */
+/* 34. Mark Tan, Wash-Dry 5 kg, Ready for pick-up: 5.00 kg x 35.00 = laundry 175.00; total 187.00 */
 SET @At = DATEADD(MINUTE, 1010, DATEADD(DAY, -1, @Today));
 SET @Claim = N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-' + RIGHT(N'000' + CAST((SELECT COUNT(*) + 1 FROM dbo.JobOrders WHERE ClaimNumber LIKE N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-%') AS NVARCHAR(10)), 3);
-INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, BillableKg, RatePerKgAtCreation, MinimumChargeAtCreation, RoundingIncrementKgAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
-VALUES (@Claim, @c12, @sWD, 4.90, 5.00, 35.00, 120.00, 1.00, 175.00, 1, 1, 0, 187.00, N'Ready for pick-up', NULL, DATEADD(HOUR, 24, @At), @At, @arivera);
+INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, RatePerKgAtCreation, MinimumChargeAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
+VALUES (@Claim, @c12, @sWD, 5.00, 35.00, 120.00, 175.00, 1, 1, 0, 187.00, N'Ready for pick-up', NULL, DATEADD(HOUR, 24, @At), @At, @arivera);
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobAddOns (JobId, AddOnId, Quantity, PriceAtCreation, AddedAt) VALUES (@JobId, @aSachet, 1, 12.00, @At);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, 1010, DATEADD(DAY, -1, @Today)), @arivera, NULL);
-INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Washing', DATEADD(MINUTE, 1035, DATEADD(DAY, -1, @Today)), @arivera, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Intake inspection', DATEADD(MINUTE, 1023, DATEADD(DAY, -1, @Today)), @arivera, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Intake inspection', N'Washing', DATEADD(MINUTE, 1035, DATEADD(DAY, -1, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Washing', N'Drying', DATEADD(MINUTE, 1060, DATEADD(DAY, -1, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Drying', N'Inspection', DATEADD(MINUTE, 1110, DATEADD(DAY, -1, @Today)), @arivera, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Inspection', N'Ready for pick-up', DATEADD(MINUTE, 1155, DATEADD(DAY, -1, @Today)), @arivera, NULL);
@@ -713,52 +746,56 @@ INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResen
 /* 35. Ana Reyes, Comforter / Bulky 2 kg, Folding: 2.00 kg x 60.00 = laundry 120.00; total 120.00 */
 SET @At = DATEADD(MINUTE, -235, @Now);
 SET @Claim = N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-' + RIGHT(N'000' + CAST((SELECT COUNT(*) + 1 FROM dbo.JobOrders WHERE ClaimNumber LIKE N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-%') AS NVARCHAR(10)), 3);
-INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, BillableKg, RatePerKgAtCreation, MinimumChargeAtCreation, RoundingIncrementKgAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
-VALUES (@Claim, @c3, @sCB, 2.00, 2.00, 60.00, 120.00, 1.00, 120.00, 1, 1, 1, 120.00, N'Folding', N'1 blouse with a loose button. No stains noted.', DATEADD(HOUR, 24, @At), @At, @jcruz);
+INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, RatePerKgAtCreation, MinimumChargeAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
+VALUES (@Claim, @c3, @sCB, 2.00, 60.00, 120.00, 120.00, 1, 1, 1, 120.00, N'Folding', N'1 blouse with a loose button. No stains noted.', DATEADD(HOUR, 24, @At), @At, @jcruz);
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, -235, @Now), @jcruz, NULL);
-INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Washing', DATEADD(MINUTE, -210, @Now), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Intake inspection', DATEADD(MINUTE, -222, @Now), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Intake inspection', N'Washing', DATEADD(MINUTE, -210, @Now), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Washing', N'Drying', DATEADD(MINUTE, -185, @Now), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Drying', N'Folding', DATEADD(MINUTE, -135, @Now), @jcruz, NULL);
 INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, RecordedByUserId) VALUES (@JobId, N'Drop-off', 120.00, N'Cash', 200.00, @At, @jcruz);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Drop-off', N'ana.reyes@example.com', N'Sent', NULL, 0, DATEADD(SECOND, 5, @At), @jcruz);
 
-/* 36. Carlo Mendoza, Wash-Dry-Fold 2.3 kg, Drying: 3.00 kg x 40.00 = laundry 120.00; total 135.00 */
+/* 36. Carlo Mendoza, Wash-Dry-Fold 3 kg, Drying: 3.00 kg x 40.00 = laundry 120.00; total 135.00 */
 SET @At = DATEADD(MINUTE, -215, @Now);
 SET @Claim = N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-' + RIGHT(N'000' + CAST((SELECT COUNT(*) + 1 FROM dbo.JobOrders WHERE ClaimNumber LIKE N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-%') AS NVARCHAR(10)), 3);
-INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, BillableKg, RatePerKgAtCreation, MinimumChargeAtCreation, RoundingIncrementKgAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
-VALUES (@Claim, @c4, @sWDF, 2.30, 3.00, 40.00, 120.00, 1.00, 120.00, 1, 1, 1, 135.00, N'Drying', NULL, DATEADD(HOUR, 24, @At), @At, @jcruz);
+INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, RatePerKgAtCreation, MinimumChargeAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
+VALUES (@Claim, @c4, @sWDF, 3.00, 40.00, 120.00, 120.00, 1, 1, 1, 135.00, N'Drying', NULL, DATEADD(HOUR, 24, @At), @At, @jcruz);
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobAddOns (JobId, AddOnId, Quantity, PriceAtCreation, AddedAt) VALUES (@JobId, @aCond, 1, 15.00, @At);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, -215, @Now), @jcruz, NULL);
-INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Washing', DATEADD(MINUTE, -190, @Now), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Intake inspection', DATEADD(MINUTE, -202, @Now), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Intake inspection', N'Washing', DATEADD(MINUTE, -190, @Now), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Washing', N'Drying', DATEADD(MINUTE, -165, @Now), @jcruz, NULL);
 INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, RecordedByUserId) VALUES (@JobId, N'Drop-off', 135.00, N'Cash', 200.00, @At, @jcruz);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Drop-off', NULL, N'Skipped', N'The customer has no email address.', 0, DATEADD(SECOND, 5, @At), @jcruz);
 
-/* 37. Liza Peñaflor, Wash-Dry 4.6 kg, Washing: 5.00 kg x 35.00 = laundry 175.00; total 195.00 */
+/* 37. Liza Peñaflor, Wash-Dry 5 kg, Washing: 5.00 kg x 35.00 = laundry 175.00; total 195.00 */
 SET @At = DATEADD(MINUTE, -205, @Now);
 SET @Claim = N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-' + RIGHT(N'000' + CAST((SELECT COUNT(*) + 1 FROM dbo.JobOrders WHERE ClaimNumber LIKE N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-%') AS NVARCHAR(10)), 3);
-INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, BillableKg, RatePerKgAtCreation, MinimumChargeAtCreation, RoundingIncrementKgAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
-VALUES (@Claim, @c5, @sWD, 4.60, 5.00, 35.00, 120.00, 1.00, 175.00, 1, 1, 0, 195.00, N'Washing', NULL, DATEADD(HOUR, 24, @At), @At, @jcruz);
+INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, RatePerKgAtCreation, MinimumChargeAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
+VALUES (@Claim, @c5, @sWD, 5.00, 35.00, 120.00, 175.00, 1, 1, 0, 195.00, N'Washing', NULL, DATEADD(HOUR, 24, @At), @At, @jcruz);
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobAddOns (JobId, AddOnId, Quantity, PriceAtCreation, AddedAt) VALUES (@JobId, @aRinse, 1, 20.00, @At);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, -205, @Now), @jcruz, NULL);
-INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Washing', DATEADD(MINUTE, -180, @Now), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Intake inspection', DATEADD(MINUTE, -192, @Now), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Intake inspection', N'Washing', DATEADD(MINUTE, -180, @Now), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Washing', N'Drying', DATEADD(MINUTE, -155, @Now), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Drying', N'Inspection', DATEADD(MINUTE, -105, @Now), @jcruz, NULL);
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Inspection', N'Washing', DATEADD(MINUTE, -93, @Now), @arivera, N'Stain still visible on the collar');
 INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, RecordedByUserId) VALUES (@JobId, N'Drop-off', 195.00, N'E-wallet', NULL, @At, @jcruz);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Drop-off', N'liza.penaflor@example.com', N'Sent', NULL, 0, DATEADD(SECOND, 5, @At), @jcruz);
 
-/* 38. Joy Castillo, Wash-Dry-Fold 6.1 kg, Washing: 7.00 kg x 40.00 = laundry 280.00; total 280.00 */
+/* 38. Joy Castillo, Wash-Dry-Fold 7 kg, Washing: 7.00 kg x 40.00 = laundry 280.00; total 280.00 */
 SET @At = DATEADD(MINUTE, -140, @Now);
 SET @Claim = N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-' + RIGHT(N'000' + CAST((SELECT COUNT(*) + 1 FROM dbo.JobOrders WHERE ClaimNumber LIKE N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-%') AS NVARCHAR(10)), 3);
-INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, BillableKg, RatePerKgAtCreation, MinimumChargeAtCreation, RoundingIncrementKgAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
-VALUES (@Claim, @c13, @sWDF, 6.10, 7.00, 40.00, 120.00, 1.00, 280.00, 1, 1, 1, 280.00, N'Washing', NULL, DATEADD(HOUR, 24, @At), @At, @arivera);
+INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, RatePerKgAtCreation, MinimumChargeAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
+VALUES (@Claim, @c13, @sWDF, 7.00, 40.00, 120.00, 280.00, 1, 1, 1, 280.00, N'Washing', NULL, DATEADD(HOUR, 24, @At), @At, @arivera);
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, -140, @Now), @arivera, NULL);
-INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Washing', DATEADD(MINUTE, -115, @Now), @arivera, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Intake inspection', DATEADD(MINUTE, -127, @Now), @arivera, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Intake inspection', N'Washing', DATEADD(MINUTE, -115, @Now), @arivera, NULL);
 -- A down payment of 150.00; the balance of 130.00 is paid before the load is claimed.
 INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, RecordedByUserId) VALUES (@JobId, N'Drop-off', 150.00, N'Cash', 200.00, @At, @arivera);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Drop-off', N'joy.castillo@example.com', N'Sent', NULL, 0, DATEADD(SECOND, 5, @At), @arivera);
@@ -766,42 +803,44 @@ INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResen
 /* 39. Ramon Bautista, Wash-Dry-Fold 7 kg, Queued: 7.00 kg x 40.00 = laundry 280.00; total 280.00 */
 SET @At = DATEADD(MINUTE, -105, @Now);
 SET @Claim = N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-' + RIGHT(N'000' + CAST((SELECT COUNT(*) + 1 FROM dbo.JobOrders WHERE ClaimNumber LIKE N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-%') AS NVARCHAR(10)), 3);
-INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, BillableKg, RatePerKgAtCreation, MinimumChargeAtCreation, RoundingIncrementKgAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
-VALUES (@Claim, @c6, @sWDF, 7.00, 7.00, 40.00, 120.00, 1.00, 280.00, 1, 1, 1, 280.00, N'Queued', NULL, DATEADD(HOUR, 24, @At), @At, @jcruz);
+INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, RatePerKgAtCreation, MinimumChargeAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
+VALUES (@Claim, @c6, @sWDF, 7.00, 40.00, 120.00, 280.00, 1, 1, 1, 280.00, N'Queued', NULL, DATEADD(HOUR, 24, @At), @At, @jcruz);
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, -105, @Now), @jcruz, NULL);
 INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, RecordedByUserId) VALUES (@JobId, N'Drop-off', 280.00, N'Cash', 300.00, @At, @jcruz);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Drop-off', NULL, N'Skipped', N'The customer has no email address.', 0, DATEADD(SECOND, 5, @At), @jcruz);
 
-/* 40. Mark Tan, Wash-Dry-Fold 2.5 kg, Voided: 3.00 kg x 40.00 = laundry 120.00; total 120.00 */
+/* 40. Mark Tan, Wash-Dry-Fold 3 kg, Voided from Intake inspection: 3.00 kg x 40.00 = laundry 120.00; total 120.00 */
 SET @At = DATEADD(MINUTE, -90, @Now);
 SET @Claim = N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-' + RIGHT(N'000' + CAST((SELECT COUNT(*) + 1 FROM dbo.JobOrders WHERE ClaimNumber LIKE N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-%') AS NVARCHAR(10)), 3);
-INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, BillableKg, RatePerKgAtCreation, MinimumChargeAtCreation, RoundingIncrementKgAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
-VALUES (@Claim, @c12, @sWDF, 2.50, 3.00, 40.00, 120.00, 1.00, 120.00, 1, 1, 1, 120.00, N'Voided', N'1 blouse with a loose button. No stains noted.', DATEADD(HOUR, 24, @At), @At, @jcruz);
+INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, RatePerKgAtCreation, MinimumChargeAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
+VALUES (@Claim, @c12, @sWDF, 3.00, 40.00, 120.00, 120.00, 1, 1, 1, 120.00, N'Voided', N'1 blouse with a loose button. No stains noted.', DATEADD(HOUR, 24, @At), @At, @jcruz);
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, -90, @Now), @jcruz, NULL);
-INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Voided', DATEADD(MINUTE, -75, @Now), @jcruz, N'Customer cancelled, wrong bag');
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Intake inspection', DATEADD(MINUTE, -85, @Now), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Intake inspection', N'Voided', DATEADD(MINUTE, -75, @Now), @jcruz, N'Customer cancelled, wrong bag');
 -- A down payment of 60.00; the balance of 60.00 is paid before the load is claimed.
 INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, RecordedByUserId) VALUES (@JobId, N'Drop-off', 60.00, N'Cash', 100.00, @At, @jcruz);
 -- Voided while the customer was away: the 60.00 refund is waiting. Demo refund code: K7M-2QX (use it on the job page).
 INSERT INTO dbo.Refunds (JobId, Amount, Status, CodeHash, CodeSalt, CreatedAt, CreatedByUserId) VALUES (@JobId, 60.00, N'Pending', 0x4B103A9F44CDBB552BE0586F2E4CC49F930D076A8646EDB8E871376ADFC2BCA9, 0x5A1D0C0DE00DFACE1234567890ABCDEF, DATEADD(MINUTE, -75, @Now), @jcruz);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Drop-off', NULL, N'Skipped', N'The customer has no email address.', 0, DATEADD(SECOND, 5, @At), @jcruz);
 
-/* 41. Grace Villanueva, Wash-Dry-Fold 1.5 kg, Queued: 2.00 kg x 40.00 = laundry 120.00; total 120.00 */
+/* 41. Grace Villanueva, Wash-Dry-Fold 2 kg, Intake inspection: 2.00 kg x 40.00 = laundry 120.00; total 120.00 */
 SET @At = DATEADD(MINUTE, -70, @Now);
 SET @Claim = N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-' + RIGHT(N'000' + CAST((SELECT COUNT(*) + 1 FROM dbo.JobOrders WHERE ClaimNumber LIKE N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-%') AS NVARCHAR(10)), 3);
-INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, BillableKg, RatePerKgAtCreation, MinimumChargeAtCreation, RoundingIncrementKgAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
-VALUES (@Claim, @c7, @sWDF, 1.50, 2.00, 40.00, 120.00, 1.00, 120.00, 1, 1, 1, 120.00, N'Queued', NULL, DATEADD(HOUR, 24, @At), @At, @jcruz);
+INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, RatePerKgAtCreation, MinimumChargeAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
+VALUES (@Claim, @c7, @sWDF, 2.00, 40.00, 120.00, 120.00, 1, 1, 1, 120.00, N'Intake inspection', NULL, DATEADD(HOUR, 24, @At), @At, @jcruz);
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, NULL, N'Queued', DATEADD(MINUTE, -70, @Now), @jcruz, NULL);
+INSERT INTO dbo.JobStatusHistory (JobId, FromStatus, ToStatus, ChangedAt, ChangedByUserId, Reason) VALUES (@JobId, N'Queued', N'Intake inspection', DATEADD(MINUTE, -55, @Now), @jcruz, NULL);
 INSERT INTO dbo.Payments (JobId, Kind, Amount, Method, CashReceived, PaidAt, RecordedByUserId) VALUES (@JobId, N'Drop-off', 120.00, N'E-wallet', NULL, @At, @jcruz);
 INSERT INTO dbo.NotificationLog (JobId, Kind, Recipient, Status, Detail, IsResend, AttemptedAt, AttemptedByUserId) VALUES (@JobId, N'Drop-off', N'grace.v@example.com', N'Sent', NULL, 0, DATEADD(SECOND, 5, @At), @jcruz);
 
-/* 42. Dennis Uy, Wash-Dry-Fold 4.8 kg, Queued: 5.00 kg x 40.00 = laundry 200.00; total 232.00 */
+/* 42. Dennis Uy, Wash-Dry-Fold 5 kg, Queued: 5.00 kg x 40.00 = laundry 200.00; total 232.00 */
 SET @At = DATEADD(MINUTE, -35, @Now);
 SET @Claim = N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-' + RIGHT(N'000' + CAST((SELECT COUNT(*) + 1 FROM dbo.JobOrders WHERE ClaimNumber LIKE N'LT-' + CONVERT(CHAR(6), @At, 12) + N'-%') AS NVARCHAR(10)), 3);
-INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, BillableKg, RatePerKgAtCreation, MinimumChargeAtCreation, RoundingIncrementKgAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
-VALUES (@Claim, @c11, @sWDF, 4.80, 5.00, 40.00, 120.00, 1.00, 200.00, 1, 1, 1, 232.00, N'Queued', N'Dark and white items bagged separately.', DATEADD(HOUR, 24, @At), @At, @arivera);
+INSERT INTO dbo.JobOrders (ClaimNumber, CustomerId, ServiceId, WeightKg, RatePerKgAtCreation, MinimumChargeAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding, TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedAt, CreatedByUserId)
+VALUES (@Claim, @c11, @sWDF, 5.00, 40.00, 120.00, 200.00, 1, 1, 1, 232.00, N'Queued', N'Dark and white items bagged separately.', DATEADD(HOUR, 24, @At), @At, @arivera);
 SET @JobId = SCOPE_IDENTITY();
 INSERT INTO dbo.JobAddOns (JobId, AddOnId, Quantity, PriceAtCreation, AddedAt) VALUES (@JobId, @aRinse, 1, 20.00, @At);
 INSERT INTO dbo.JobAddOns (JobId, AddOnId, Quantity, PriceAtCreation, AddedAt) VALUES (@JobId, @aSachet, 1, 12.00, @At);

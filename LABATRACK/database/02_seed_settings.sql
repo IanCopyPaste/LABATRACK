@@ -28,8 +28,6 @@ SET NOCOUNT ON;
 /* ------------------------------------------------------------------ Settings */
 IF NOT EXISTS (SELECT 1 FROM dbo.Settings WHERE SettingKey = N'MinimumCharge')
     INSERT INTO dbo.Settings (SettingKey, SettingValue) VALUES (N'MinimumCharge', N'120.00');          -- pesos
-IF NOT EXISTS (SELECT 1 FROM dbo.Settings WHERE SettingKey = N'RoundingIncrementKg')
-    INSERT INTO dbo.Settings (SettingKey, SettingValue) VALUES (N'RoundingIncrementKg', N'1');         -- 1 or 0.5 kg
 IF NOT EXISTS (SELECT 1 FROM dbo.Settings WHERE SettingKey = N'MaxWeightKg')
     INSERT INTO dbo.Settings (SettingKey, SettingValue) VALUES (N'MaxWeightKg', N'100');               -- per job
 -- The least a customer may pay at drop-off, as a percentage of the total (0 to 100). The rest is

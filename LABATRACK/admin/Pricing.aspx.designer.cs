@@ -18,8 +18,6 @@
 
         protected global::System.Web.UI.WebControls.Label lblMinimumError;
 
-        protected global::System.Web.UI.WebControls.DropDownList ddlRounding;
-
         protected global::System.Web.UI.WebControls.TextBox txtMaxWeight;
 
         protected global::System.Web.UI.WebControls.Label lblMaxWeightError;

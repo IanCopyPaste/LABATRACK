@@ -53,12 +53,6 @@ namespace LABATRACK.admin
             {
                 ShowSavedNotice();
                 txtMinimumCharge.Text = settings.MinimumCharge.ToString("0.00", Inv);
-                FillRoundingChoices();
-                ListItem current = ddlRounding.Items.FindByValue(RoundingValue(settings.RoundingIncrementKg));
-                if (current != null)
-                    ddlRounding.SelectedValue = current.Value;
-                else
-                    ddlRounding.SelectedValue = "1";
                 txtMaxWeight.Text = settings.MaxWeightKg.ToString("0.##", Inv);
                 txtMinDownPayment.Text = settings.MinimumDownPaymentPercent.ToString(Inv);
             }
@@ -145,8 +139,6 @@ namespace LABATRACK.admin
                         int number;
                         if (key == ShopSettings.MinimumChargeKey && decimal.TryParse(value, NumberStyles.Number, Inv, out money))
                             settings.MinimumCharge = money;
-                        else if (key == ShopSettings.RoundingIncrementKgKey && decimal.TryParse(value, NumberStyles.Number, Inv, out money))
-                            settings.RoundingIncrementKg = money;
                         else if (key == ShopSettings.MaxWeightKgKey && decimal.TryParse(value, NumberStyles.Number, Inv, out money))
                             settings.MaxWeightKg = money;
                         else if (key == ShopSettings.MinimumDownPaymentPercentKey && int.TryParse(value, NumberStyles.Integer, Inv, out number))
@@ -156,22 +148,10 @@ namespace LABATRACK.admin
             }
         }
 
-        private void FillRoundingChoices()
-        {
-            ddlRounding.Items.Clear();
-            foreach (decimal step in ShopSettings.RoundingChoices)
-                ddlRounding.Items.Add(new ListItem(RoundingValue(step) + " kg", RoundingValue(step)));
-        }
-
-        private static string RoundingValue(decimal step)
-        {
-            return step.ToString("0.#", Inv);
-        }
-
         private void SaveRules()
         {
             bool ok = true;
-            decimal minimum, maxWeight, rounding;
+            decimal minimum, maxWeight;
             int minDown;
 
             if (!TryMoney(txtMinimumCharge.Text, out minimum) || minimum < 0)
@@ -190,15 +170,9 @@ namespace LABATRACK.admin
                 ShowError(lblMinDownError, "Enter a whole percentage from 0 to 100, for example 50.");
                 ok = false;
             }
-            if (!decimal.TryParse(ddlRounding.SelectedValue, NumberStyles.Number, Inv, out rounding) || !ShopSettings.IsValidRounding(rounding))
-            {
-                ShowNotice("warn", "Choose how far the weight is rounded up, from 0.1 kg to 1 kg.");
-                ok = false;
-            }
             if (!ok) return;
 
             SaveSetting(ShopSettings.MinimumChargeKey, minimum.ToString("0.00##", Inv));
-            SaveSetting(ShopSettings.RoundingIncrementKgKey, rounding.ToString("0.00##", Inv));
             SaveSetting(ShopSettings.MaxWeightKgKey, maxWeight.ToString("0.00##", Inv));
             SaveSetting(ShopSettings.MinimumDownPaymentPercentKey, minDown.ToString(Inv));
             Redirect("rules");
@@ -371,8 +345,7 @@ namespace LABATRACK.admin
             AddOn product = addOns.FirstOrDefault(a => a.IsActive && a.IsProduct);
 
             decimal weight = 5.1m;
-            decimal billable = Math.Ceiling(weight / settings.RoundingIncrementKg) * settings.RoundingIncrementKg;
-            decimal chargeBeforeMinimum = Math.Round(billable * service.RatePerKg, 2, MidpointRounding.AwayFromZero);
+            decimal chargeBeforeMinimum = Math.Round(weight * service.RatePerKg, 2, MidpointRounding.AwayFromZero);
             bool minimumApplied = chargeBeforeMinimum < settings.MinimumCharge;
             decimal laundryCharge;
             if (minimumApplied)
@@ -386,8 +359,7 @@ namespace LABATRACK.admin
 
             StringBuilder sb = new StringBuilder("<dl class=\"dl\">");
             Line(sb, "Weight", Kg(weight), false);
-            Line(sb, "Billable (rounded up)", Kg(billable), false);
-            Line(sb, Kg(billable) + " × " + Peso(service.RatePerKg), Peso(chargeBeforeMinimum), false);
+            Line(sb, Kg(weight) + " × " + Peso(service.RatePerKg), Peso(chargeBeforeMinimum), false);
             Line(sb, "Minimum charge check", minimumApplied
                 ? "raised to " + Peso(settings.MinimumCharge)
                 : Peso(chargeBeforeMinimum) + " ≥ " + Peso(settings.MinimumCharge), !minimumApplied);

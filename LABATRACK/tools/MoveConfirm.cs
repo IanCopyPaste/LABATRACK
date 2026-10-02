@@ -26,7 +26,9 @@ namespace LABATRACK.tools
             else if (next == JobStatus.Claimed)
                 what = "Check that the customer's slip shows this claim number. Claimed is final: the job closes and leaves the board.";
             else if (job.CurrentStatus == JobStatus.Queued)
-                what = "Queued → " + next + ". Go ahead only if the load is going into " + next.ToLowerInvariant() + " now.";
+                what = "Queued → " + next + ". Go ahead only if the load is being checked in now.";
+            else if (job.CurrentStatus == JobStatus.IntakeInspection)
+                what = "Intake inspection → " + next + ". Go ahead only if the load was checked and is going into " + next.ToLowerInvariant() + " now.";
             else
                 what = job.CurrentStatus + " → " + next + ". Go ahead only if " + job.CurrentStatus.ToLowerInvariant() + " is finished.";
 

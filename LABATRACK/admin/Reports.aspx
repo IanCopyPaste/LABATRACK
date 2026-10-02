@@ -27,9 +27,10 @@
 
                     <div class="report-filters">
                         <nav class="seg" aria-label="Report period">
-                            <a href="<%: ViewLink("year") %>" class="<%= View == "year" ? "active" : "" %>">Year</a>
-                            <a href="<%: ViewLink("month") %>" class="<%= View == "month" ? "active" : "" %>">Month</a>
-                            <a href="<%: ViewLink("day") %>" class="<%= View == "day" ? "active" : "" %>">Day</a>
+                            <a href="<%: ViewLink("year") %>" class="<%= View == "year" ? "active" : "" %>">Yearly</a>
+                            <a href="<%: ViewLink("month") %>" class="<%= View == "month" ? "active" : "" %>">Monthly</a>
+                            <a href="<%: ViewLink("week") %>" class="<%= View == "week" ? "active" : "" %>">Weekly</a>
+                            <a href="<%: ViewLink("day") %>" class="<%= View == "day" ? "active" : "" %>">Daily</a>
                         </nav>
                         <div class="period-pick">
                             <% if (PrevLink != null) { %><a class="btn btn-sm btn-ghost" href="<%: PrevLink %>" aria-label="Previous period"><%= Icons.Get("arrow-left", "ico-sm") %></a><% } else { %><span class="btn btn-sm btn-ghost is-off" aria-hidden="true"><%= Icons.Get("arrow-left", "ico-sm") %></span><% } %>
@@ -37,6 +38,8 @@
                             <asp:DropDownList ID="ddlYear" runat="server" aria-label="Year" />
                             <% } else if (View == "month") { %>
                             <asp:TextBox ID="txtMonth" runat="server" TextMode="Month" aria-label="Month" CssClass="input" />
+                            <% } else if (View == "week") { %>
+                            <asp:TextBox ID="txtWeek" runat="server" TextMode="Date" aria-label="Any day in the week" title="Pick any day. The week runs Monday to Sunday." CssClass="input" />
                             <% } else { %>
                             <asp:TextBox ID="txtDay" runat="server" TextMode="Date" aria-label="Day" CssClass="input" />
                             <% } %>
@@ -53,6 +56,10 @@
 
                     <% if (View == "day") { %>
                     <%= CompareChart() %>
+                    <% } else if (View == "week") { %>
+                    <%= CompareChart() %>
+
+                    <%= Heatmap() %>
                     <% } else { %>
                     <div class="grid grid-2">
                         <%= CompareChart() %>

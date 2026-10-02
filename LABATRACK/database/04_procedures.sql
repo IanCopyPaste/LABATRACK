@@ -423,10 +423,8 @@ CREATE OR ALTER PROCEDURE dbo.usp_JobOrders_Insert
     @CustomerId                    INT,
     @ServiceId                     INT,
     @WeightKg                      DECIMAL(6,2),
-    @BillableKg                    DECIMAL(6,2),
     @RatePerKgAtCreation           DECIMAL(10,2),
     @MinimumChargeAtCreation       DECIMAL(10,2),
-    @RoundingIncrementKgAtCreation DECIMAL(4,2),
     @LaundryCharge                 DECIMAL(10,2),
     @IncludesWashing               BIT,
     @IncludesDrying                BIT,
@@ -440,12 +438,12 @@ AS
 BEGIN
     SET NOCOUNT ON;
     INSERT INTO dbo.JobOrders
-        (ClaimNumber, CustomerId, ServiceId, WeightKg, BillableKg, RatePerKgAtCreation, MinimumChargeAtCreation,
-         RoundingIncrementKgAtCreation, LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding,
+        (ClaimNumber, CustomerId, ServiceId, WeightKg, RatePerKgAtCreation, MinimumChargeAtCreation,
+         LaundryCharge, IncludesWashing, IncludesDrying, IncludesFolding,
          TotalAmount, CurrentStatus, Remarks, ExpectedPickupAt, CreatedByUserId)
     VALUES
-        (@ClaimNumber, @CustomerId, @ServiceId, @WeightKg, @BillableKg, @RatePerKgAtCreation, @MinimumChargeAtCreation,
-         @RoundingIncrementKgAtCreation, @LaundryCharge, @IncludesWashing, @IncludesDrying, @IncludesFolding,
+        (@ClaimNumber, @CustomerId, @ServiceId, @WeightKg, @RatePerKgAtCreation, @MinimumChargeAtCreation,
+         @LaundryCharge, @IncludesWashing, @IncludesDrying, @IncludesFolding,
          @TotalAmount, @CurrentStatus, @Remarks, @ExpectedPickupAt, @CreatedByUserId);
     SELECT CAST(SCOPE_IDENTITY() AS INT) AS JobId;
 END
@@ -609,13 +607,12 @@ END
 GO
 
 -- The owner's correction of a job, guarded the same way: it saves only if the job is still in
--- the status the owner saw. The minimum charge and rounding step frozen at creation stay.
+-- the status the owner saw. The minimum charge frozen at creation stays.
 CREATE OR ALTER PROCEDURE dbo.usp_JobOrders_Update
     @JobId               INT,
     @ExpectedStatus      NVARCHAR(20),
     @ServiceId           INT,
     @WeightKg            DECIMAL(6,2),
-    @BillableKg          DECIMAL(6,2),
     @RatePerKgAtCreation DECIMAL(10,2),
     @LaundryCharge       DECIMAL(10,2),
     @IncludesWashing     BIT,
@@ -630,7 +627,6 @@ BEGIN
     UPDATE dbo.JobOrders
     SET ServiceId = @ServiceId,
         WeightKg = @WeightKg,
-        BillableKg = @BillableKg,
         RatePerKgAtCreation = @RatePerKgAtCreation,
         LaundryCharge = @LaundryCharge,
         IncludesWashing = @IncludesWashing,
@@ -991,7 +987,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
     SELECT j.JobId, j.ClaimNumber, j.CreatedAt, j.ServiceId, s.Name AS ServiceName,
-           j.WeightKg, j.BillableKg, j.RatePerKgAtCreation, j.MinimumChargeAtCreation, j.LaundryCharge, j.TotalAmount,
+           j.WeightKg, j.RatePerKgAtCreation, j.MinimumChargeAtCreation, j.LaundryCharge, j.TotalAmount,
            j.CurrentStatus, j.CustomerId, c.Name AS CustomerName, u.Username AS CreatedByName,
            (SELECT MIN(h.ChangedAt) FROM dbo.JobStatusHistory AS h
             WHERE h.JobId = j.JobId AND h.ToStatus = N'Ready for pick-up') AS FirstReadyAt,

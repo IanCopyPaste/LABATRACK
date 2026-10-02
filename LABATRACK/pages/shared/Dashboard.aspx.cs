@@ -338,11 +338,17 @@ namespace LABATRACK.pages.shared
         protected static string ActionLabel(JobOrder job)
         {
             string next = job.NextStage;
+            bool startingWork = job.CurrentStatus == JobStatus.IntakeInspection;
             switch (next)
             {
+                case JobStatus.IntakeInspection: return "Start intake inspection";
                 case JobStatus.Washing: return "Start washing";
-                case JobStatus.Drying: return job.CurrentStatus == JobStatus.Queued ? "Start drying" : "Move to drying";
-                case JobStatus.Folding: return job.CurrentStatus == JobStatus.Queued ? "Start folding" : "Move to folding";
+                case JobStatus.Drying:
+                    if (startingWork) return "Start drying";
+                    return "Move to drying";
+                case JobStatus.Folding:
+                    if (startingWork) return "Start folding";
+                    return "Move to folding";
                 case JobStatus.Inspection: return "Send to inspection";
                 case JobStatus.Ready: return "Pass";
                 default: return "Mark claimed";
@@ -403,6 +409,7 @@ namespace LABATRACK.pages.shared
             switch (stage)
             {
                 case "Queued": return "st-queued";
+                case "Intake inspection": return "st-intake";
                 case "Washing": return "st-washing";
                 case "Drying": return "st-drying";
                 case "Folding": return "st-folding";

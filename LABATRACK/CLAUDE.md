@@ -60,7 +60,7 @@ Two roles: **Owner** (admin) and **Staff**. The owner can do everything staff ca
 | Action | Staff | Owner |
 |---|---|---|
 | Create a job order, print the slip, advance status, mark claimed | Yes | Yes |
-| Void a job that is still Queued (reason required) | Yes | Yes |
+| Void a job that is still Queued or in Intake inspection (reason required) | Yes | Yes |
 | Hand a waiting refund to the customer who gives the refund code, or send them a new code | Yes | Yes |
 | Release a refund without the code (reason required, recorded as an owner override) | No | Yes |
 | Add and search customers | Yes | Yes |
@@ -76,33 +76,34 @@ Two roles: **Owner** (admin) and **Staff**. The owner can do everything staff ca
 | Historical sales, reports, analytics, full history with voided jobs and who did what | No | Yes |
 
 - Staff can void freely on purpose, because the owner may be unreachable. Voiding is not deleting (see Data rules). A refund is not paid out just because a job was voided: see Refunds under Payment rules.
-- Staff cannot edit a job. A wrong weight is fixed by the owner, or by voiding and re-creating a Queued job.
+- Staff cannot edit a job. A wrong weight is fixed by the owner, or by voiding and re-creating a Queued or Intake inspection job.
 - Enforce roles on the server. Every page in `admin/` inherits `AdminBasePage`, which sends anyone who is not the signed-in owner to the owner login. Hiding a menu link is not security.
 - Staff log in at `/Login.aspx`. The owner logs in at `/admin/Login.aspx`. Each login page checks the `Users` table itself (see REVISION.md).
 - The owner must be able to reach the counter screens (New Job, Dashboard, History) from the owner's navigation (`NavBar.cs`), so the owner never needs a second staff account.
 
 ## Job lifecycle
 
-Stages: **Queued, Washing, Drying, Folding, Inspection, Ready for pick-up, Claimed**, plus **Voided**.
+Stages: **Queued, Intake inspection, Washing, Drying, Folding, Inspection, Ready for pick-up, Claimed**, plus **Voided**.
 
-Inspection is the quality check after the last work stage (verify the finished laundry before shelving). The intake check at the counter is not a stage; it lives in the job's `Remarks` field.
+Intake inspection comes before any work starts: staff check the laundry (stains, damage, things left in pockets) and write what they found in the job's `Remarks`. A load that should not be worked on is voided from this stage, the same way it can be from Queued. Inspection is the quality check after the last work stage (verify the finished laundry before shelving).
 
 **Each service has its own route.** The owner chooses, per service, which of the three work stages it includes: Washing, Drying, Folding (at least one). The order never changes and the rest of the route is the same for every job:
 
-Queued → (the service's work stages, in the order Washing, Drying, Folding) → Inspection → Ready for pick-up → Claimed
+Queued → Intake inspection → (the service's work stages, in the order Washing, Drying, Folding) → Inspection → Ready for pick-up → Claimed
 
-For example, Wash-Dry-Fold includes all three, and a Wash-Dry service skips Folding: Queued → Washing → Drying → Inspection. Which stages each service has is the owner's decision, set on the Pricing page; the draft's sample services are only examples. Inspection is always included. **Stages belong to the main services only.** Service add-ons and product add-ons never have stages: they ride along with the load, so the Pricing edit window shows the stage checkboxes only for a service, and `AddOns` has no stage columns.
+For example, Wash-Dry-Fold includes all three, and a Wash-Dry service skips Folding: Queued → Intake inspection → Washing → Drying → Inspection. Which stages each service has is the owner's decision, set on the Pricing page; the draft's sample services are only examples. Intake inspection and Inspection are always included. **Stages belong to the main services only.** Service add-ons and product add-ons never have stages: they ride along with the load, so the Pricing edit window shows the stage checkboxes only for a service, and `AddOns` has no stage columns.
 
 The route is copied onto the job when it is created (see Pricing rules, freeze at creation), so the job's route never changes under it. These are the only allowed transitions. `StatusService` enforces them and rejects everything else. No skipping within the job's route.
 
 | From | To | Notes |
 |---|---|---|
-| Queued | the first work stage on the job's route | |
+| Queued | Intake inspection | |
+| Intake inspection | the first work stage on the job's route | |
 | a work stage | the next work stage on the route, or Inspection after the last one | |
 | Inspection | Ready for pick-up | Pass. Triggers the ready email. |
 | Inspection | a work stage on the job's route | Fail. Rework. Reason required. A stage the job does not have is never offered. |
 | Ready for pick-up | Claimed | Only with nothing owed: the balance is collected in the same save (see Payment rules). |
-| Queued | Voided | Reason required. Only from Queued. Anything paid becomes a refund (see Payment rules). |
+| Queued or Intake inspection | Voided | Reason required. Only from these two stages, before any work starts. Anything paid becomes a refund (see Payment rules). |
 
 //use smtp setup for a while for email sending
 
@@ -116,8 +117,7 @@ Claimed and Voided are final.
 ## Pricing rules (`PricingService`)
 
 - Total = laundry charge + sum of add-on lines, where a line is `Quantity * PriceAtCreation`.
-- Laundry charge = billable kilos x the service's rate per kilo, then raised to the minimum charge if lower. Add-ons are added after.
-- Billable kilos = weight rounded up to the next multiple of `RoundingIncrementKg`. The owner chooses the step on the Pricing page from a dropdown of 0.1 kg to 1 kg in tenths (`ShopSettings.RoundingChoices`; default 1, so 3.2 kg bills as 4 kg; with 0.1 kg it bills as 3.2 kg, with 0.5 kg as 3.5 kg). The choice is frozen on each job (`RoundingIncrementKgAtCreation`). The page's scripts work in hundredths of a kilo (whole numbers) so a 0.1 step never leaves a floating-point remainder; the server uses `decimal`.
+- Laundry charge = the weight exactly as weighed x the service's rate per kilo, rounded to the centavo, then raised to the minimum charge if lower. Add-ons are added after. There is no rounding up of the weight and no "billable kilos": 3.2 kg at ₱40.00 per kilo is ₱128.00. The page's scripts work in hundredths of a kilo and of a peso (whole numbers) so the browser never shows a floating-point remainder; the server uses `decimal`.
 - **Minimum down payment.** The owner sets it on the Pricing page too, as a percentage of the total (see Payment rules).
 - **Maximum weight per job.** The owner sets it on the Pricing page (stored in `Settings`, draft default 100 kg). A weight above it is refused when a job is created and when the owner edits a job, on screen and again in `PricingService`. A bigger load is split into two or more jobs.
 - Freeze the price at creation. Copy the service rate into `JobOrders.RatePerKgAtCreation` and each add-on price into `JobAddOns.PriceAtCreation`. Compute `TotalAmount` once and store it. Never recompute an old job from today's prices, or historical sales silently change when the owner edits a rate. The service's route (its work stages) is copied onto the job the same way.
@@ -147,7 +147,7 @@ The proposal (scope, payment recording) says the system records whether a job or
   - **A new code** (`ReissueCode`, staff or owner) emails a fresh code to the address on file. The old code stops working only once the new email has really been sent, so a failed email leaves the customer with the code they have. A customer with no email cannot be sent one.
   - A job with nothing paid has no refund record. Voided and refunded jobs keep their history; nothing is deleted.
   - Refunds waiting are listed on both dashboards under "Needs attention", with the money the shop is holding for them, and on the voided job''s page. Sales figures count money on the day it was received and net refunds on the day they are handed over, so a refund that is still waiting is still inside the sales figures until then.
-- **Owner edits that change the total** (for example a corrected weight). Allowed only while the job is not Claimed or Voided. The service itself can be changed only while the job is still Queued, because a different service can have a different route and a load already in, say, Folding may not have that stage on the new one. Weight, add-on, and customer corrections stay allowed until the job is claimed. The job update and any refund row are saved in one `SqlTransaction`. A correction never takes money on the spot:
+- **Owner edits that change the total** (for example a corrected weight). Allowed only while the job is not Claimed or Voided. The service itself can be changed only while the job is still Queued or in Intake inspection (before any work stage), because a different service can have a different route and a load already in, say, Folding may not have that stage on the new one. Weight, add-on, and customer corrections stay allowed until the job is claimed. The job update and any refund row are saved in one `SqlTransaction`. A correction never takes money on the spot:
   - New total higher than what was paid: the difference is simply a bigger balance, collected before pick-up like any balance. No payment row.
   - New total below what was already paid (the customer overpaid): a negative `Adjustment` row refunds the excess, and the screen tells the owner exactly how much to give back. The owner picks Cash or E-wallet for it; it defaults to the job's original method.
   - The page sends back the amount it showed (new total − paid), and the save is refused if it is no longer the same.
@@ -169,13 +169,13 @@ Tables, as built in `01_schema.sql` (the student asked for the backend to be bui
 - `Customers` (name, contact number, email nullable, created at) — added: `ContactDigits`, a computed column (the number without spaces, dashes, brackets or plus) with a unique index, so one number is one customer even when typed differently
 - `Services` (name, rate per kg, active, includes washing, includes drying, includes folding) — the three stage flags are `BIT`, with a `CHECK` that at least one is set
 - `AddOns` (name, price, kind, active) — `kind` is `Service` or `Product`, with a `CHECK` constraint
-- `JobOrders` (claim number, customer, service, weight, billable kg, rate at creation, the three stage flags copied from the service at creation, total, current status, remarks, expected pick-up, created at and by) — added: `MinimumChargeAtCreation` and `RoundingIncrementKgAtCreation` (frozen like the rate, so an owner's correction re-bills with the job's own rules), `LaundryCharge` (for reports), and `LastEditedAt` / `LastEditedByUserId` (who last corrected it)
+- `JobOrders` (claim number, customer, service, weight, rate at creation, the three stage flags copied from the service at creation, total, current status, remarks, expected pick-up, created at and by) — added: `MinimumChargeAtCreation` (frozen like the rate, so an owner's correction re-bills with the job's own rules), `LaundryCharge` (for reports), and `LastEditedAt` / `LastEditedByUserId` (who last corrected it)
 - `JobAddOns` (job, add-on, quantity, price at creation) — `quantity` is always 1 for a service and 1 or more for a product, never 0; a line amount is `Quantity * PriceAtCreation`. Added: `AddedAt` and `RemovedAt`: an add-on the owner takes off a job is marked removed, never deleted (a filtered unique index allows one current line per add-on)
 - `JobStatusHistory` (job, from, to, changed at, changed by, reason)
 - `Payments` (job, amount, method, cash received, paid at, recorded by) — added: `Kind` (`Drop-off`, `Adjustment`, `Void refund`), so each row says what it was
 - `Refunds` (job, unique; amount; status `Pending` or `Released`; the refund code's hash and salt, erased once released; wrong tries; created at and by; released at, by, and how: `At void`, `Code` or `Owner override`; the owner's reason) — one row per voided job that had paid something, with `CHECK`s that a Released row says who, when and how, and that an override has a reason
 - `NotificationLog` (job, kind `Drop-off`, `Ready`, `Modified` or `Voided`, recipient, status `Sent`/`Failed`/`Skipped`, detail, resend flag, attempted at and by)
-- `Settings` (key/value: minimum charge, rounding increment, maximum weight per job, minimum down payment percent, unclaimed threshold in days, default turnaround hours, shop name, slip header, and the rework stages allowed after a failed inspection)
+- `Settings` (key/value: minimum charge, maximum weight per job, minimum down payment percent, unclaimed threshold in days, default turnaround hours, shop name, slip header, and the rework stages allowed after a failed inspection)
 - Views: `vw_JobPayments` (the amount paid per job, net of refunds, also split by method; the balance is the total minus it) and `vw_JobList` (a job with its customer, service, latest status change, add-ons and, for a voided job, its refund; the one shape every job screen reads)
 
 ## T-SQL conventions
@@ -246,7 +246,7 @@ Every list of jobs shows how a job stands on payment (Paid in full, Partial with
 
 **Owner reports.** Daily and monthly sales, cash vs e-wallet split, most-availed services, average turnaround (first Queued to first Ready), unclaimed loads, and a comparison with the previous period. Daily sales and the cash split come from `Payments.PaidAt`, which is what the drawer check needs. Service popularity comes from the job's created date. Do not mix the two.
 
-The Reports page (`admin/Reports.aspx`) is scoped by one period filter (a year, a month, or a day) and every figure below it covers that period. Comparisons are like for like: a year or month so far against the same dates one period earlier, a day against the same weekday a week before, never a part-period against a whole one. Beyond the list above it shows sales by month/day/hour split into cash and e-wallet, a running total against last month, sales per year, average sales by weekday, a weekday-by-hour heatmap of drop-offs, add-on take-up, load sizes (and how many hit the minimum charge), turnaround against the 24-hour target, new against returning customers, top customers, orders per staff member, and voids with their reasons. It deliberately shows nothing about profit, costs, payroll, stock, or forecasts (see Out of scope).
+The Reports page (`admin/Reports.aspx`) is scoped by one period filter (a year, a month, a week, or a day) and every figure below it covers that period. A week runs Monday to Sunday and is picked by any day inside it. Comparisons are like for like: a year or month so far against the same dates one period earlier, a week so far against the same days of the week before, a day against the same weekday a week before, never a part-period against a whole one. Beyond the list above it shows sales by month/day/hour split into cash and e-wallet, a running total against last month or last week, sales per year, average sales by weekday, a weekday-by-hour heatmap of drop-offs, add-on take-up, load sizes (and how many hit the minimum charge), turnaround against the 24-hour target, new against returning customers, top customers, orders per staff member, and voids with their reasons. It deliberately shows nothing about profit, costs, payroll, stock, or forecasts (see Out of scope).
 
 Charts are inline SVG drawn on the server by `tools/SvgChart.cs`. No chart library and no CDN. Every chart has a "Show as table" twin, hover and keyboard tooltips come from `assets/js/Charts.js`, and the series colours (blue `#2f62c9`, orange `#eb6834`, grey for context) were checked for colour-blind separation. Add new charts through the same helper rather than a second way of drawing them.
 
@@ -347,7 +347,7 @@ Do not build these, and do not add hooks "for later" without asking: SMS, paymen
 
 Ask the student before hard-coding any of these. Store them in `Settings`, not in code.
 
-1. Real rate per kilo for each service, the minimum charge, and the rounding increment (a dropdown from 0.1 kg to 1 kg, default 1 kg).
+1. Real rate per kilo for each service and the minimum charge.
 2. Claim number format (suggested: `LT-yyMMdd-###`).
 3. Days before an unclaimed load is flagged.
 4. Default turnaround hours used for the expected pick-up date on the slip.

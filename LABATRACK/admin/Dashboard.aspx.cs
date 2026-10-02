@@ -259,6 +259,7 @@ namespace LABATRACK.admin
             switch (stage)
             {
                 case "Queued": return "st-queued";
+                case "Intake inspection": return "st-intake";
                 case "Washing": return "st-washing";
                 case "Drying": return "st-drying";
                 case "Folding": return "st-folding";

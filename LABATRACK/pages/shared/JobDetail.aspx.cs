@@ -29,6 +29,9 @@ namespace LABATRACK.pages.shared
         protected bool IsVoided { get; private set; }
         protected bool InShop { get; private set; }
         protected string NextStage { get; private set; }
+        protected string EarlyTitle { get; private set; }
+        protected string EarlySub { get; private set; }
+        protected string EarlyText { get; private set; }
         protected bool MinimumApplied { get; private set; }
         protected bool ReadyReached { get; private set; }
         protected bool NothingPaid { get; private set; }
@@ -319,7 +322,7 @@ namespace LABATRACK.pages.shared
                     JobOrder job = LockJob(conn, tx);
                     if (job == null)
                         error = "That job could not be found.";
-                    else if (job.CurrentStatus != JobStatus.Queued)
+                    else if (job.CurrentStatus != JobStatus.Queued && job.CurrentStatus != JobStatus.IntakeInspection)
                         error = JobStatus.AlreadyUpdated;
                     else
                         error = MoveJob(conn, tx, job, JobStatus.Voided, reason, userId);
@@ -943,8 +946,7 @@ namespace LABATRACK.pages.shared
             InShop = Job.IsInShop;
             NextStage = Job.NextStage;
 
-            decimal billable = Math.Ceiling(Job.WeightKg / Job.RoundingIncrementKgAtCreation) * Job.RoundingIncrementKgAtCreation;
-            decimal chargeBeforeMinimum = Math.Round(billable * Job.RatePerKgAtCreation, 2, MidpointRounding.AwayFromZero);
+            decimal chargeBeforeMinimum = Math.Round(Job.WeightKg * Job.RatePerKgAtCreation, 2, MidpointRounding.AwayFromZero);
             MinimumApplied = chargeBeforeMinimum < Job.MinimumChargeAtCreation;
 
             hfShownStatus.Value = Job.CurrentStatus;
@@ -1051,7 +1053,24 @@ namespace LABATRACK.pages.shared
             rptEmails.DataBind();
 
             string status = Job.CurrentStatus;
-            pnlQueued.Visible = status == JobStatus.Queued;
+            pnlQueued.Visible = status == JobStatus.Queued || status == JobStatus.IntakeInspection;
+            if (status == JobStatus.Queued)
+            {
+                EarlyTitle = "Queued";
+                EarlySub = "Waiting for the intake inspection";
+                EarlyText = "Start the intake inspection, then record it here.";
+            }
+            else if (status == JobStatus.IntakeInspection)
+            {
+                string where;
+                if (NextStage == JobStatus.Washing)
+                    where = "a washer";
+                else
+                    where = "for " + NextStage.ToLowerInvariant();
+                EarlyTitle = "Intake inspection";
+                EarlySub = "Check the laundry before any work starts";
+                EarlyText = "Check the load for stains, damage and things left in pockets, then put it in " + where + " and record it here.";
+            }
             pnlAdvance.Visible = Job.WorkStages.Contains(status);
             pnlInspection.Visible = status == JobStatus.Inspection;
             pnlReady.Visible = status == JobStatus.Ready;
@@ -1254,6 +1273,7 @@ namespace LABATRACK.pages.shared
             switch (stage)
             {
                 case "Queued": return "st-queued";
+                case "Intake inspection": return "st-intake";
                 case "Washing": return "st-washing";
                 case "Drying": return "st-drying";
                 case "Folding": return "st-folding";
