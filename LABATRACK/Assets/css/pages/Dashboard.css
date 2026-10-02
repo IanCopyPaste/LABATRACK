@@ -3,17 +3,14 @@
 .board-search .ico { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
 .board-search input { width: 100%; padding-left: 36px; }
 
-.board {
-  display: grid; grid-template-columns: repeat(7, minmax(188px, 1fr)); gap: 12px;
-  overflow-x: auto; padding-bottom: 6px; align-items: start;
-}
+.board { display: flex; flex-direction: column; gap: 12px; }
 .board-col {
   background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius);
-  display: flex; flex-direction: column; min-height: 180px;
+  min-width: 0;
 }
 .board-col-h {
-  display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  padding: 12px 12px 10px;
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px 10px;
 }
 .board-count {
   min-width: 24px; height: 22px; padding: 0 7px; border-radius: 20px;
@@ -21,10 +18,13 @@
   background: var(--surface); border: 1px solid var(--border);
   font-size: 12px; font-weight: 600; color: var(--text-2); font-variant-numeric: tabular-nums;
 }
-.board-cards { display: flex; flex-direction: column; gap: 10px; padding: 0 8px 10px; }
+.board-cards {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr));
+  gap: 10px; align-items: start; padding: 0 14px 14px;
+}
 
 .board-empty {
-  display: none; padding: 18px 8px; text-align: center; font-size: 12.5px; color: var(--muted);
+  display: none; grid-column: 1 / -1; padding: 10px 8px; text-align: center; font-size: 12.5px; color: var(--muted);
   border: 1px dashed var(--border-strong); border-radius: var(--radius-sm);
 }
 .board-col.is-empty .board-empty { display: block; }
@@ -32,6 +32,7 @@
 .job-card {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
   padding: 10px 11px 11px; box-shadow: var(--shadow);
+  min-width: 0; overflow-wrap: anywhere;
   transition: border-color .15s, box-shadow .15s;
 }
 .job-card:hover { border-color: var(--border-strong); box-shadow: 0 2px 8px rgba(20, 35, 60, .08); }
@@ -62,7 +63,7 @@
   padding-top: 8px; border-top: 1px solid var(--border); font-size: 12px;
 }
 .job-card-meta dt { color: var(--muted); white-space: nowrap; }
-.job-card-meta dd { margin: 0; text-align: right; color: var(--text-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.job-card-meta dd { margin: 0; text-align: right; color: var(--text-2); font-variant-numeric: tabular-nums; }
 
 .job-card-actions { display: flex; gap: 6px; margin-top: 10px; }
 .job-card-actions .btn { flex: 1; justify-content: center; }
