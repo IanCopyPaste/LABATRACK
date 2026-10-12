@@ -16,7 +16,7 @@
                 <header class="page-head">
                     <div>
                         <h1>Reports</h1>
-                        <p class="sub"><strong><%: PeriodTitle %></strong> &middot; <%: PeriodNote %> &middot; compared with <%: PrevLabel %></p>
+                        <p class="sub"><strong><%: PeriodTitle %></strong> &middot; <%: PeriodNote %><% if (View != "all") { %> &middot; compared with <%: PrevLabel %><% } %></p>
                     </div>
                     <div class="page-actions">
                         <a class="btn" href="DailySalesReport.aspx"><%= Icons.Get("printer", "ico-sm") %>Daily sales report</a>
@@ -29,20 +29,26 @@
                         <nav class="seg" aria-label="Report period">
                             <a href="<%: ViewLink("year") %>" class="<%= View == "year" ? "active" : "" %>">Year</a>
                             <a href="<%: ViewLink("month") %>" class="<%= View == "month" ? "active" : "" %>">Month</a>
+                            <a href="<%: ViewLink("week") %>" class="<%= View == "week" ? "active" : "" %>">Week</a>
                             <a href="<%: ViewLink("day") %>" class="<%= View == "day" ? "active" : "" %>">Day</a>
+                            <a href="<%: ViewLink("all") %>" class="<%= View == "all" ? "active" : "" %>">All</a>
                         </nav>
+                        <% if (View != "all") { %>
                         <div class="period-pick">
                             <% if (PrevLink != null) { %><a class="btn btn-sm btn-ghost" href="<%: PrevLink %>" aria-label="Previous period"><%= Icons.Get("arrow-left", "ico-sm") %></a><% } else { %><span class="btn btn-sm btn-ghost is-off" aria-hidden="true"><%= Icons.Get("arrow-left", "ico-sm") %></span><% } %>
                             <% if (View == "year") { %>
                             <asp:DropDownList ID="ddlYear" runat="server" aria-label="Year" />
                             <% } else if (View == "month") { %>
                             <asp:TextBox ID="txtMonth" runat="server" TextMode="Month" aria-label="Month" CssClass="input" />
+                            <% } else if (View == "week") { %>
+                            <asp:TextBox ID="txtWeek" runat="server" TextMode="Date" aria-label="Any day in the week" CssClass="input" />
                             <% } else { %>
                             <asp:TextBox ID="txtDay" runat="server" TextMode="Date" aria-label="Day" CssClass="input" />
                             <% } %>
                             <asp:Button ID="btnShow" runat="server" Text="Show" CssClass="btn btn-sm" OnClick="btnShow_Click" />
                             <% if (NextLink != null) { %><a class="btn btn-sm btn-ghost" href="<%: NextLink %>" aria-label="Next period"><%= Icons.Get("arrow-right", "ico-sm") %></a><% } else { %><span class="btn btn-sm btn-ghost is-off" aria-hidden="true"><%= Icons.Get("arrow-right", "ico-sm") %></span><% } %>
                         </div>
+                        <% } %>
                     </div>
 
                     <section class="kpis kpis-6">
@@ -53,6 +59,17 @@
 
                     <% if (View == "day") { %>
                     <%= CompareChart() %>
+                    <% } else if (View == "week") { %>
+                    <%= CompareChart() %>
+
+                    <%= Heatmap() %>
+                    <% } else if (View == "all") { %>
+                    <div class="grid grid-2">
+                        <%= YearsChart() %>
+                        <%= WeekdayChart() %>
+                    </div>
+
+                    <%= Heatmap() %>
                     <% } else { %>
                     <div class="grid grid-2">
                         <%= CompareChart() %>
@@ -65,6 +82,11 @@
                     <%= WeekdayChart() %>
                     <% } %>
                     <% } %>
+
+                    <div class="grid grid-2">
+                        <%= ServiceSalesCard() %>
+                        <%= PaymentSplitCard() %>
+                    </div>
 
                     <div class="grid grid-2">
                         <%= ServicesCard() %>

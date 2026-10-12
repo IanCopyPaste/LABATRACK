@@ -10,6 +10,8 @@
 
         protected global::System.Web.UI.WebControls.TextBox txtMonth;
 
+        protected global::System.Web.UI.WebControls.TextBox txtWeek;
+
         protected global::System.Web.UI.WebControls.TextBox txtDay;
 
         protected global::System.Web.UI.WebControls.Button btnShow;

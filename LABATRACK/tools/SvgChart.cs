@@ -26,7 +26,9 @@ namespace LABATRACK.tools
         public const string Orange = "#eb6834";
         public const string Gray = "#b8c1cc";
 
-        private static readonly string[] Ramp = { "#eef3fb", "#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95" };
+        private static readonly string[] Slices = { Blue, Orange, "#1baf7a", "#eda100", "#e87ba4", "#4a3aa7" };
+
+        private static readonly string[] Ramp ={ "#eef3fb", "#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95" };
 
         public const int Wide = 1150, Half = 560;
         private const int PadLeft = 58, PadRight = 14, PadTop = 18, PadBottom = 30;
@@ -166,6 +168,58 @@ namespace LABATRACK.tools
                   .Append("<span class=\"hbar-value\">").Append(Enc(valueText[i])).Append("</span></div>");
             }
             return sb.Append("</div>").ToString();
+        }
+
+        public static string Categorical(int index)
+        {
+            if (index >= 0 && index < Slices.Length)
+                return Slices[index];
+            else
+                return Gray;
+        }
+
+        public static string Pie(string ariaLabel, IList<string> labels, IList<double> values, IList<string> colors,
+                                 IList<string> valueText, IList<string> tipRows, string tipName)
+        {
+            double total = values.Sum();
+            if (total <= 0) return "";
+
+            const double cx = 100, cy = 100, radius = 94;
+            var svg = new StringBuilder();
+            svg.AppendFormat(Inv, "<svg class=\"pie-svg\" viewBox=\"0 0 200 200\" role=\"img\" aria-label=\"{0}\">",
+                HttpUtility.HtmlAttributeEncode(ariaLabel));
+            var legend = new StringBuilder("<ul class=\"pie-legend\">");
+
+            double angle = 0;
+            for (int i = 0; i < labels.Count; i++)
+            {
+                legend.Append("<li><i class=\"key-box\" style=\"background:").Append(colors[i]).Append("\"></i><span class=\"pie-name\">")
+                      .Append(Enc(labels[i])).Append("</span><span class=\"pie-value\">").Append(Enc(valueText[i])).Append("</span></li>");
+
+                if (values[i] <= 0) continue;
+                string tip = TipAttrs(labels[i], new[] { new[] { tipName, tipRows[i], colors[i] } });
+
+                if (values[i] >= total)
+                {
+                    svg.AppendFormat(Inv, "<circle class=\"pie-slice\" tabindex=\"0\" cx=\"{0}\" cy=\"{1}\" r=\"{2}\" fill=\"{3}\"{4}/>",
+                        cx, cy, radius, colors[i], tip);
+                    continue;
+                }
+
+                double next = angle + values[i] / total * 2 * Math.PI;
+                double x0 = cx + radius * Math.Sin(angle), y0 = cy - radius * Math.Cos(angle);
+                double x1 = cx + radius * Math.Sin(next), y1 = cy - radius * Math.Cos(next);
+                int largeArc;
+                if (next - angle > Math.PI)
+                    largeArc = 1;
+                else
+                    largeArc = 0;
+                svg.AppendFormat(Inv, "<path class=\"pie-slice\" tabindex=\"0\" d=\"M{0},{1} L{2:0.##},{3:0.##} A{4},{4} 0 {5} 1 {6:0.##},{7:0.##} Z\" fill=\"{8}\"{9}/>",
+                    cx, cy, x0, y0, radius, largeArc, x1, y1, colors[i], tip);
+                angle = next;
+            }
+
+            return "<div class=\"pie-wrap\">" + svg.Append("</svg>") + legend.Append("</ul>") + "</div>";
         }
 
         public static string Heatmap(string[] rowLabels, string[] colLabels, int[,] counts, string unit)

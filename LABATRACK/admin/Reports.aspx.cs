@@ -39,7 +39,7 @@ namespace LABATRACK.admin
         protected string NextLink { get; private set; }
         protected int UnclaimedDays { get; private set; }
 
-        private DateTime now, opened;
+        private DateTime now, opened, weekStart;
         private List<ReportJob> jobs, prevJobs;
         private List<ReportPayment> payments;
         private int turnaroundTarget;
@@ -146,6 +146,9 @@ namespace LABATRACK.admin
                 txtDay.Text = Start.ToString("yyyy-MM-dd", Inv);
                 txtDay.Attributes["min"] = opened.ToString("yyyy-MM-dd", Inv);
                 txtDay.Attributes["max"] = now.ToString("yyyy-MM-dd", Inv);
+                txtWeek.Text = Start.ToString("yyyy-MM-dd", Inv);
+                txtWeek.Attributes["min"] = opened.ToString("yyyy-MM-dd", Inv);
+                txtWeek.Attributes["max"] = now.ToString("yyyy-MM-dd", Inv);
                 txtMonth.Attributes["min"] = opened.ToString("yyyy-MM", Inv);
                 txtMonth.Attributes["max"] = now.ToString("yyyy-MM", Inv);
             }
@@ -233,6 +236,7 @@ namespace LABATRACK.admin
             {
                 case "year": url = "Reports.aspx?view=year&y=" + HttpUtility.UrlEncode(ddlYear.SelectedValue); break;
                 case "day": url = "Reports.aspx?view=day&d=" + HttpUtility.UrlEncode(txtDay.Text); break;
+                case "week": url = "Reports.aspx?view=week&w=" + HttpUtility.UrlEncode(txtWeek.Text); break;
                 default: url = "Reports.aspx?view=month&m=" + HttpUtility.UrlEncode(txtMonth.Text); break;
             }
             Response.Redirect(url, false);
@@ -242,7 +246,7 @@ namespace LABATRACK.admin
         private void ChoosePeriod()
         {
             View = Request.QueryString["view"];
-            if (View != "year" && View != "day") View = "month";
+            if (View != "year" && View != "day" && View != "week" && View != "all") View = "month";
 
             if (View == "year")
             {
@@ -287,6 +291,48 @@ namespace LABATRACK.admin
                 else
                     NextLink = null;
             }
+            else if (View == "week")
+            {
+                DateTime d;
+                if (!DateTime.TryParseExact(Request.QueryString["w"], "yyyy-MM-dd", Inv, DateTimeStyles.None, out d))
+                    d = now.Date;
+                d = Min(Max(d, opened), now.Date);
+                weekStart = d.AddDays(-(((int)d.DayOfWeek + 6) % 7));
+                DateTime weekEnd = weekStart.AddDays(7);
+                Start = Max(weekStart, opened);
+                End = Min(weekEnd, now);
+                PrevStart = Start.AddDays(-7);
+                PrevEnd = End.AddDays(-7);
+                if (weekStart.Year == weekEnd.AddDays(-1).Year)
+                    PeriodTitle = weekStart.ToString("MMM d", Inv) + " – " + weekEnd.AddDays(-1).ToString("MMM d, yyyy", Inv);
+                else
+                    PeriodTitle = weekStart.ToString("MMM d, yyyy", Inv) + " – " + weekEnd.AddDays(-1).ToString("MMM d, yyyy", Inv);
+                if (weekEnd > now)
+                    PeriodNote = "This week so far, up to " + now.ToString("ddd h:mm tt", Inv);
+                else
+                    PeriodNote = "The whole week, Monday to Sunday";
+                PrevLabel = "the week before, " + Span(PrevStart, PrevEnd);
+                if (weekStart > opened)
+                    PrevLink = "Reports.aspx?view=week&w=" + weekStart.AddDays(-7).ToString("yyyy-MM-dd", Inv);
+                else
+                    PrevLink = null;
+                if (weekEnd <= now)
+                    NextLink = "Reports.aspx?view=week&w=" + weekEnd.ToString("yyyy-MM-dd", Inv);
+                else
+                    NextLink = null;
+            }
+            else if (View == "all")
+            {
+                Start = opened;
+                End = now;
+                PrevStart = opened;
+                PrevEnd = opened;
+                PeriodTitle = "All";
+                PeriodNote = "Every job order and payment, " + opened.ToString("MMM d, yyyy", Inv) + " to " + now.ToString("MMM d, yyyy", Inv);
+                PrevLabel = "";
+                PrevLink = null;
+                NextLink = null;
+            }
             else
             {
                 DateTime d;
@@ -329,6 +375,8 @@ namespace LABATRACK.admin
         {
             if (View == "year") return new DateTime(Start.Year - 1, 1, 1);
             if (View == "month") return new DateTime(Start.Year, Start.Month, 1).AddMonths(-1);
+            if (View == "week") return Start.AddDays(-7);
+            if (View == "all") return Start;
             return Start.AddDays(-28);
         }
 
@@ -358,9 +406,19 @@ namespace LABATRACK.admin
 
         protected string ViewLink(string view)
         {
-            if (view == "year") return "Reports.aspx?view=year&y=" + Start.Year;
+            if (view == "all") return "Reports.aspx?view=all";
+            if (view == "year")
+            {
+                if (View == "all") return "Reports.aspx?view=year&y=" + now.Year;
+                return "Reports.aspx?view=year&y=" + Start.Year;
+            }
+            if (view == "week")
+            {
+                if (View == "day" || View == "week") return "Reports.aspx?view=week&w=" + Start.ToString("yyyy-MM-dd", Inv);
+                return "Reports.aspx?view=week&w=" + Min(End.AddTicks(-1), now).Date.ToString("yyyy-MM-dd", Inv);
+            }
             if (view == "day") return "Reports.aspx?view=day&d=" + (View == "day" ? Start : Min(End.AddTicks(-1), now).Date).ToString("yyyy-MM-dd", Inv);
-            return "Reports.aspx?view=month&m=" + (View == "year" ? Min(End.AddTicks(-1), now) : Start).ToString("yyyy-MM", Inv);
+            return "Reports.aspx?view=month&m=" + (View == "year" || View == "all" ? Min(End.AddTicks(-1), now) : Start).ToString("yyyy-MM", Inv);
         }
 
         protected string KpiTiles()
@@ -373,6 +431,15 @@ namespace LABATRACK.admin
             decimal avg = orders > 0 ? sales / orders : 0, prevAvg = prevOrders > 0 ? prevSales / prevOrders : 0;
             decimal kg = cur.Sum(j => j.WeightKg), prevKg = prev.Sum(j => j.WeightKg);
             double tat = AvgTurnaround(cur), prevTat = AvgTurnaround(prev);
+            string tatFoot;
+            if (double.IsNaN(tat))
+                tatFoot = Note("Not ready yet");
+            else if (prevOrders == 0)
+                tatFoot = Note("No earlier period");
+            else if (double.IsNaN(prevTat))
+                tatFoot = Note("Not ready yet");
+            else
+                tatFoot = DeltaHours(tat, prevTat);
             double ret;
             if (orders > 0)
                 ret = cur.Count(j => j.IsReturning) * 100.0 / orders;
@@ -388,8 +455,7 @@ namespace LABATRACK.admin
                  + Tile("Job orders", "clipboard-list", orders.ToString("N0", Inv), Delta(orders, prevOrders, true, prevOrders.ToString("N0", Inv)), false)
                  + Tile("Average per order", "receipt", Peso2(avg), Delta((double)avg, (double)prevAvg, true, Peso2(prevAvg)), false)
                  + Tile("Laundry washed", "weight", kg.ToString("N0", Inv) + " kg", Delta((double)kg, (double)prevKg, true, prevKg.ToString("N0", Inv) + " kg"), false)
-                 + Tile("Average turnaround", "timer", double.IsNaN(tat) ? "—" : tat.ToString("0.0", Inv) + " h",
-                        double.IsNaN(tat) || double.IsNaN(prevTat) ? Note("Not ready yet") : DeltaHours(tat, prevTat), false)
+                 + Tile("Average turnaround", "timer", double.IsNaN(tat) ? "—" : tat.ToString("0.0", Inv) + " h", tatFoot, false)
                  + Tile("Repeat business", "users", ret.ToString("0", Inv) + "%",
                         prevOrders == 0 ? Note("No earlier period") : DeltaPoints(ret, prevRet), false);
         }
@@ -482,6 +548,36 @@ namespace LABATRACK.admin
                     });
                 }
             }
+            else if (View == "week")
+            {
+                for (int d = 0; d < 7; d++)
+                {
+                    var from = weekStart.AddDays(d);
+                    bool hasData = from >= opened && from <= now;
+                    list.Add(new Bucket
+                    {
+                        Label = from.ToString("ddd", Inv), From = from, To = from.AddDays(1),
+                        Tip = from.ToString("dddd, MMM d", Inv) + (hasData ? " · click to open" : ""),
+                        Link = hasData ? "Reports.aspx?view=day&d=" + from.ToString("yyyy-MM-dd", Inv) : null,
+                    });
+                }
+            }
+            else if (View == "all")
+            {
+                var first = new DateTime(opened.Year, opened.Month, 1);
+                int months = (now.Year - opened.Year) * 12 + now.Month - opened.Month + 1;
+                for (int m = 0; m < months; m++)
+                {
+                    var from = first.AddMonths(m);
+                    bool partial = from.Year == now.Year && from.Month == now.Month;
+                    list.Add(new Bucket
+                    {
+                        Label = from.ToString("MMM", Inv) + " '" + from.ToString("yy", Inv), From = from, To = from.AddMonths(1),
+                        Tip = from.ToString("MMMM yyyy", Inv) + (partial ? " (to date)" : "") + " · click to open",
+                        Link = "Reports.aspx?view=month&m=" + from.ToString("yyyy-MM", Inv),
+                    });
+                }
+            }
             else
             {
                 for (int h = 7; h <= 20; h++)
@@ -497,7 +593,25 @@ namespace LABATRACK.admin
             return list;
         }
 
-        private int LabelEvery { get { return View == "month" ? 2 : 1; } }
+        private int LabelEvery
+        {
+            get
+            {
+                if (View == "month") return 2;
+                if (View == "all") return Math.Max(1, (int)Math.Ceiling(Buckets().Count / 10.0));
+                return 1;
+            }
+        }
+
+        private string UnitName
+        {
+            get
+            {
+                if (View == "year" || View == "all") return "Month";
+                if (View == "month" || View == "week") return "Day";
+                return "Hour";
+            }
+        }
 
         private double[] SalesBy(List<Bucket> buckets, string method)
         {
@@ -511,7 +625,7 @@ namespace LABATRACK.admin
             var ewallet = new ChartSeries("E-wallet", SvgChart.Orange, SalesBy(b, Payment.Ewallet));
             var series = new List<ChartSeries> { cash, ewallet };
 
-            string title = View == "year" ? "Sales by month" : View == "month" ? "Sales by day" : "Sales by hour";
+            string title = "Sales by " + UnitName.ToLowerInvariant();
             string chart = SvgChart.Columns(title + ", cash and e-wallet", b.Select(x => x.Label).ToArray(), b.Select(x => x.Tip).ToArray(),
                 series, SvgChart.PesoShort, 300, LabelEvery, View == "day" ? null : b.Select(x => x.Link).ToArray(), width: SvgChart.Wide, tipFormat: SvgChart.Peso);
 
@@ -523,9 +637,9 @@ namespace LABATRACK.admin
 
             var rows = b.Select((x, i) => new[] { x.Tip.Replace(" · click to open", ""), SvgChart.Peso(cash.Values[i]), SvgChart.Peso(ewallet.Values[i]), SvgChart.Peso(cash.Values[i] + ewallet.Values[i]) });
             return Card(title,
-                (View == "day" ? "Payments taken each hour" : "Click a " + (View == "year" ? "month" : "day") + " to open it") + ". Counted on the payment date; voided jobs net to zero.",
+                (View == "day" ? "Payments taken each hour" : "Click a " + UnitName.ToLowerInvariant() + " to open it") + ". Counted on the payment date; voided jobs net to zero.",
                 SvgChart.Legend(series) + chart + split
-                + SvgChart.Table("Show as table", new[] { View == "year" ? "Month" : View == "month" ? "Day" : "Hour", "Cash", "E-wallet", "Total" }, rows),
+                + SvgChart.Table("Show as table", new[] { UnitName, "Cash", "E-wallet", "Total" }, rows),
                 "chart-card wide");
         }
 
@@ -533,6 +647,8 @@ namespace LABATRACK.admin
         {
             if (View == "year") return CompareYear();
             if (View == "month") return CompareMonth();
+            if (View == "week") return CompareWeek();
+            if (View == "all") return "";
             return CompareDay();
         }
 
@@ -601,6 +717,37 @@ namespace LABATRACK.admin
                 + SvgChart.Table("Show as table", new[] { "Day", series[0].Name, series[1].Name }, rows), "chart-card");
         }
 
+        private string CompareWeek()
+        {
+            var b = Buckets();
+            double[] thisWeek = new double[7], lastWeek = new double[7];
+            for (int i = 0; i < 7; i++)
+            {
+                DateTime day = weekStart.AddDays(i);
+                DateTime before = day.AddDays(-7);
+                if (day > now || day.AddDays(1) <= opened)
+                    thisWeek[i] = double.NaN;
+                else
+                    thisWeek[i] = (double)SalesIn(day, day.AddDays(1));
+                if (before.AddDays(1) <= opened)
+                    lastWeek[i] = double.NaN;
+                else
+                    lastWeek[i] = (double)SalesIn(before, before.AddDays(1));
+            }
+
+            var series = new List<ChartSeries>
+            {
+                new ChartSeries("Week of " + weekStart.ToString("MMM d", Inv), SvgChart.Blue, thisWeek),
+                new ChartSeries("Week of " + weekStart.AddDays(-7).ToString("MMM d", Inv), SvgChart.Gray, lastWeek),
+            };
+            string[] tips = b.Select(x => x.Tip.Replace(" · click to open", "")).ToArray();
+            var rows = b.Select((x, i) => new[] { tips[i], Val(thisWeek[i]), Val(lastWeek[i]) });
+            return Card("This week against the week before", "Sales on each day, with the same weekday of the week before in grey. A day that has not happened yet is left blank.",
+                SvgChart.Legend(series, true) + SvgChart.Lines("Daily sales, this week and the week before", b.Select(x => x.Label).ToArray(),
+                    tips, series, SvgChart.PesoShort, 260, 1, SvgChart.Wide, SvgChart.Peso)
+                + SvgChart.Table("Show as table", new[] { "Day", series[0].Name, series[1].Name }, rows), "chart-card");
+        }
+
         private string CompareDay()
         {
             var b = Buckets();
@@ -627,7 +774,7 @@ namespace LABATRACK.admin
 
         protected string YearsChart()
         {
-            if (View != "year") return "";
+            if (View != "year" && View != "all") return "";
             int first = opened.Year, last = now.Year;
             var totals = new List<YearTotal>();
             using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
@@ -653,16 +800,18 @@ namespace LABATRACK.admin
             double[] sales = years.Select(y => (double)of(y).Sales).ToArray();
             string[] tips = years.Select(y => y + (y == first ? " (from " + opened.ToString("MMM d", Inv) + ")" : y == last ? " (to " + now.ToString("MMM d", Inv) + ")" : "") + " · click to open").ToArray();
             var series = new List<ChartSeries> { new ChartSeries("Sales", SvgChart.Blue, sales) };
+            int highlightYear = -1;
+            if (View == "year") highlightYear = years.IndexOf(Start.Year);
             var rows = years.Select((y, i) => new[] { tips[i].Replace(" · click to open", ""), SvgChart.Peso(sales[i]), of(y).Orders.ToString("N0", Inv) });
             return Card("Every year", "Total sales per year since the first job. The first and the current year are part-years.",
                 SvgChart.Columns("Sales per year", years.Select(y => y.ToString(Inv)).ToArray(), tips, series, SvgChart.PesoShort, 240, 1,
-                    years.Select(y => "Reports.aspx?view=year&y=" + y).ToArray(), years.IndexOf(Start.Year), tipFormat: SvgChart.Peso)
+                    years.Select(y => "Reports.aspx?view=year&y=" + y).ToArray(), highlightYear, tipFormat: SvgChart.Peso)
                 + SvgChart.Table("Show as table", new[] { "Year", "Sales", "Job orders" }, rows), "chart-card");
         }
 
         protected string WeekdayChart()
         {
-            if (View == "day") return "";
+            if (View == "day" || View == "week") return "";
             double[] avg = new double[7];
             for (int w = 0; w < 7; w++)
             {
@@ -733,6 +882,78 @@ namespace LABATRACK.admin
                 + SvgChart.Table("Show as table", new[] { "Service", "Orders", "Share", "Laundry (kg)", "Sales" },
                     rows.Select(r => new[] { r.Name, r.Jobs.ToString("N0", Inv), Pct(r.Jobs, total), r.Kg.ToString("N0", Inv), Peso0((double)r.Sales) })),
                 "chart-card");
+        }
+
+        protected string ServiceSalesCard()
+        {
+            var serviceIds = new List<int>();
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
+            using (SqlCommand cmd = new SqlCommand("dbo.usp_Services_GetAll", conn))
+            {
+                cmd.CommandType = CommandType.StoredProcedure;
+
+                conn.Open();
+                using (SqlDataReader r = cmd.ExecuteReader())
+                {
+                    while (r.Read())
+                    {
+                        serviceIds.Add((int)r["ServiceId"]);
+                    }
+                }
+            }
+            serviceIds.Sort();
+
+            var rows = Live(jobs).GroupBy(j => j.ServiceId).Select(g => new
+            {
+                Name = g.First().ServiceName,
+                Color = SvgChart.Categorical(serviceIds.IndexOf(g.Key)),
+                Orders = g.Count(),
+                Sales = (double)g.Sum(j => j.TotalAmount),
+            }).OrderByDescending(x => x.Sales).ToList();
+            double total = rows.Sum(x => x.Sales);
+
+            string body;
+            if (total <= 0)
+            {
+                body = "<p class=\"muted small\">No job orders in this period.</p>";
+            }
+            else
+            {
+                body = SvgChart.Pie("Share of sales by service", rows.Select(x => x.Name).ToList(), rows.Select(x => x.Sales).ToList(),
+                           rows.Select(x => x.Color).ToList(),
+                           rows.Select(x => Peso0(x.Sales) + " · " + Pct(x.Sales, total)).ToList(),
+                           rows.Select(x => Peso0(x.Sales) + " · " + Pct(x.Sales, total) + " · " + x.Orders.ToString("N0", Inv) + " orders").ToList(), "Sales")
+                     + SvgChart.Table("Show as table", new[] { "Service", "Sales", "Share", "Orders" },
+                           rows.Select(x => new[] { x.Name, Peso0(x.Sales), Pct(x.Sales, total), x.Orders.ToString("N0", Inv) }));
+            }
+
+            return Card("Sales by service", "Each service's share of what was billed on the job orders created in this period. Voided jobs are left out.",
+                body, "chart-card");
+        }
+
+        protected string PaymentSplitCard()
+        {
+            double cash = (double)SalesIn(Start, End, Payment.Cash);
+            double ewallet = (double)SalesIn(Start, End, Payment.Ewallet);
+            double cashPart = Math.Max(0, cash), ewalletPart = Math.Max(0, ewallet);
+            double total = cashPart + ewalletPart;
+
+            string body;
+            if (total <= 0)
+            {
+                body = "<p class=\"muted small\">No payments were taken in this period.</p>";
+            }
+            else
+            {
+                string[] text = { Peso0(cashPart) + " · " + Pct(cashPart, total), Peso0(ewalletPart) + " · " + Pct(ewalletPart, total) };
+                body = SvgChart.Pie("Share of sales by payment method", new[] { "Cash", "E-wallet" }, new[] { cashPart, ewalletPart },
+                           new[] { SvgChart.Blue, SvgChart.Orange }, text, text, "Received")
+                     + SvgChart.Table("Show as table", new[] { "Method", "Received", "Share" },
+                           new[] { new[] { "Cash", Peso0(cash), Pct(cashPart, total) }, new[] { "E-wallet", Peso0(ewallet), Pct(ewalletPart, total) } });
+            }
+
+            return Card("Cash and e-wallet", "Money received in this period by how it was paid, net of refunds handed back. Counted on the payment date, like the sales chart.",
+                body, "chart-card");
         }
 
         protected string AddOnsCard()
@@ -826,7 +1047,7 @@ namespace LABATRACK.admin
                 };
                 chart = SvgChart.Legend(series) + SvgChart.Columns("Orders from new and returning customers", b.Select(x => x.Label).ToArray(),
                             b.Select(x => x.Tip.Replace(" · click to open", "")).ToArray(), series, v => v.ToString("N0", Inv), 230, LabelEvery, null, -1, false)
-                      + SvgChart.Table("Show as table", new[] { View == "year" ? "Month" : "Day", "Returning", "New" },
+                      + SvgChart.Table("Show as table", new[] { UnitName, "Returning", "New" },
                             b.Select((x, i) => new[] { x.Tip.Replace(" · click to open", ""), series[0].Values[i].ToString("N0", Inv), series[1].Values[i].ToString("N0", Inv) }));
             }
 
