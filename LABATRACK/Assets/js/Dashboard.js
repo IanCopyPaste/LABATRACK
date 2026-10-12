@@ -1,8 +1,4 @@
-﻿// Pages/Shared/Dashboard.aspx
-// Filters the board as staff type a claim number, name, or contact number. Display only:
-// hidden cards are still on the page, and the filter text survives a card move because
-// the box is a server TextBox.
-(function () {
+﻿(function () {
     var box = document.querySelector('[data-board-filter]');
     var status = document.getElementById('filterCount');
     var columns = document.querySelectorAll('[data-board-col]');
@@ -30,11 +26,9 @@
     }
 
     box.addEventListener('input', apply);
-    // Esc clears the search, the quickest way back to the whole board.
     box.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') { box.value = ''; apply(); }
     });
-    // Enter would submit the form and reload the page for nothing.
     box.addEventListener('keypress', function (e) {
         if (e.key === 'Enter') { e.preventDefault(); }
     });

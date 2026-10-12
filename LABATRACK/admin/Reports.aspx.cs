@@ -1,0 +1,1170 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Data;
+using System.Data.SqlClient;
+using System.Globalization;
+using System.Linq;
+using System.Web;
+using LABATRACK.db_conn;
+using LABATRACK.tools;
+using LABATRACK.models;
+using LABATRACK.security;
+
+namespace LABATRACK.admin
+{
+    public partial class Reports : AdminBasePage
+    {
+        protected override string ActiveNav
+        {
+            get { return "Reports"; }
+        }
+
+        protected override string PageStyleSheet
+        {
+            get { return "Reports.css"; }
+        }
+
+        private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
+        private static readonly string[] Weekdays = { "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun" };
+
+        protected string View { get; private set; }
+        protected DateTime Start { get; private set; }
+        protected DateTime End { get; private set; }
+        protected DateTime PrevStart { get; private set; }
+        protected DateTime PrevEnd { get; private set; }
+        protected string PeriodTitle { get; private set; }
+        protected string PeriodNote { get; private set; }
+        protected string PrevLabel { get; private set; }
+        protected string PrevLink { get; private set; }
+        protected string NextLink { get; private set; }
+        protected int UnclaimedDays { get; private set; }
+
+        private DateTime now, opened, weekStart;
+        private List<ReportJob> jobs, prevJobs;
+        private List<ReportPayment> payments;
+        private int turnaroundTarget;
+
+        protected void Page_Load(object sender, EventArgs e)
+        {
+            now = DateTime.Now;
+            opened = now.Date;
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
+            using (SqlCommand cmd = new SqlCommand("dbo.usp_Reports_GetFirstJobDate", conn))
+            {
+                cmd.CommandType = CommandType.StoredProcedure;
+
+                conn.Open();
+                object first = cmd.ExecuteScalar();
+                if (first != null && first != DBNull.Value && (DateTime)first < now)
+                    opened = ((DateTime)first).Date;
+            }
+
+            turnaroundTarget = 24;
+            int days = 7;
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
+            using (SqlCommand cmd = new SqlCommand("dbo.usp_Settings_GetAll", conn))
+            {
+                cmd.CommandType = CommandType.StoredProcedure;
+
+                conn.Open();
+                using (SqlDataReader r = cmd.ExecuteReader())
+                {
+                    while (r.Read())
+                    {
+                        string key = (string)r["SettingKey"];
+                        string value = r["SettingValue"] as string;
+                        int number;
+                        if (value == null || !int.TryParse(value, NumberStyles.Integer, Inv, out number)) continue;
+
+                        if (key == ShopSettings.DefaultTurnaroundHoursKey) turnaroundTarget = number;
+                        else if (key == ShopSettings.UnclaimedThresholdDaysKey) days = number;
+                    }
+                }
+            }
+            days = Math.Max(1, days);
+
+            ChoosePeriod();
+            jobs = ReadJobs(Start, End);
+            if (PrevEnd > PrevStart)
+                prevJobs = ReadJobs(PrevStart, PrevEnd);
+            else
+                prevJobs = new List<ReportJob>();
+
+            payments = new List<ReportPayment>();
+            if (PaymentsFrom() < End)
+            {
+                using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
+                using (SqlCommand cmd = new SqlCommand("dbo.usp_Reports_GetPaymentsBetween", conn))
+                {
+                    cmd.CommandType = CommandType.StoredProcedure;
+                    cmd.Parameters.Add("@From", SqlDbType.DateTime2).Value = PaymentsFrom();
+                    cmd.Parameters.Add("@To", SqlDbType.DateTime2).Value = End;
+
+                    conn.Open();
+                    using (SqlDataReader r = cmd.ExecuteReader())
+                    {
+                        while (r.Read())
+                        {
+                            ReportPayment payment = new ReportPayment();
+                            payment.PaidAt = (DateTime)r["PaidAt"];
+                            payment.Amount = (decimal)r["Amount"];
+                            payment.Method = (string)r["Method"];
+                            payment.Kind = (string)r["Kind"];
+                            payments.Add(payment);
+                        }
+                    }
+                }
+            }
+
+            List<JobOrder> unclaimed = new List<JobOrder>();
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
+            using (SqlCommand cmd = new SqlCommand("dbo.usp_JobOrders_GetReadyBefore", conn))
+            {
+                cmd.CommandType = CommandType.StoredProcedure;
+                cmd.Parameters.Add("@ReadyBefore", SqlDbType.DateTime2).Value = now.Date.AddDays(1 - days);
+
+                conn.Open();
+                using (SqlDataReader r = cmd.ExecuteReader())
+                {
+                    while (r.Read())
+                    {
+                        unclaimed.Add(JobOrder.FromRow(r));
+                    }
+                }
+            }
+            rptUnclaimed.DataSource = unclaimed;
+            rptUnclaimed.DataBind();
+            UnclaimedDays = days;
+
+            if (!IsPostBack)
+            {
+                ddlYear.Items.Clear();
+                for (int y = now.Year; y >= opened.Year; y--)
+                    ddlYear.Items.Add(y.ToString(Inv));
+                ddlYear.SelectedValue = Start.Year.ToString(Inv);
+                txtMonth.Text = Start.ToString("yyyy-MM", Inv);
+                txtDay.Text = Start.ToString("yyyy-MM-dd", Inv);
+                txtDay.Attributes["min"] = opened.ToString("yyyy-MM-dd", Inv);
+                txtDay.Attributes["max"] = now.ToString("yyyy-MM-dd", Inv);
+                txtWeek.Text = Start.ToString("yyyy-MM-dd", Inv);
+                txtWeek.Attributes["min"] = opened.ToString("yyyy-MM-dd", Inv);
+                txtWeek.Attributes["max"] = now.ToString("yyyy-MM-dd", Inv);
+                txtMonth.Attributes["min"] = opened.ToString("yyyy-MM", Inv);
+                txtMonth.Attributes["max"] = now.ToString("yyyy-MM", Inv);
+            }
+        }
+
+        private List<ReportJob> ReadJobs(DateTime from, DateTime to)
+        {
+            List<ReportJob> list = new List<ReportJob>();
+            if (from >= to) return list;
+
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
+            {
+                conn.Open();
+
+                using (SqlCommand cmd = new SqlCommand("dbo.usp_Reports_GetJobsBetween", conn))
+                {
+                    cmd.CommandType = CommandType.StoredProcedure;
+                    cmd.Parameters.Add("@From", SqlDbType.DateTime2).Value = from;
+                    cmd.Parameters.Add("@To", SqlDbType.DateTime2).Value = to;
+
+                    using (SqlDataReader r = cmd.ExecuteReader())
+                    {
+                        while (r.Read())
+                        {
+                            ReportJob job = new ReportJob();
+                            job.JobId = (int)r["JobId"];
+                            job.ClaimNumber = (string)r["ClaimNumber"];
+                            job.CreatedAt = (DateTime)r["CreatedAt"];
+                            job.ServiceId = (int)r["ServiceId"];
+                            job.ServiceName = (string)r["ServiceName"];
+                            job.WeightKg = (decimal)r["WeightKg"];
+                            job.BillableKg = (decimal)r["BillableKg"];
+                            job.RatePerKgAtCreation = (decimal)r["RatePerKgAtCreation"];
+                            job.MinimumChargeAtCreation = (decimal)r["MinimumChargeAtCreation"];
+                            job.LaundryCharge = (decimal)r["LaundryCharge"];
+                            job.TotalAmount = (decimal)r["TotalAmount"];
+                            job.CurrentStatus = (string)r["CurrentStatus"];
+                            job.CustomerId = (int)r["CustomerId"];
+                            job.CustomerName = (string)r["CustomerName"];
+                            job.CreatedByName = (string)r["CreatedByName"];
+                            job.FirstReadyAt = r["FirstReadyAt"] as DateTime?;
+                            job.IsReturning = Convert.ToBoolean(r["IsReturning"]);
+                            job.CustomerFirstJobAt = r["CustomerFirstJobAt"] as DateTime?;
+                            job.VoidReason = r["VoidReason"] as string;
+                            job.AmountRefunded = (decimal)r["AmountRefunded"];
+                            job.RefundPending = (decimal)r["RefundPending"];
+                            list.Add(job);
+                        }
+                    }
+                }
+
+                Dictionary<int, ReportJob> byJob = list.ToDictionary(j => j.JobId);
+                using (SqlCommand cmd = new SqlCommand("dbo.usp_Reports_GetAddOnLinesBetween", conn))
+                {
+                    cmd.CommandType = CommandType.StoredProcedure;
+                    cmd.Parameters.Add("@From", SqlDbType.DateTime2).Value = from;
+                    cmd.Parameters.Add("@To", SqlDbType.DateTime2).Value = to;
+
+                    using (SqlDataReader r = cmd.ExecuteReader())
+                    {
+                        while (r.Read())
+                        {
+                            ReportJob job;
+                            if (!byJob.TryGetValue((int)r["JobId"], out job)) continue;
+
+                            ReportAddOnLine line = new ReportAddOnLine();
+                            line.JobId = job.JobId;
+                            line.AddOnId = (int)r["AddOnId"];
+                            line.Name = (string)r["Name"];
+                            line.Kind = (string)r["Kind"];
+                            line.Quantity = (int)r["Quantity"];
+                            line.PriceAtCreation = (decimal)r["PriceAtCreation"];
+                            job.AddOns.Add(line);
+                        }
+                    }
+                }
+            }
+            return list;
+        }
+
+        protected void btnShow_Click(object sender, EventArgs e)
+        {
+            string url;
+            switch (View)
+            {
+                case "year": url = "Reports.aspx?view=year&y=" + HttpUtility.UrlEncode(ddlYear.SelectedValue); break;
+                case "day": url = "Reports.aspx?view=day&d=" + HttpUtility.UrlEncode(txtDay.Text); break;
+                case "week": url = "Reports.aspx?view=week&w=" + HttpUtility.UrlEncode(txtWeek.Text); break;
+                default: url = "Reports.aspx?view=month&m=" + HttpUtility.UrlEncode(txtMonth.Text); break;
+            }
+            Response.Redirect(url, false);
+            Context.ApplicationInstance.CompleteRequest();
+        }
+
+        private void ChoosePeriod()
+        {
+            View = Request.QueryString["view"];
+            if (View != "year" && View != "day" && View != "week" && View != "all") View = "month";
+
+            if (View == "year")
+            {
+                int y;
+                if (!int.TryParse(Request.QueryString["y"], out y)) y = now.Year;
+                y = Math.Min(now.Year, Math.Max(opened.Year, y));
+                Start = Max(new DateTime(y, 1, 1), opened);
+                End = Min(new DateTime(y + 1, 1, 1), now);
+                PrevStart = Start.AddYears(-1);
+                PrevEnd = End.AddYears(-1);
+                PeriodTitle = y.ToString(Inv);
+                PeriodNote = Span(Start, End);
+                PrevLabel = Span(PrevStart, PrevEnd) + ", " + (y - 1);
+                if (y > opened.Year)
+                    PrevLink = "Reports.aspx?view=year&y=" + (y - 1);
+                else
+                    PrevLink = null;
+                if (y < now.Year)
+                    NextLink = "Reports.aspx?view=year&y=" + (y + 1);
+                else
+                    NextLink = null;
+            }
+            else if (View == "month")
+            {
+                DateTime m;
+                if (!DateTime.TryParseExact(Request.QueryString["m"], "yyyy-MM", Inv, DateTimeStyles.None, out m))
+                    m = new DateTime(now.Year, now.Month, 1);
+                m = Min(Max(m, new DateTime(opened.Year, opened.Month, 1)), new DateTime(now.Year, now.Month, 1));
+                Start = Max(m, opened);
+                End = Min(m.AddMonths(1), now);
+                PrevStart = Start.AddMonths(-1);
+                PrevEnd = End.AddMonths(-1);
+                PeriodTitle = m.ToString("MMMM yyyy", Inv);
+                PeriodNote = Span(Start, End);
+                PrevLabel = Span(PrevStart, PrevEnd);
+                if (m > new DateTime(opened.Year, opened.Month, 1))
+                    PrevLink = "Reports.aspx?view=month&m=" + m.AddMonths(-1).ToString("yyyy-MM", Inv);
+                else
+                    PrevLink = null;
+                if (m < new DateTime(now.Year, now.Month, 1))
+                    NextLink = "Reports.aspx?view=month&m=" + m.AddMonths(1).ToString("yyyy-MM", Inv);
+                else
+                    NextLink = null;
+            }
+            else if (View == "week")
+            {
+                DateTime d;
+                if (!DateTime.TryParseExact(Request.QueryString["w"], "yyyy-MM-dd", Inv, DateTimeStyles.None, out d))
+                    d = now.Date;
+                d = Min(Max(d, opened), now.Date);
+                weekStart = d.AddDays(-(((int)d.DayOfWeek + 6) % 7));
+                DateTime weekEnd = weekStart.AddDays(7);
+                Start = Max(weekStart, opened);
+                End = Min(weekEnd, now);
+                PrevStart = Start.AddDays(-7);
+                PrevEnd = End.AddDays(-7);
+                if (weekStart.Year == weekEnd.AddDays(-1).Year)
+                    PeriodTitle = weekStart.ToString("MMM d", Inv) + " – " + weekEnd.AddDays(-1).ToString("MMM d, yyyy", Inv);
+                else
+                    PeriodTitle = weekStart.ToString("MMM d, yyyy", Inv) + " – " + weekEnd.AddDays(-1).ToString("MMM d, yyyy", Inv);
+                if (weekEnd > now)
+                    PeriodNote = "This week so far, up to " + now.ToString("ddd h:mm tt", Inv);
+                else
+                    PeriodNote = "The whole week, Monday to Sunday";
+                PrevLabel = "the week before, " + Span(PrevStart, PrevEnd);
+                if (weekStart > opened)
+                    PrevLink = "Reports.aspx?view=week&w=" + weekStart.AddDays(-7).ToString("yyyy-MM-dd", Inv);
+                else
+                    PrevLink = null;
+                if (weekEnd <= now)
+                    NextLink = "Reports.aspx?view=week&w=" + weekEnd.ToString("yyyy-MM-dd", Inv);
+                else
+                    NextLink = null;
+            }
+            else if (View == "all")
+            {
+                Start = opened;
+                End = now;
+                PrevStart = opened;
+                PrevEnd = opened;
+                PeriodTitle = "All";
+                PeriodNote = "Every job order and payment, " + opened.ToString("MMM d, yyyy", Inv) + " to " + now.ToString("MMM d, yyyy", Inv);
+                PrevLabel = "";
+                PrevLink = null;
+                NextLink = null;
+            }
+            else
+            {
+                DateTime d;
+                if (!DateTime.TryParseExact(Request.QueryString["d"], "yyyy-MM-dd", Inv, DateTimeStyles.None, out d))
+                    d = now.Date;
+                d = Min(Max(d, opened), now.Date);
+                Start = d;
+                End = Min(d.AddDays(1), now);
+                PrevStart = d.AddDays(-7);
+                PrevEnd = End.AddDays(-7);
+                PeriodTitle = d.ToString("dddd, MMMM d, yyyy", Inv);
+                if (d == now.Date)
+                    PeriodNote = "Today, up to " + now.ToString("h:mm tt", Inv);
+                else
+                    PeriodNote = "The whole day";
+                PrevLabel = "the " + d.ToString("dddd", Inv) + " before, " + PrevStart.ToString("MMM d", Inv);
+                if (d > opened)
+                    PrevLink = "Reports.aspx?view=day&d=" + d.AddDays(-1).ToString("yyyy-MM-dd", Inv);
+                else
+                    PrevLink = null;
+                if (d < now.Date)
+                    NextLink = "Reports.aspx?view=day&d=" + d.AddDays(1).ToString("yyyy-MM-dd", Inv);
+                else
+                    NextLink = null;
+            }
+
+            if (PrevEnd <= opened)
+            {
+                PrevLabel = "nothing earlier: the first job was on " + opened.ToString("MMM d, yyyy", Inv);
+            }
+            else if (PrevStart < opened)
+            {
+                PrevStart = opened;
+                PrevLabel = Span(PrevStart, PrevEnd) + ", " + PrevStart.Year
+                          + " (the first job was that day, so the earlier period is shorter)";
+            }
+        }
+
+        private DateTime PaymentsFrom()
+        {
+            if (View == "year") return new DateTime(Start.Year - 1, 1, 1);
+            if (View == "month") return new DateTime(Start.Year, Start.Month, 1).AddMonths(-1);
+            if (View == "week") return Start.AddDays(-7);
+            if (View == "all") return Start;
+            return Start.AddDays(-28);
+        }
+
+        private static string Span(DateTime start, DateTime end)
+        {
+            DateTime last;
+            if (end.TimeOfDay == TimeSpan.Zero)
+                last = end.AddDays(-1);
+            else
+                last = end;
+            if (start.Date == last.Date) return start.ToString("MMM d", Inv);
+            return start.ToString("MMM d", Inv) + " – " + last.ToString("MMM d", Inv);
+        }
+
+        private static IEnumerable<ReportJob> Live(IEnumerable<ReportJob> list)
+        {
+            return list.Where(j => !j.IsVoided);
+        }
+
+        private decimal SalesIn(DateTime from, DateTime to, string method = null)
+        {
+            return payments.Where(p => p.PaidAt >= from && p.PaidAt < to && (method == null || p.Method == method)).Sum(p => p.Amount);
+        }
+
+        private static DateTime Min(DateTime a, DateTime b) { return a < b ? a : b; }
+        private static DateTime Max(DateTime a, DateTime b) { return a > b ? a : b; }
+
+        protected string ViewLink(string view)
+        {
+            if (view == "all") return "Reports.aspx?view=all";
+            if (view == "year")
+            {
+                if (View == "all") return "Reports.aspx?view=year&y=" + now.Year;
+                return "Reports.aspx?view=year&y=" + Start.Year;
+            }
+            if (view == "week")
+            {
+                if (View == "day" || View == "week") return "Reports.aspx?view=week&w=" + Start.ToString("yyyy-MM-dd", Inv);
+                return "Reports.aspx?view=week&w=" + Min(End.AddTicks(-1), now).Date.ToString("yyyy-MM-dd", Inv);
+            }
+            if (view == "day") return "Reports.aspx?view=day&d=" + (View == "day" ? Start : Min(End.AddTicks(-1), now).Date).ToString("yyyy-MM-dd", Inv);
+            return "Reports.aspx?view=month&m=" + (View == "year" || View == "all" ? Min(End.AddTicks(-1), now) : Start).ToString("yyyy-MM", Inv);
+        }
+
+        protected string KpiTiles()
+        {
+            var cur = Live(jobs).ToList();
+            var prev = Live(prevJobs).ToList();
+
+            decimal sales = SalesIn(Start, End), prevSales = PrevEnd > PrevStart ? SalesIn(PrevStart, PrevEnd) : 0;
+            int orders = cur.Count, prevOrders = prev.Count;
+            decimal avg = orders > 0 ? sales / orders : 0, prevAvg = prevOrders > 0 ? prevSales / prevOrders : 0;
+            decimal kg = cur.Sum(j => j.WeightKg), prevKg = prev.Sum(j => j.WeightKg);
+            double tat = AvgTurnaround(cur), prevTat = AvgTurnaround(prev);
+            string tatFoot;
+            if (double.IsNaN(tat))
+                tatFoot = Note("Not ready yet");
+            else if (prevOrders == 0)
+                tatFoot = Note("No earlier period");
+            else if (double.IsNaN(prevTat))
+                tatFoot = Note("Not ready yet");
+            else
+                tatFoot = DeltaHours(tat, prevTat);
+            double ret;
+            if (orders > 0)
+                ret = cur.Count(j => j.IsReturning) * 100.0 / orders;
+            else
+                ret = 0;
+            double prevRet;
+            if (prevOrders > 0)
+                prevRet = prev.Count(j => j.IsReturning) * 100.0 / prevOrders;
+            else
+                prevRet = 0;
+
+            return Tile("Sales", "wallet", Peso2(sales), Delta((double)sales, (double)prevSales, true, Peso0((double)prevSales)), true)
+                 + Tile("Job orders", "clipboard-list", orders.ToString("N0", Inv), Delta(orders, prevOrders, true, prevOrders.ToString("N0", Inv)), false)
+                 + Tile("Average per order", "receipt", Peso2(avg), Delta((double)avg, (double)prevAvg, true, Peso2(prevAvg)), false)
+                 + Tile("Laundry washed", "weight", kg.ToString("N0", Inv) + " kg", Delta((double)kg, (double)prevKg, true, prevKg.ToString("N0", Inv) + " kg"), false)
+                 + Tile("Average turnaround", "timer", double.IsNaN(tat) ? "—" : tat.ToString("0.0", Inv) + " h", tatFoot, false)
+                 + Tile("Repeat business", "users", ret.ToString("0", Inv) + "%",
+                        prevOrders == 0 ? Note("No earlier period") : DeltaPoints(ret, prevRet), false);
+        }
+
+        private static double AvgTurnaround(IEnumerable<ReportJob> list)
+        {
+            var hours = list.Where(j => j.FirstReadyAt.HasValue).Select(j => (j.FirstReadyAt.Value - j.CreatedAt).TotalHours).ToList();
+            if (hours.Count == 0)
+                return double.NaN;
+            else
+                return hours.Average();
+        }
+
+        private string Tile(string label, string icon, string value, string foot, bool hero)
+        {
+            return "<div class=\"card kpi" + (hero ? " kpi-hero" : "") + "\"><div class=\"kpi-top\">" + HttpUtility.HtmlEncode(label)
+                 + " <span class=\"kpi-icon\">" + Icons.Get(icon, "ico-sm") + "</span></div><div class=\"kpi-value\">"
+                 + HttpUtility.HtmlEncode(value) + "</div><div class=\"kpi-foot\">" + foot + "</div></div>";
+        }
+
+        private string Delta(double cur, double prev, bool upIsGood, string prevText)
+        {
+            if (prev <= 0) return Note("No earlier period to compare");
+            double pct = (cur - prev) / prev * 100;
+            return Change(pct >= 0, upIsGood, Math.Abs(pct).ToString("0.0", Inv) + "%") + " <span class=\"muted\">vs " + HttpUtility.HtmlEncode(prevText) + "</span>";
+        }
+
+        private string DeltaHours(double cur, double prev)
+        {
+            double diff = cur - prev;
+            return Change(diff >= 0, false, Math.Abs(diff).ToString("0.0", Inv) + " h " + (diff > 0 ? "slower" : "faster"))
+                 + " <span class=\"muted\">vs " + prev.ToString("0.0", Inv) + " h</span>";
+        }
+
+        private string DeltaPoints(double cur, double prev)
+        {
+            double diff = cur - prev;
+            return Change(diff >= 0, true, Math.Abs(diff).ToString("0.0", Inv) + " pts") + " <span class=\"muted\">vs " + prev.ToString("0", Inv) + "%</span>";
+        }
+
+        private static string Change(bool up, bool upIsGood, string text)
+        {
+            bool good = up == upIsGood;
+            return "<span class=\"" + (good ? "up" : "down") + "\">" + Icons.Get(up ? "trending-up" : "trending-down", "ico-sm")
+                 + " " + HttpUtility.HtmlEncode(text) + "</span>";
+        }
+
+        private static string Note(string text)
+        {
+            return "<span class=\"muted\">" + HttpUtility.HtmlEncode(text) + "</span>";
+        }
+
+        private class Bucket
+        {
+            public string Label, Tip, Link;
+            public DateTime From, To;
+        }
+
+        private List<Bucket> Buckets()
+        {
+            var list = new List<Bucket>();
+            if (View == "year")
+            {
+                for (int m = 1; m <= 12; m++)
+                {
+                    var from = new DateTime(Start.Year, m, 1);
+                    bool hasData = from.AddMonths(1) > opened && from <= now;
+                    bool partial = from.Year == now.Year && m == now.Month;
+                    list.Add(new Bucket
+                    {
+                        Label = from.ToString("MMM", Inv), From = from, To = from.AddMonths(1),
+                        Tip = from.ToString("MMMM yyyy", Inv) + (partial ? " (to date)" : "") + (hasData ? " · click to open" : ""),
+                        Link = hasData ? "Reports.aspx?view=month&m=" + from.ToString("yyyy-MM", Inv) : null,
+                    });
+                }
+            }
+            else if (View == "month")
+            {
+                int days = DateTime.DaysInMonth(Start.Year, Start.Month);
+                var first = new DateTime(Start.Year, Start.Month, 1);
+                for (int d = 0; d < days; d++)
+                {
+                    var from = first.AddDays(d);
+                    bool hasData = from >= opened && from <= now;
+                    list.Add(new Bucket
+                    {
+                        Label = (d + 1).ToString(Inv), From = from, To = from.AddDays(1),
+                        Tip = from.ToString("ddd, MMM d", Inv) + (hasData ? " · click to open" : ""),
+                        Link = hasData ? "Reports.aspx?view=day&d=" + from.ToString("yyyy-MM-dd", Inv) : null,
+                    });
+                }
+            }
+            else if (View == "week")
+            {
+                for (int d = 0; d < 7; d++)
+                {
+                    var from = weekStart.AddDays(d);
+                    bool hasData = from >= opened && from <= now;
+                    list.Add(new Bucket
+                    {
+                        Label = from.ToString("ddd", Inv), From = from, To = from.AddDays(1),
+                        Tip = from.ToString("dddd, MMM d", Inv) + (hasData ? " · click to open" : ""),
+                        Link = hasData ? "Reports.aspx?view=day&d=" + from.ToString("yyyy-MM-dd", Inv) : null,
+                    });
+                }
+            }
+            else if (View == "all")
+            {
+                var first = new DateTime(opened.Year, opened.Month, 1);
+                int months = (now.Year - opened.Year) * 12 + now.Month - opened.Month + 1;
+                for (int m = 0; m < months; m++)
+                {
+                    var from = first.AddMonths(m);
+                    bool partial = from.Year == now.Year && from.Month == now.Month;
+                    list.Add(new Bucket
+                    {
+                        Label = from.ToString("MMM", Inv) + " '" + from.ToString("yy", Inv), From = from, To = from.AddMonths(1),
+                        Tip = from.ToString("MMMM yyyy", Inv) + (partial ? " (to date)" : "") + " · click to open",
+                        Link = "Reports.aspx?view=month&m=" + from.ToString("yyyy-MM", Inv),
+                    });
+                }
+            }
+            else
+            {
+                for (int h = 7; h <= 20; h++)
+                {
+                    var from = Start.AddHours(h);
+                    list.Add(new Bucket
+                    {
+                        Label = from.ToString("h tt", Inv).Replace(" ", "").ToLowerInvariant(), From = from, To = from.AddHours(1),
+                        Tip = from.ToString("h:mm tt", Inv) + " – " + from.AddHours(1).ToString("h:mm tt", Inv),
+                    });
+                }
+            }
+            return list;
+        }
+
+        private int LabelEvery
+        {
+            get
+            {
+                if (View == "month") return 2;
+                if (View == "all") return Math.Max(1, (int)Math.Ceiling(Buckets().Count / 10.0));
+                return 1;
+            }
+        }
+
+        private string UnitName
+        {
+            get
+            {
+                if (View == "year" || View == "all") return "Month";
+                if (View == "month" || View == "week") return "Day";
+                return "Hour";
+            }
+        }
+
+        private double[] SalesBy(List<Bucket> buckets, string method)
+        {
+            return buckets.Select(b => (double)SalesIn(b.From, b.To, method)).ToArray();
+        }
+
+        protected string SalesChart()
+        {
+            var b = Buckets();
+            var cash = new ChartSeries("Cash", SvgChart.Blue, SalesBy(b, Payment.Cash));
+            var ewallet = new ChartSeries("E-wallet", SvgChart.Orange, SalesBy(b, Payment.Ewallet));
+            var series = new List<ChartSeries> { cash, ewallet };
+
+            string title = "Sales by " + UnitName.ToLowerInvariant();
+            string chart = SvgChart.Columns(title + ", cash and e-wallet", b.Select(x => x.Label).ToArray(), b.Select(x => x.Tip).ToArray(),
+                series, SvgChart.PesoShort, 300, LabelEvery, View == "day" ? null : b.Select(x => x.Link).ToArray(), width: SvgChart.Wide, tipFormat: SvgChart.Peso);
+
+            double c = cash.Values.Sum(), w = ewallet.Values.Sum(), t = c + w;
+            string split = t > 0
+                ? "<div class=\"split-line\"><span><i class=\"key-box\" style=\"background:" + SvgChart.Blue + "\"></i>Cash <b>" + SvgChart.Peso(c) + "</b> <span class=\"muted\">" + Pct(c, t) + "</span></span>"
+                  + "<span><i class=\"key-box\" style=\"background:" + SvgChart.Orange + "\"></i>E-wallet <b>" + SvgChart.Peso(w) + "</b> <span class=\"muted\">" + Pct(w, t) + "</span></span></div>"
+                : "";
+
+            var rows = b.Select((x, i) => new[] { x.Tip.Replace(" · click to open", ""), SvgChart.Peso(cash.Values[i]), SvgChart.Peso(ewallet.Values[i]), SvgChart.Peso(cash.Values[i] + ewallet.Values[i]) });
+            return Card(title,
+                (View == "day" ? "Payments taken each hour" : "Click a " + UnitName.ToLowerInvariant() + " to open it") + ". Counted on the payment date; voided jobs net to zero.",
+                SvgChart.Legend(series) + chart + split
+                + SvgChart.Table("Show as table", new[] { UnitName, "Cash", "E-wallet", "Total" }, rows),
+                "chart-card wide");
+        }
+
+        protected string CompareChart()
+        {
+            if (View == "year") return CompareYear();
+            if (View == "month") return CompareMonth();
+            if (View == "week") return CompareWeek();
+            if (View == "all") return "";
+            return CompareDay();
+        }
+
+        private string CompareYear()
+        {
+            int y = Start.Year;
+            string[] labels = Enumerable.Range(1, 12).Select(m => new DateTime(y, m, 1).ToString("MMM", Inv)).ToArray();
+            Func<int, int, double> month = (yy, m) =>
+            {
+                var from = new DateTime(yy, m, 1);
+                if (from.AddMonths(1) <= opened || from > now) return double.NaN;
+                return (double)SalesIn(from, from.AddMonths(1));
+            };
+            var series = new List<ChartSeries>
+            {
+                new ChartSeries(y.ToString(Inv), SvgChart.Blue, Enumerable.Range(1, 12).Select(m => month(y, m)).ToArray()),
+                new ChartSeries((y - 1).ToString(Inv), SvgChart.Gray, Enumerable.Range(1, 12).Select(m => month(y - 1, m)).ToArray()),
+            };
+
+            string sub = "Monthly sales, " + y + " in blue and " + (y - 1) + " in grey.";
+            if (y == now.Year)
+            {
+                var monthStart = new DateTime(now.Year, now.Month, 1);
+                series[0].Values[now.Month - 1] = double.NaN;
+                double soFar = (double)SalesIn(monthStart, now);
+                double sameDays = (double)SalesIn(monthStart.AddYears(-1), now.AddYears(-1));
+                sub += " " + monthStart.ToString("MMMM", Inv) + " is not over, so it is left off: " + SvgChart.Peso(soFar)
+                     + " so far against " + SvgChart.Peso(sameDays) + " on the same days last year.";
+            }
+
+            string[] tips = labels.Select(l => l + " sales").ToArray();
+            var rows = labels.Select((l, i) => new[] { l, Val(series[0].Values[i]), Val(series[1].Values[i]) });
+            return Card("This year against last year", sub,
+                SvgChart.Legend(series, true) + SvgChart.Lines("Monthly sales, " + y + " and " + (y - 1), labels, tips, series, SvgChart.PesoShort, tipFormat: SvgChart.Peso)
+                + SvgChart.Table("Show as table", new[] { "Month", y.ToString(Inv), (y - 1).ToString(Inv) }, rows), "chart-card");
+        }
+
+        private string CompareMonth()
+        {
+            DateTime m = new DateTime(Start.Year, Start.Month, 1), pm = m.AddMonths(-1);
+            int days = Math.Max(DateTime.DaysInMonth(m.Year, m.Month), DateTime.DaysInMonth(pm.Year, pm.Month));
+            Func<DateTime, double[]> running = first =>
+            {
+                var result = new double[days];
+                double sum = 0;
+                int monthDays = DateTime.DaysInMonth(first.Year, first.Month);
+                for (int d = 0; d < days; d++)
+                {
+                    DateTime day = first.AddDays(d);
+                    if (d >= monthDays || day > now || day.AddDays(1) <= opened) { result[d] = double.NaN; continue; }
+                    sum += (double)SalesIn(day, day.AddDays(1));
+                    result[d] = sum;
+                }
+                return result;
+            };
+            var series = new List<ChartSeries>
+            {
+                new ChartSeries(m.ToString("MMMM", Inv), SvgChart.Blue, running(m)),
+                new ChartSeries(pm.ToString("MMMM", Inv), SvgChart.Gray, running(pm)),
+            };
+            string[] labels = Enumerable.Range(1, days).Select(d => d.ToString(Inv)).ToArray();
+            string[] tips = labels.Select(d => "Running total to day " + d).ToArray();
+            var rows = labels.Select((l, i) => new[] { "Day " + l, Val(series[0].Values[i]), Val(series[1].Values[i]) });
+            return Card("Running total against last month", "Sales added up day by day, so a slow start or a strong finish shows at a glance.",
+                SvgChart.Legend(series, true) + SvgChart.Lines("Running sales total, this month and last", labels, tips, series, SvgChart.PesoShort, 240, 2, tipFormat: SvgChart.Peso)
+                + SvgChart.Table("Show as table", new[] { "Day", series[0].Name, series[1].Name }, rows), "chart-card");
+        }
+
+        private string CompareWeek()
+        {
+            var b = Buckets();
+            double[] thisWeek = new double[7], lastWeek = new double[7];
+            for (int i = 0; i < 7; i++)
+            {
+                DateTime day = weekStart.AddDays(i);
+                DateTime before = day.AddDays(-7);
+                if (day > now || day.AddDays(1) <= opened)
+                    thisWeek[i] = double.NaN;
+                else
+                    thisWeek[i] = (double)SalesIn(day, day.AddDays(1));
+                if (before.AddDays(1) <= opened)
+                    lastWeek[i] = double.NaN;
+                else
+                    lastWeek[i] = (double)SalesIn(before, before.AddDays(1));
+            }
+
+            var series = new List<ChartSeries>
+            {
+                new ChartSeries("Week of " + weekStart.ToString("MMM d", Inv), SvgChart.Blue, thisWeek),
+                new ChartSeries("Week of " + weekStart.AddDays(-7).ToString("MMM d", Inv), SvgChart.Gray, lastWeek),
+            };
+            string[] tips = b.Select(x => x.Tip.Replace(" · click to open", "")).ToArray();
+            var rows = b.Select((x, i) => new[] { tips[i], Val(thisWeek[i]), Val(lastWeek[i]) });
+            return Card("This week against the week before", "Sales on each day, with the same weekday of the week before in grey. A day that has not happened yet is left blank.",
+                SvgChart.Legend(series, true) + SvgChart.Lines("Daily sales, this week and the week before", b.Select(x => x.Label).ToArray(),
+                    tips, series, SvgChart.PesoShort, 260, 1, SvgChart.Wide, SvgChart.Peso)
+                + SvgChart.Table("Show as table", new[] { "Day", series[0].Name, series[1].Name }, rows), "chart-card");
+        }
+
+        private string CompareDay()
+        {
+            var b = Buckets();
+            var today = b.Select(x => (double)SalesIn(x.From, x.To)).ToArray();
+            var weeks = Enumerable.Range(1, 4).Select(k => Start.AddDays(-7 * k)).Where(d => d >= opened).ToList();
+            double[] avg = new double[b.Count];
+            if (weeks.Count > 0)
+                for (int i = 0; i < b.Count; i++)
+                    avg[i] = weeks.Average(w => (double)SalesIn(w.Add(b[i].From - Start), w.Add(b[i].To - Start)));
+            for (int i = 0; i < b.Count; i++) if (b[i].From >= now) today[i] = double.NaN;
+
+            string weekday = Start.ToString("dddd", Inv);
+            var series = new List<ChartSeries>
+            {
+                new ChartSeries(Start.ToString("MMM d", Inv), SvgChart.Blue, today),
+                new ChartSeries("Average " + weekday, SvgChart.Gray, avg),
+            };
+            var rows = b.Select((x, i) => new[] { x.Tip, Val(today[i]), SvgChart.Peso(avg[i]) });
+            return Card("Against a usual " + weekday, "Sales each hour, next to the average of the " + weeks.Count + " " + weekday + "s before.",
+                SvgChart.Legend(series, true) + SvgChart.Lines("Hourly sales against the usual " + weekday, b.Select(x => x.Label).ToArray(),
+                    b.Select(x => x.Tip).ToArray(), series, SvgChart.PesoShort, 260, 1, SvgChart.Wide, SvgChart.Peso)
+                + SvgChart.Table("Show as table", new[] { "Hour", series[0].Name, series[1].Name }, rows), "chart-card");
+        }
+
+        protected string YearsChart()
+        {
+            if (View != "year" && View != "all") return "";
+            int first = opened.Year, last = now.Year;
+            var totals = new List<YearTotal>();
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
+            using (SqlCommand cmd = new SqlCommand("dbo.usp_Reports_GetYearTotals", conn))
+            {
+                cmd.CommandType = CommandType.StoredProcedure;
+
+                conn.Open();
+                using (SqlDataReader r = cmd.ExecuteReader())
+                {
+                    while (r.Read())
+                    {
+                        YearTotal total = new YearTotal();
+                        total.Year = Convert.ToInt32(r["SalesYear"]);
+                        total.Sales = Convert.ToDecimal(r["Sales"]);
+                        total.Orders = Convert.ToInt32(r["Orders"]);
+                        totals.Add(total);
+                    }
+                }
+            }
+            var years = Enumerable.Range(first, last - first + 1).ToList();
+            Func<int, YearTotal> of = y => totals.FirstOrDefault(t => t.Year == y) ?? new YearTotal { Year = y };
+            double[] sales = years.Select(y => (double)of(y).Sales).ToArray();
+            string[] tips = years.Select(y => y + (y == first ? " (from " + opened.ToString("MMM d", Inv) + ")" : y == last ? " (to " + now.ToString("MMM d", Inv) + ")" : "") + " · click to open").ToArray();
+            var series = new List<ChartSeries> { new ChartSeries("Sales", SvgChart.Blue, sales) };
+            int highlightYear = -1;
+            if (View == "year") highlightYear = years.IndexOf(Start.Year);
+            var rows = years.Select((y, i) => new[] { tips[i].Replace(" · click to open", ""), SvgChart.Peso(sales[i]), of(y).Orders.ToString("N0", Inv) });
+            return Card("Every year", "Total sales per year since the first job. The first and the current year are part-years.",
+                SvgChart.Columns("Sales per year", years.Select(y => y.ToString(Inv)).ToArray(), tips, series, SvgChart.PesoShort, 240, 1,
+                    years.Select(y => "Reports.aspx?view=year&y=" + y).ToArray(), highlightYear, tipFormat: SvgChart.Peso)
+                + SvgChart.Table("Show as table", new[] { "Year", "Sales", "Job orders" }, rows), "chart-card");
+        }
+
+        protected string WeekdayChart()
+        {
+            if (View == "day" || View == "week") return "";
+            double[] avg = new double[7];
+            for (int w = 0; w < 7; w++)
+            {
+                var dow = (DayOfWeek)((w + 1) % 7);
+                int dayCount = 0;
+                double total = 0;
+                for (var d = Start.Date; d < End; d = d.AddDays(1))
+                {
+                    if (d.DayOfWeek != dow) continue;
+                    dayCount++;
+                    total += (double)SalesIn(d, d.AddDays(1));
+                }
+                avg[w] = dayCount == 0 ? 0 : total / dayCount;
+            }
+            int best = Array.IndexOf(avg, avg.Max());
+            var series = new List<ChartSeries> { new ChartSeries("Average sales", SvgChart.Blue, avg) };
+            var rows = Weekdays.Select((d, i) => new[] { d, SvgChart.Peso(avg[i]) });
+            return Card("Busiest days of the week", "Average sales on each weekday. " + FullDay(best) + " is the strongest day in this period.",
+                SvgChart.Columns("Average sales by weekday", Weekdays, Weekdays.Select(d => FullDay(d)).ToArray(), series, SvgChart.PesoShort, 240, 1, null, best,
+                    width: View == "year" ? SvgChart.Wide : SvgChart.Half, tipFormat: SvgChart.Peso)
+                + SvgChart.Table("Show as table", new[] { "Weekday", "Average sales" }, rows), "chart-card");
+        }
+
+        private static string FullDay(int monFirst)
+        {
+            return new[] { "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday" }[monFirst];
+        }
+
+        private static string FullDay(string shortDay)
+        {
+            return FullDay(Array.IndexOf(Weekdays, shortDay));
+        }
+
+        protected string Heatmap()
+        {
+            if (View == "day") return "";
+            var counts = new int[7, 14];
+            foreach (var j in jobs)
+            {
+                int w = ((int)j.CreatedAt.DayOfWeek + 6) % 7;
+                int h = j.CreatedAt.Hour - 7;
+                if (h >= 0 && h < 14) counts[w, h]++;
+            }
+            string[] hours = Enumerable.Range(7, 14).Select(h => new DateTime(2000, 1, 1, h, 0, 0).ToString("h tt", Inv).Replace(" ", "").ToLowerInvariant()).ToArray();
+            var rows = Weekdays.Select((d, w) => new[] { d }.Concat(Enumerable.Range(0, 14).Select(h => counts[w, h].ToString(Inv))).ToArray());
+            return Card("Busiest drop-off times", "Job orders taken in each hour of each weekday. Use it to plan staff shifts and machine loads.",
+                SvgChart.Heatmap(Weekdays, hours, counts, "Job orders")
+                + SvgChart.Table("Show as table", new[] { "Day" }.Concat(hours).ToArray(), rows), "chart-card wide");
+        }
+
+        protected string ServicesCard()
+        {
+            var live = Live(jobs).ToList();
+            int total = live.Count;
+            var rows = live.GroupBy(j => j.ServiceName).Select(g => new
+            {
+                Name = g.Key,
+                Jobs = g.Count(),
+                Sales = g.Sum(j => j.TotalAmount),
+                Kg = g.Sum(j => j.WeightKg),
+            }).OrderByDescending(r => r.Jobs).ToList();
+
+            return Card("Most availed services", "Job orders by service, counted on the day the job was created.",
+                SvgChart.HBars(rows.Select(r => r.Name).ToList(), rows.Select(r => (double)r.Jobs).ToList(),
+                    rows.Select(r => r.Jobs.ToString("N0", Inv) + " · " + Pct(r.Jobs, total)).ToList(),
+                    rows.Select(r => r.Jobs.ToString("N0", Inv) + " orders · " + Peso0((double)r.Sales)).ToList(), "Orders")
+                + (rows.Count == 0 ? "<p class=\"muted small\">No job orders in this period.</p>" : "")
+                + SvgChart.Table("Show as table", new[] { "Service", "Orders", "Share", "Laundry (kg)", "Sales" },
+                    rows.Select(r => new[] { r.Name, r.Jobs.ToString("N0", Inv), Pct(r.Jobs, total), r.Kg.ToString("N0", Inv), Peso0((double)r.Sales) })),
+                "chart-card");
+        }
+
+        protected string ServiceSalesCard()
+        {
+            var serviceIds = new List<int>();
+            using (SqlConnection conn = new SqlConnection(Db.ConnectionString))
+            using (SqlCommand cmd = new SqlCommand("dbo.usp_Services_GetAll", conn))
+            {
+                cmd.CommandType = CommandType.StoredProcedure;
+
+                conn.Open();
+                using (SqlDataReader r = cmd.ExecuteReader())
+                {
+                    while (r.Read())
+                    {
+                        serviceIds.Add((int)r["ServiceId"]);
+                    }
+                }
+            }
+            serviceIds.Sort();
+
+            var rows = Live(jobs).GroupBy(j => j.ServiceId).Select(g => new
+            {
+                Name = g.First().ServiceName,
+                Color = SvgChart.Categorical(serviceIds.IndexOf(g.Key)),
+                Orders = g.Count(),
+                Sales = (double)g.Sum(j => j.TotalAmount),
+            }).OrderByDescending(x => x.Sales).ToList();
+            double total = rows.Sum(x => x.Sales);
+
+            string body;
+            if (total <= 0)
+            {
+                body = "<p class=\"muted small\">No job orders in this period.</p>";
+            }
+            else
+            {
+                body = SvgChart.Pie("Share of sales by service", rows.Select(x => x.Name).ToList(), rows.Select(x => x.Sales).ToList(),
+                           rows.Select(x => x.Color).ToList(),
+                           rows.Select(x => Peso0(x.Sales) + " · " + Pct(x.Sales, total)).ToList(),
+                           rows.Select(x => Peso0(x.Sales) + " · " + Pct(x.Sales, total) + " · " + x.Orders.ToString("N0", Inv) + " orders").ToList(), "Sales")
+                     + SvgChart.Table("Show as table", new[] { "Service", "Sales", "Share", "Orders" },
+                           rows.Select(x => new[] { x.Name, Peso0(x.Sales), Pct(x.Sales, total), x.Orders.ToString("N0", Inv) }));
+            }
+
+            return Card("Sales by service", "Each service's share of what was billed on the job orders created in this period. Voided jobs are left out.",
+                body, "chart-card");
+        }
+
+        protected string PaymentSplitCard()
+        {
+            double cash = (double)SalesIn(Start, End, Payment.Cash);
+            double ewallet = (double)SalesIn(Start, End, Payment.Ewallet);
+            double cashPart = Math.Max(0, cash), ewalletPart = Math.Max(0, ewallet);
+            double total = cashPart + ewalletPart;
+
+            string body;
+            if (total <= 0)
+            {
+                body = "<p class=\"muted small\">No payments were taken in this period.</p>";
+            }
+            else
+            {
+                string[] text = { Peso0(cashPart) + " · " + Pct(cashPart, total), Peso0(ewalletPart) + " · " + Pct(ewalletPart, total) };
+                body = SvgChart.Pie("Share of sales by payment method", new[] { "Cash", "E-wallet" }, new[] { cashPart, ewalletPart },
+                           new[] { SvgChart.Blue, SvgChart.Orange }, text, text, "Received")
+                     + SvgChart.Table("Show as table", new[] { "Method", "Received", "Share" },
+                           new[] { new[] { "Cash", Peso0(cash), Pct(cashPart, total) }, new[] { "E-wallet", Peso0(ewallet), Pct(ewalletPart, total) } });
+            }
+
+            return Card("Cash and e-wallet", "Money received in this period by how it was paid, net of refunds handed back. Counted on the payment date, like the sales chart.",
+                body, "chart-card");
+        }
+
+        protected string AddOnsCard()
+        {
+            var live = Live(jobs).ToList();
+            int total = live.Count;
+            var lines = live.SelectMany(j => j.AddOns).ToList();
+            var rows = lines.GroupBy(a => a.Name).Select(g => new
+            {
+                Name = g.Key,
+                Jobs = g.Select(a => a.JobId).Distinct().Count(),
+                Qty = g.Sum(a => a.Quantity),
+                Sales = g.Sum(a => Math.Round(a.Quantity * a.PriceAtCreation, 2, MidpointRounding.AwayFromZero)),
+                Product = g.First().IsProduct,
+            }).OrderByDescending(r => r.Jobs).ToList();
+            decimal addOnSales = rows.Sum(r => r.Sales), allSales = live.Sum(j => j.TotalAmount);
+
+            return Card("Add-ons", "How often each add-on is taken, as a share of all orders. Add-ons made "
+                    + Pct((double)addOnSales, (double)allSales) + " of sales (" + Peso0((double)addOnSales) + ").",
+                SvgChart.HBars(rows.Select(r => r.Name + (r.Product ? " (product)" : "")).ToList(),
+                    rows.Select(r => total == 0 ? 0 : r.Jobs * 100.0 / total).ToList(),
+                    rows.Select(r => Pct(r.Jobs, total) + " · " + Peso0((double)r.Sales)).ToList(),
+                    rows.Select(r => r.Jobs.ToString("N0", Inv) + " orders" + (r.Product ? ", " + r.Qty.ToString("N0", Inv) + " pieces" : "") + " · " + Peso0((double)r.Sales)).ToList(), "Taken")
+                + (rows.Count == 0 ? "<p class=\"muted small\">No add-ons were taken in this period.</p>" : "")
+                + SvgChart.Table("Show as table", new[] { "Add-on", "Orders with it", "Share of orders", "Pieces", "Sales" },
+                    rows.Select(r => new[] { r.Name, r.Jobs.ToString("N0", Inv), Pct(r.Jobs, total), r.Product ? r.Qty.ToString("N0", Inv) : "—", Peso0((double)r.Sales) })),
+                "chart-card");
+        }
+
+        protected string LoadSizeCard()
+        {
+            var live = Live(jobs).ToList();
+            string[] labels = { "Under 2", "2–3", "3–4", "4–5", "5–6", "6–8", "8–10", "10+" };
+            double[] edges = { 0, 2, 3, 4, 5, 6, 8, 10, double.MaxValue };
+            double[] counts = new double[labels.Length];
+            foreach (var j in live)
+            {
+                double kg = (double)j.WeightKg;
+                for (int i = 0; i < labels.Length; i++) if (kg >= edges[i] && kg < edges[i + 1]) { counts[i]++; break; }
+            }
+            int atMinimum = live.Count(j => j.LaundryCharge > Math.Round(j.BillableKg * j.RatePerKgAtCreation, 2, MidpointRounding.AwayFromZero));
+            double avgKg;
+            if (live.Count == 0)
+                avgKg = 0;
+            else
+                avgKg = (double)live.Average(j => j.WeightKg);
+            var series = new List<ChartSeries> { new ChartSeries("Orders", SvgChart.Blue, counts) };
+            return Card("Load sizes", "Orders by weight in kilos. Average load " + avgKg.ToString("0.0", Inv) + " kg; "
+                    + Pct(atMinimum, live.Count) + " were billed at the minimum charge.",
+                SvgChart.Columns("Orders by load weight", labels, labels.Select(l => l + " kg").ToArray(), series, v => v.ToString("N0", Inv), 230)
+                + SvgChart.Table("Show as table", new[] { "Weight (kg)", "Orders", "Share" },
+                    labels.Select((l, i) => new[] { l, counts[i].ToString("N0", Inv), Pct(counts[i], live.Count) })),
+                "chart-card");
+        }
+
+        protected string TurnaroundCard()
+        {
+            var hours = Live(jobs).Where(j => j.FirstReadyAt.HasValue).Select(j => (j.FirstReadyAt.Value - j.CreatedAt).TotalHours).ToList();
+            string[] labels = { "Under 12", "12–18", "18–24", "24–30", "30–36", "36–48", "48+" };
+            double[] edges = { 0, 12, 18, 24, 30, 36, 48, double.MaxValue };
+            double[] counts = new double[labels.Length];
+            foreach (double h in hours)
+                for (int i = 0; i < labels.Length; i++) if (h >= edges[i] && h < edges[i + 1]) { counts[i]++; break; }
+            int onTime = hours.Count(h => h <= turnaroundTarget);
+            var series = new List<ChartSeries> { new ChartSeries("Orders", SvgChart.Blue, counts) };
+            string sub = hours.Count == 0
+                ? "No load from this period has reached Ready for pick-up yet."
+                : "Hours from drop-off to Ready for pick-up. " + Pct(onTime, hours.Count) + " were ready within the " + turnaroundTarget + "-hour turnaround.";
+            return Card("Turnaround", sub,
+                SvgChart.Columns("Orders by turnaround time", labels, labels.Select(l => l + " hours").ToArray(), series, v => v.ToString("N0", Inv), 230)
+                + SvgChart.Table("Show as table", new[] { "Hours", "Orders", "Share" },
+                    labels.Select((l, i) => new[] { l, counts[i].ToString("N0", Inv), Pct(counts[i], hours.Count) })),
+                "chart-card");
+        }
+
+        protected string CustomersCard()
+        {
+            var live = Live(jobs).ToList();
+            int distinct = live.Select(j => j.CustomerId).Distinct().Count();
+            int newOnes = live.Count(j => !j.IsReturning);
+
+            string chart = "";
+            if (View != "day")
+            {
+                var b = Buckets();
+                Func<Func<ReportJob, bool>, double[]> count = f => b.Select(x => (double)live.Count(j => f(j) && j.CreatedAt >= x.From && j.CreatedAt < x.To)).ToArray();
+                var series = new List<ChartSeries>
+                {
+                    new ChartSeries("Returning", SvgChart.Blue, count(j => j.IsReturning)),
+                    new ChartSeries("New", SvgChart.Orange, count(j => !j.IsReturning)),
+                };
+                chart = SvgChart.Legend(series) + SvgChart.Columns("Orders from new and returning customers", b.Select(x => x.Label).ToArray(),
+                            b.Select(x => x.Tip.Replace(" · click to open", "")).ToArray(), series, v => v.ToString("N0", Inv), 230, LabelEvery, null, -1, false)
+                      + SvgChart.Table("Show as table", new[] { UnitName, "Returning", "New" },
+                            b.Select((x, i) => new[] { x.Tip.Replace(" · click to open", ""), series[0].Values[i].ToString("N0", Inv), series[1].Values[i].ToString("N0", Inv) }));
+            }
+
+            var stats = "<div class=\"mini-stats\">"
+                + Mini("Customers served", distinct.ToString("N0", Inv))
+                + Mini("First-time customers", newOnes.ToString("N0", Inv))
+                + Mini("Orders from regulars", Pct(live.Count - newOnes, live.Count))
+                + "</div>";
+
+            return Card("New and returning customers", "Each order is from a first-time customer or from someone who has come before. Repeat business is what keeps a laundry shop steady.",
+                stats + chart, "chart-card");
+        }
+
+        protected string TopCustomersCard()
+        {
+            var live = Live(jobs).ToList();
+            var top = live.GroupBy(j => j.CustomerId)
+                .Select(g => new { Name = g.First().CustomerName, Since = g.First().CustomerFirstJobAt, Orders = g.Count(), Sales = g.Sum(j => j.TotalAmount), Kg = g.Sum(j => j.WeightKg) })
+                .OrderByDescending(x => x.Sales).ThenByDescending(x => x.Orders).Take(8).ToList();
+
+            var sb = new System.Text.StringBuilder("<div class=\"table-wrap\"><table class=\"table\"><thead><tr><th>Customer</th><th class=\"right\">Orders</th><th class=\"right\">Laundry</th><th class=\"right\">Sales</th></tr></thead><tbody>");
+            foreach (var t in top)
+                sb.Append("<tr><td><div class=\"cell-main\">").Append(HttpUtility.HtmlEncode(t.Name))
+                  .Append("</div><div class=\"cell-sub\">Customer since ").Append(t.Since.HasValue ? t.Since.Value.ToString("MMM yyyy", Inv) : "—").Append("</div></td>")
+                  .Append("<td class=\"right num\">").Append(t.Orders.ToString("N0", Inv)).Append("</td>")
+                  .Append("<td class=\"right num\">").Append(t.Kg.ToString("N0", Inv)).Append(" kg</td>")
+                  .Append("<td class=\"right num strong\">").Append(Peso0((double)t.Sales)).Append("</td></tr>");
+            if (top.Count == 0) sb.Append("<tr><td colspan=\"4\" class=\"muted\">No orders in this period.</td></tr>");
+            sb.Append("</tbody></table></div>");
+            return Card("Top customers", "By sales in this period. Worth a thank-you, or a word if they stop coming.", sb.ToString(), "chart-card flush");
+        }
+
+        protected string StaffCard()
+        {
+            var rows = jobs.GroupBy(j => j.CreatedByName).Select(g => new
+            {
+                Name = g.Key,
+                Orders = g.Count(j => !j.IsVoided),
+                Voids = g.Count(j => j.IsVoided),
+                Sales = g.Where(j => !j.IsVoided).Sum(j => j.TotalAmount),
+            }).Where(r => r.Orders + r.Voids > 0).OrderByDescending(r => r.Orders).ToList();
+            int total = rows.Sum(r => r.Orders);
+
+            return Card("Orders taken by staff", "Who took each job order at the counter. For planning shifts, not for pay.",
+                SvgChart.HBars(rows.Select(r => r.Name).ToList(), rows.Select(r => (double)r.Orders).ToList(),
+                    rows.Select(r => r.Orders.ToString("N0", Inv) + " · " + Pct(r.Orders, total)).ToList(),
+                    rows.Select(r => r.Orders.ToString("N0", Inv) + " orders · " + Peso0((double)r.Sales) + " · " + r.Voids + " voided").ToList(), "Taken")
+                + (rows.Count == 0 ? "<p class=\"muted small\">No job orders in this period.</p>" : "")
+                + SvgChart.Table("Show as table", new[] { "Staff", "Orders", "Share", "Sales", "Voided" },
+                    rows.Select(r => new[] { r.Name, r.Orders.ToString("N0", Inv), Pct(r.Orders, total), Peso0((double)r.Sales), r.Voids.ToString("N0", Inv) })),
+                "chart-card");
+        }
+
+        protected string VoidsCard()
+        {
+            var voided = jobs.Where(j => j.IsVoided).ToList();
+            decimal refunded = voided.Sum(j => j.AmountRefunded);
+            decimal waiting = voided.Sum(j => j.RefundPending);
+            var reasons = voided.GroupBy(j => j.VoidReason ?? "").Select(g => new { Reason = g.Key, Count = g.Count(), Amount = g.Sum(j => j.AmountRefunded + j.RefundPending) })
+                .OrderByDescending(r => r.Count).ToList();
+
+            var sb = new System.Text.StringBuilder("<div class=\"mini-stats\">");
+            sb.Append(Mini("Voided orders", voided.Count.ToString("N0", Inv)))
+              .Append(Mini("Refunded", Peso0((double)refunded)))
+              .Append(Mini("Waiting to be collected", Peso0((double)waiting)))
+              .Append(Mini("Void rate", Pct(voided.Count, jobs.Count)))
+              .Append("</div>");
+            if (reasons.Count > 0)
+            {
+                sb.Append("<div class=\"table-wrap\"><table class=\"table\"><thead><tr><th>Reason given</th><th class=\"right\">Orders</th><th class=\"right\">Refund</th></tr></thead><tbody>");
+                foreach (var r in reasons)
+                    sb.Append("<tr><td>").Append(HttpUtility.HtmlEncode(r.Reason)).Append("</td><td class=\"right num\">").Append(r.Count)
+                      .Append("</td><td class=\"right num\">").Append(Peso0((double)r.Amount)).Append("</td></tr>");
+                sb.Append("</tbody></table></div>");
+            }
+            else
+            {
+                sb.Append("<p class=\"muted small\" style=\"padding:0 20px 18px;\">No orders were voided in this period.</p>");
+            }
+            return Card("Voids and refunds", "A void gives back all that was paid on it, once the customer collects it (a refund waiting is still counted in sales). Look at the reasons, not just the count.",
+                sb.ToString(), "chart-card flush");
+        }
+
+        private static string Card(string title, string sub, string body, string css)
+        {
+            return "<section class=\"card " + css + "\"><div class=\"card-h\"><div><h2>" + HttpUtility.HtmlEncode(title)
+                 + "</h2><div class=\"sub\">" + HttpUtility.HtmlEncode(sub) + "</div></div></div><div class=\"card-b\">" + body + "</div></section>";
+        }
+
+        private static string Mini(string label, string value)
+        {
+            return "<div class=\"mini-stat\"><div class=\"muted small\">" + HttpUtility.HtmlEncode(label) + "</div><div class=\"mini-value\">"
+                 + HttpUtility.HtmlEncode(value) + "</div></div>";
+        }
+
+        private static string Pct(double part, double whole)
+        {
+            if (whole <= 0)
+                return "0%";
+            else
+                return (part * 100 / whole).ToString(part * 100 / whole < 10 ? "0.0" : "0", Inv) + "%";
+        }
+
+        private static string Val(double v)
+        {
+            if (double.IsNaN(v))
+                return "—";
+            else
+                return SvgChart.Peso(v);
+        }
+
+        private static string Peso0(double v) { return SvgChart.Peso(v); }
+        private static string Peso2(decimal v) { return "₱" + v.ToString("N2", Inv); }
+
+        protected string DaysWaiting(DateTime readySince)
+        {
+            return (now.Date - readySince.Date).Days.ToString(Inv);
+        }
+    }
+}

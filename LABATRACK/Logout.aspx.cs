@@ -7,9 +7,13 @@ namespace LABATRACK
     {
         protected void Page_Load(object sender, EventArgs e)
         {
-            // DRAFT: nothing to clear yet. Phase 2 adds FormsAuthentication.SignOut() here.
+            string role = Session["Role"] as string;
             Session.Abandon();
-            Response.Redirect("~/Default.aspx");
+
+            if (role == "Owner")
+                Response.Redirect("~/admin/Login.aspx");
+            else
+                Response.Redirect("~/Login.aspx");
         }
     }
 }

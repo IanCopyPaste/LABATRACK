@@ -9,50 +9,56 @@
 </head>
 <body>
     <form id="form1" runat="server" defaultbutton="btnSignIn">
-        <div class="auth">
-            <aside class="auth-side">
-                <div class="brand" style="padding:0;">
-                    <div class="brand-mark"><%= Icons.Get("washing-machine") %></div>
-                    <div class="brand-name">LabaTrack</div>
-                </div>
+        <div class="auth auth-staff">
+            <div class="auth-brand">
+                <div class="brand-mark"><%= Icons.Get("washing-machine") %></div>
                 <div>
-                    <h2>The counter, in one place.</h2>
-                    <p>Take job orders, move loads along the board, and hand them back to the customer.</p>
-                    <ul class="auth-points">
-                        <li><%= Icons.Get("receipt") %>Prices worked out for you, change included</li>
-                        <li><%= Icons.Get("washing-machine") %>Every load on one board, oldest first</li>
-                        <li><%= Icons.Get("search") %>Any past job found by claim number, name, or phone</li>
-                    </ul>
+                    <div class="brand-name">LabaTrack</div>
+                    <div class="brand-sub">Counter</div>
                 </div>
-                <div class="small" style="opacity:.75;">Quezon City University &middot; IPT102</div>
-            </aside>
+            </div>
 
-            <main class="auth-main">
-                <div class="auth-card">
-                    <span class="pill pill-plain" style="background:var(--primary-soft); color:var(--primary);"><%= Icons.Get("user-round", "ico-sm") %>Counter staff</span>
-                    <h1 style="font-size:24px; margin-top:14px;">Sign in</h1>
-                    <p class="muted" style="margin-top:4px;">Use the account the owner made for you.</p>
+            <main class="auth-card">
+                <nav class="auth-switch" aria-label="Sign in as">
+                    <a href="Login.aspx" class="is-active" aria-current="page"><%= Icons.Get("user-round", "ico-sm") %>Staff</a>
+                    <a href="admin/Login.aspx"><%= Icons.Get("shield-check", "ico-sm") %>Owner</a>
+                </nav>
 
-                    <div class="form" style="margin-top:28px;">
-                        <asp:Panel ID="pnlError" runat="server" Visible="false" CssClass="notice notice-danger">
-                            <%= Icons.Get("circle-alert", "ico-sm") %>
-                            <asp:Label ID="lblError" runat="server" Text="Invalid username or password" />
-                        </asp:Panel>
-                        <div class="field">
-                            <label for="txtUsername">Username</label>
-                            <asp:TextBox ID="txtUsername" runat="server" MaxLength="50" autocomplete="username" />
-                        </div>
-                        <div class="field">
-                            <label for="txtPassword">Password</label>
-                            <asp:TextBox ID="txtPassword" runat="server" TextMode="Password" MaxLength="100" autocomplete="current-password" />
-                        </div>
-                        <asp:Button ID="btnSignIn" runat="server" Text="Sign in" CssClass="btn btn-primary btn-block" OnClick="btnSignIn_Click" style="height:40px;" />
+                <div class="auth-role">
+                    <span class="auth-role-icon"><%= Icons.Get("user-round") %></span>
+                    <div>
+                        <h1 class="auth-title">Staff sign in</h1>
+                        <p class="auth-sub">Use the account the owner made for you.</p>
                     </div>
+                </div>
 
-                    <p class="small muted" style="margin-top:28px;">Forgot your password? Ask the owner to reset it. The owner signs in on the <a href="Admin/Login.aspx">owner page</a>.</p>
+                <div class="form auth-form">
+                    <asp:Panel ID="pnlError" runat="server" Visible="false" CssClass="notice notice-danger">
+                        <%= Icons.Get("circle-alert", "ico-sm") %>
+                        <asp:Label ID="lblError" runat="server" Text="Invalid username or password" />
+                    </asp:Panel>
+                    <div class="field">
+                        <label for="txtUsername">Username</label>
+                        <asp:TextBox ID="txtUsername" runat="server" MaxLength="50" autocomplete="username" />
+                    </div>
+                    <div class="field">
+                        <label for="txtPassword">Password</label>
+                        <div class="input-reveal">
+                            <asp:TextBox ID="txtPassword" runat="server" TextMode="Password" MaxLength="100" autocomplete="current-password" />
+                            <button type="button" class="reveal-btn" data-reveal="txtPassword" aria-pressed="false" aria-label="Show password" title="Show password"><%= Icons.Get("eye", "ico-sm when-hidden") %><%= Icons.Get("eye-off", "ico-sm when-shown") %></button>
+                        </div>
+                        <span class="auth-aside muted">Forgot it? Ask the owner to reset it.</span>
+                    </div>
+                    <asp:Button ID="btnSignIn" runat="server" Text="Sign in" CssClass="btn btn-primary btn-block" OnClick="btnSignIn_Click" />
                 </div>
             </main>
+
+            <p class="auth-note">Quezon City University &middot; IPT102</p>
         </div>
     </form>
+
+    <script src="<%= AssetUrl.Get("~/assets/js/Loading.js") %>"></script>
+
+    <script src="<%= AssetUrl.Get("~/assets/js/ShowPassword.js") %>"></script>
 </body>
 </html>

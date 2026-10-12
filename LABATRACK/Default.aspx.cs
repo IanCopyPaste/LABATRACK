@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Web.UI;
-using LABATRACK.Helpers;
 
 namespace LABATRACK
 {
@@ -8,15 +7,14 @@ namespace LABATRACK
     {
         protected void Page_Load(object sender, EventArgs e)
         {
-            // The front door: a signed-in user goes to their own dashboard, anyone else to the
-            // staff login, which links to the owner's. DRAFT: the sign-in is the draft one in
-            // SampleData; Phase 2 reads it from Forms authentication and AuthService.
-            if (!SampleData.IsSignedIn(Session))
-                Response.Redirect("~/Login.aspx");
-            else if (SampleData.IsOwner(Session))
-                Response.Redirect("~/Admin/Dashboard.aspx");
+            string role = Session["Role"] as string;
+
+            if (role == "Owner")
+                Response.Redirect("~/admin/Dashboard.aspx");
+            else if (role == "Staff")
+                Response.Redirect("~/pages/shared/Dashboard.aspx");
             else
-                Response.Redirect("~/Pages/Shared/Dashboard.aspx");
+                Response.Redirect("~/Login.aspx");
         }
     }
 }

@@ -1,12 +1,9 @@
-﻿/* Pages/Shared/JobSlip.aspx: the job order slip (receipt) and bag tag */
-
-.toolbar {
+﻿.toolbar {
   max-width: 560px; margin: 24px auto 0; padding: 0 16px;
   display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap;
 }
 .toolbar div { display: flex; gap: 8px; }
 
-/* The slip is sized like 80 mm thermal paper */
 .paper {
   width: 340px; max-width: calc(100% - 32px); margin: 20px auto 40px;
   background: #fff; color: #111; padding: 22px 20px;
